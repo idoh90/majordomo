@@ -3,6 +3,7 @@ import type { Workout } from '../modules/training/types'
 import { downloadJson, parseImport, serializeExport } from '../modules/training/lib/backup'
 import { localDayKey } from '../core/dates'
 import { SKINS, SKIN_IDS } from '../core/ui/skins'
+import { FOUNDER } from '../core/founder'
 import { useShellStore } from '../core/store/shell'
 import { useWorkoutStore } from '../modules/training/store'
 import { ConfirmDialog } from '../core/ui/ConfirmDialog'
@@ -172,6 +173,12 @@ function SkinSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const skin = useShellStore((s) => s.skin)
   const setSkin = useShellStore((s) => s.setSkin)
 
+  // founder-only skins stay hidden from the picker unless the flag is set —
+  // but an *active* founder skin is never stomped, it just keeps its row
+  const visibleSkins = SKIN_IDS.filter(
+    (id) => FOUNDER || !SKINS[id].founderOnly || id === skin,
+  )
+
   return (
     <Sheet open={open} onClose={onClose}>
       <h2 className="mb-1 font-display text-xl font-bold tracking-wide">App skin</h2>
@@ -179,7 +186,7 @@ function SkinSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
         Seven looks for the same cave. Switches instantly — nothing else changes.
       </p>
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="App skin">
-        {SKIN_IDS.map((id) => {
+        {visibleSkins.map((id) => {
           const s = SKINS[id]
           const active = id === skin
           return (

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { Workout } from './types'
 import { DEFAULT_PROFILE, type Profile } from './lib/nutrition'
-import { DEFAULT_SKIN, isSkinId, type SkinId } from '../../core/ui/skins'
+import { DEFAULT_SKIN } from '../../core/ui/skins'
 import { makeId } from '../../core/ids'
 
 // re-export so training components keep importing makeId from the store barrel
@@ -16,8 +16,9 @@ interface WorkoutState {
   weeklyGoal: number
   /** bodyweight/dimensions + nutrition tunables for the macro engine */
   profile: Profile
-  /** active visual skin (one of the five design directions) */
-  skin: SkinId
+  /** legacy/frozen passthrough — never read or written anymore; typed as a
+   *  plain string so pre-pivot ids in old blobs/exports round-trip verbatim */
+  skin: string
   addWorkout: (w: Workout) => void
   updateWorkout: (id: string, patch: Partial<Omit<Workout, 'id'>>) => void
   deleteWorkout: (id: string) => void
@@ -25,7 +26,7 @@ interface WorkoutState {
   replaceAll: (workouts: Workout[]) => void
   setWeeklyGoal: (goal: number) => void
   setProfile: (patch: Partial<Profile>) => void
-  setSkin: (skin: SkinId) => void
+  setSkin: (skin: string) => void
 }
 
 const byDateDesc = (a: Workout, b: Workout) => b.performedAt.localeCompare(a.performedAt)
@@ -49,7 +50,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       replaceAll: (workouts) => set({ workouts: [...workouts].sort(byDateDesc) }),
       setWeeklyGoal: (goal) => set({ weeklyGoal: Math.max(0, Math.min(21, Math.round(goal))) }),
       setProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
-      setSkin: (skin) => set({ skin: isSkinId(skin) ? skin : DEFAULT_SKIN }),
+      setSkin: (skin) => set({ skin }),
     }),
     {
       name: 'batman-workouts',
@@ -70,7 +71,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           weeklyGoal: p.weeklyGoal ?? DEFAULT_WEEKLY_GOAL,
           // merge so older exports missing new tunables still get sane defaults
           profile: { ...DEFAULT_PROFILE, ...(p.profile ?? {}) },
-          skin: isSkinId(p.skin) ? p.skin : DEFAULT_SKIN,
+          skin: typeof p.skin === 'string' ? p.skin : DEFAULT_SKIN,
         }
       },
     },

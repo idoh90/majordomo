@@ -11,11 +11,13 @@
   },
   "dependencies": {
     "@fontsource/anton": "^5.2.7",
+    "@fontsource/big-shoulders": "^5.2.6",
     "@fontsource/chakra-petch": "^5.2.7",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/instrument-serif": "^5.2.8",
     "@fontsource/rajdhani": "^5.2.0",
     "@fontsource/saira": "^5.2.11",
+    "@fontsource/source-sans-3": "^5.2.9",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zustand": "^5.0.5"
