@@ -2,14 +2,14 @@ import { addDays, startOfWeek, type WeekStart } from '../dates'
 import type { CalendarEvent, EventKind } from './types'
 
 /**
- * The duty-cycle seam (from the Week View design direction 1a): a Manor
- * "day" column runs from SEAM_HOUR to SEAM_HOUR of the next calendar day, so
- * a night watch and the sleep that pays for it live in ONE unbroken column
- * and midnight is a dashed line, not a wall. Noon reads as the natural break
- * (a column = "this afternoon through tomorrow morning"); deriving the seam
- * from the user's own quietest hour is backlog.
+ * Where a Manor column starts: a column runs [SEAM_HOUR, SEAM_HOUR + 24h).
+ * 0 = the ordinary calendar day (00:00 → 00:00), which is what people read
+ * fastest. Events that run past the seam (a 19:00 → 08:00 night watch) split
+ * across the two columns with dotted "continues" edges — the data itself is
+ * never day-bucketed, only its rendering. A shift-aware seam (the duty-cycle
+ * idea from Week View direction 1a) stays available by moving this constant.
  */
-export const SEAM_HOUR = 12
+export const SEAM_HOUR = 0
 
 /** wall-clock seam instant on a given calendar day (DST-safe: local ctor) */
 export function seamStart(day: Date, seamHour: number = SEAM_HOUR): Date {

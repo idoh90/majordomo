@@ -33,7 +33,9 @@ const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 // hour offsets from the seam for the axis + rules; midnight gets the accent
 const TICKS = [0, 3, 6, 9, 12, 15, 18, 21, 24]
 const RULES = [3, 6, 9, 12, 15, 18, 21]
-const MIDNIGHT_OFFSET = (24 - SEAM_HOUR) % 24
+/** does this offset from the seam land on midnight? (with SEAM_HOUR = 0 the
+ *  column edges themselves are midnight, so no rule is drawn mid-column) */
+const isMidnight = (offset: number) => (SEAM_HOUR + offset) % 24 === 0
 
 const px = (from: Date, to: Date) => ((to.getTime() - from.getTime()) / 3_600_000) * PXH
 const HOUR_MS = 3_600_000
@@ -451,10 +453,9 @@ function Rules() {
           className="pointer-events-none absolute left-0 right-0 z-[1]"
           style={{
             top: h * PXH,
-            borderTop:
-              h === MIDNIGHT_OFFSET
-                ? '1px dashed color-mix(in srgb, var(--color-accent) 45%, transparent)'
-                : '1px solid color-mix(in srgb, var(--color-line) 60%, transparent)',
+            borderTop: isMidnight(h)
+              ? '1px dashed color-mix(in srgb, var(--color-accent) 45%, transparent)'
+              : '1px solid color-mix(in srgb, var(--color-line) 60%, transparent)',
           }}
         />
       ))}
@@ -471,7 +472,7 @@ function TickAxis() {
           className="absolute right-2.5 -translate-y-1/2 text-[10px] tracking-[0.04em] [font-variant-numeric:tabular-nums]"
           style={{
             top: h * PXH,
-            color: h === MIDNIGHT_OFFSET ? 'var(--color-accent)' : 'var(--color-ink-faint)',
+            color: isMidnight(h) ? 'var(--color-accent)' : 'var(--color-ink-faint)',
           }}
         >
           {tickLabel(h)}
@@ -505,9 +506,6 @@ function DayHeader({
           style={{ color: isToday ? 'var(--color-accent)' : 'var(--color-ink)' }}
         >
           {win.day.getDate()}
-        </span>
-        <span className="ml-auto truncate text-[9.5px] tracking-[0.08em] text-ink-faint">
-          ▸ {WD[(win.day.getDay() + 1) % 7]}
         </span>
       </div>
       {markers.map((m) => (
@@ -975,9 +973,6 @@ function MobileWeek({
               <div className="flex h-8 items-center gap-2 px-2">
                 <span className="font-display text-[13px] font-semibold tracking-[0.12em] text-ink">
                   {WD[win.day.getDay()]} {win.day.getDate()}
-                </span>
-                <span className="text-[9px] tracking-[0.08em] text-ink-faint">
-                  {tickLabel(0)} → {tickLabel(24)}
                 </span>
                 {markersFor(win).map((m) => (
                   <span
