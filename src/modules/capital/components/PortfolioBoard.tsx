@@ -1,0 +1,194 @@
+import { useMemo } from 'react'
+import { useCapitalStore } from '../store'
+import type { Holding } from '../types'
+import { holdingRow, portfolioTotals } from '../lib/holdings'
+import { formatPercent } from '../lib/money'
+import { Amount } from './Amount'
+
+interface PortfolioBoardProps {
+  onAddHolding: () => void
+  onEditHolding: (h: Holding) => void
+  onOpenSettings: () => void
+}
+
+export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: PortfolioBoardProps) {
+  const holdings = useCapitalStore((s) => s.holdings)
+  const prices = useCapitalStore((s) => s.prices)
+  const fx = useCapitalStore((s) => s.fx)
+  const apiKey = useCapitalStore((s) => s.apiKey)
+  const updatedAt = useCapitalStore((s) => s.pricesUpdatedAt)
+  const error = useCapitalStore((s) => s.pricesError)
+  const loading = useCapitalStore((s) => s.pricesLoading)
+  const refreshPrices = useCapitalStore((s) => s.refreshPrices)
+
+  const rows = useMemo(
+    () => holdings.map((h) => holdingRow(h, prices, fx)).sort((a, b) => b.marketValue - a.marketValue),
+    [holdings, prices, fx],
+  )
+  const totals = useMemo(() => portfolioTotals(rows), [rows])
+  const anyClosed = rows.some((r) => r.quote && r.quote.marketOpen === false)
+
+  return (
+    <div className="panel p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="card-title">Portfolio</h3>
+        <div className="flex items-center gap-2 text-[11px] text-ink-faint">
+          <span>
+            {loading
+              ? 'Updating…'
+              : error
+                ? <span className="text-danger" title={error}>price error</span>
+                : updatedAt
+                  ? `updated ${agoLabel(updatedAt)}`
+                  : 'not fetched'}
+          </span>
+          {apiKey ? (
+            <button
+              type="button"
+              onClick={() => refreshPrices()}
+              disabled={loading || holdings.length === 0}
+              className="chip border border-line bg-panel p-1.5 text-ink-dim transition-colors hover:text-ink disabled:opacity-40"
+              aria-label="Refresh prices"
+            >
+              <RefreshIcon spinning={loading} />
+            </button>
+          ) : (
+            <button type="button" onClick={onOpenSettings} className="text-accent hover:opacity-80">
+              + API key
+            </button>
+          )}
+        </div>
+      </div>
+
+      {holdings.length === 0 ? (
+        <div className="card p-5 text-center">
+          <p className="text-sm text-ink-dim">No holdings yet.</p>
+          <button type="button" onClick={onAddHolding} className="btn-cta mt-3 px-4 py-2.5 text-sm">
+            Add a holding
+          </button>
+          {!apiKey && (
+            <p className="mt-2 text-[11px] text-ink-faint">
+              Live prices need a free{' '}
+              <button type="button" onClick={onOpenSettings} className="text-accent hover:opacity-80">
+                Twelve Data key
+              </button>
+              .
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+                  <th className="pb-1.5 font-medium">Symbol</th>
+                  <th className="pb-1.5 text-right font-medium">Price</th>
+                  <th className="pb-1.5 text-right font-medium">Day P/L</th>
+                  <th className="pb-1.5 text-right font-medium">Value</th>
+                  <th className="pb-1.5 text-right font-medium">Unreal. P/L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr
+                    key={r.holding.id}
+                    onClick={() => onEditHolding(r.holding)}
+                    className="cursor-pointer border-t border-line hover:bg-panel-2"
+                  >
+                    <td className="py-2">
+                      <span className="font-semibold text-ink">{r.holding.symbol.toUpperCase()}</span>
+                      <span className="ml-1.5 text-[11px] text-ink-faint">{r.holding.shares}×</span>
+                      {!r.priced && <span className="ml-1 text-[10px] text-ink-faint">(no price)</span>}
+                    </td>
+                    <td className="py-2 text-right tabular-nums text-ink-dim">
+                      {r.quote ? nativePrice(r.quote.price, r.quote.currency) : '—'}
+                    </td>
+                    <td className={`py-2 text-right tabular-nums ${sign(r.dayChange)}`}>
+                      {r.quote ? (
+                        <>
+                          <Amount value={r.dayChange} kind="delta" />
+                          {r.dayChangePct != null && (
+                            <span className="block text-[10px] text-ink-faint">{formatPercent(r.dayChangePct)}</span>
+                          )}
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="py-2 text-right tabular-nums text-ink">
+                      <Amount value={r.marketValue} kind="compact" />
+                    </td>
+                    <td className={`py-2 text-right tabular-nums ${sign(r.unrealized)}`}>
+                      <Amount value={r.unrealized} kind="delta" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-line font-semibold">
+                  <td className="pt-2 text-ink-dim">Total</td>
+                  <td />
+                  <td className={`pt-2 text-right tabular-nums ${sign(totals.dayChange)}`}>
+                    <Amount value={totals.dayChange} kind="delta" />
+                  </td>
+                  <td className="pt-2 text-right tabular-nums text-ink">
+                    <Amount value={totals.marketValue} kind="compact" />
+                  </td>
+                  <td className={`pt-2 text-right tabular-nums ${sign(totals.unrealized)}`}>
+                    <Amount value={totals.unrealized} kind="delta" />
+                    {totals.unrealizedPct != null && (
+                      <span className="ml-1 text-[11px] font-normal text-ink-faint">
+                        {formatPercent(totals.unrealizedPct)}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div className="mt-3 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={onAddHolding}
+              className="text-sm text-accent transition-opacity hover:opacity-80"
+            >
+              + Add holding
+            </button>
+            {anyClosed && <span className="text-[10px] text-ink-faint">Day P/L = last close</span>}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function sign(n: number | null): string {
+  if (n == null || n === 0) return 'text-ink-dim'
+  return n > 0 ? 'text-accent' : 'text-danger'
+}
+
+function nativePrice(price: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(price)
+  } catch {
+    return price.toFixed(2)
+  }
+}
+
+function agoLabel(iso: string): string {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.round(hrs / 24)}d ago`
+}
+
+function RefreshIcon({ spinning }: { spinning?: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden className={spinning ? 'animate-spin' : ''}>
+      <path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
