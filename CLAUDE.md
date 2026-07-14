@@ -6,6 +6,27 @@ console tiles; each console is a self-contained module. Today there are two:
 **Training Grounds** (the workout tracker — body map, strain engine, nutrition) and
 **Wayne Fund** (net-worth / budget tracker — Phase 1, offline/manual; live prices later).
 
+## Direction (July 2026): the Majordomo pivot
+
+The app is being rebuilt as **Majordomo** — a commercial, calendar-first "life OS"
+with a butler persona. Strategy in `majordomo-playbook.md`; engineering milestones
+in `majordomo-build-plan.md` (M0–M8); target UI in the Claude Design project
+"Majordomo: Calendar OS" (`Majordomo Manor.dc.html` + `Majordomo Tokens.dc.html`).
+What changes as milestones land: the Manor (a duty-cycle-seamed week calendar)
+becomes home behind a tab nav (MANOR / WATCH / GROUNDS / LEDGER); consoles become
+Wings; three commercial presets (Midnight / Terminal / Aurora) join and the seven
+Batman-era skins move behind a local `VITE_FOUNDER_SKIN` flag (`.env.local`, never
+committed, tree-shaken from builds). Two standing rules from the pivot onward:
+
+1. **All NEW user-facing strings go through `src/core/voice/`** — no inline copy.
+   Register per playbook Appendix B: dry, composed, one sentence-final "sir",
+   never begs, never guilts, no emoji.
+2. **The Grounds keeps every existing Training Grounds feature.** The design's
+   Grounds screen is directional; where it omits an old feature, the old feature wins.
+
+Sections below describe the app as it exists today; each milestone updates only
+the lines it invalidates.
+
 ## Commands
 
 - `npm run dev` — Vite dev server on port 5173 (also via `.claude/launch.json`)
