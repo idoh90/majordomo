@@ -104,13 +104,13 @@ that never ships.
 
 | # | Milestone | Contents | Gate |
 |---|---|---|---|
-| M0 | Foundation | git baseline ✓ · this doc · CLAUDE.md Direction section · **USER: backup ritual** | docs committed |
-| M1 | Theme foundation | fonts · new tokens + 3 preset bundles · SKINS entries + founder split · DEFAULT_SKIN midnight · shell v2 normalize · AmbientLayer · voice scaffold + wave-1 strings | old screens legible under midnight; screenshots ×3 presets |
-| M2 | New shell + identity | tab header · view state · delete old shell furniture · identity sweep · key renames (after backup!) · check-brand gate | check-brand clean; real data intact |
-| M3 | Events + Manor read-only | core/events store+lib · seamed WeekGrid (desktop+mobile) · month view · empty state · popover · briefing strip · ?demo fixtures | night watch = one block; day watch splits at seam |
-| M4 | The Watch | POST A WATCH strip · ON DUTY ring · NEXT WATCH · week list · sleep suggestion · eslint zone | posting a watch lands it on the Manor |
-| M5 | Interactions | quick-add popover · drag engine · confirm/toast/undo | drag/quick-add exercised in browser |
-| M6 | What-if | draft fork · ghosts · diff panel · APPLY/Discard bar | discard leaves base untouched (verify blob) |
+| ✅ M0 | Foundation | git baseline · this doc · CLAUDE.md Direction section · **USER: backup ritual (still pending)** | docs committed |
+| ✅ M1 | Theme foundation | fonts · new tokens + 3 preset bundles · SKINS entries + founder split · DEFAULT_SKIN midnight · shell v2 normalize · AmbientLayer · voice scaffold + wave-1 strings | old screens legible under midnight; screenshots ×3 presets |
+| 🟡 M2 | New shell + identity | tab header ✓ · view state ✓ · old shell furniture deleted ✓ · identity sweep ✓ · check-brand gate ✓ · **key renames: waiting on the backup ritual** | check-brand clean; real data intact |
+| ✅ M3 | Events + Manor read-only | core/events store+lib · seamed WeekGrid (desktop+mobile) · month view · empty state · popover · briefing strip · ?demo fixtures | night watch = one block ✓ |
+| ✅ M4 | The Watch | POST A WATCH strip · ON DUTY ring · NEXT WATCH · week list · sleep pencilled after nights · eslint zone · nav mailbox | posting a watch lands it on the Manor ✓ |
+| ✅ M5 | Interactions | quick-add popover · drag engine (desktop; mobile drag backlog) · confirm/toast/undo | drag/quick-add exercised in browser ✓ |
+| ✅ M6 | What-if | draft fork in events store · ghosts · diff panel · APPLY/Discard bar | discard leaves base blob byte-identical ✓ |
 | M7 | The Grounds | full restyle, ALL old features kept · additive design cards · strain↔Manor bridge · log-fulfills-block | every pre-pivot training feature reachable |
 | M8 | The Ledger | token-restyle QA · payday markers · tab polish | all capital sheets legible ×3 presets |
 
