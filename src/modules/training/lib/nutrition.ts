@@ -1,4 +1,4 @@
-import type { MuscleId, Workout } from '../types'
+import { isRun, type MuscleId, type Workout } from '../types'
 import { addDays, localDayKey } from '../../../core/dates'
 
 /*
@@ -83,6 +83,10 @@ const ENERGY_WEIGHT: Record<MuscleId, number> = {
 const SESSION_SETS_BASE = 14
 const CAP_SESSION_KCAL = 450
 
+// Runs are priced in time on feet, not sets (see workoutWeightedSets).
+const RUN_SETS_PER_H = 30
+const RUN_DEFAULT_MIN = 30
+
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x))
 const setEffortScale = (effort: number) => 0.4 + 0.08 * effort // 0.4 → 1.2
 
@@ -106,8 +110,19 @@ export function weeklyProtein(p: Profile): number {
   return proteinGrams(p) * 7
 }
 
-/** Estimated weighted hard sets for one logged session. */
+/**
+ * Estimated weighted hard sets for one logged session — the app's energy unit.
+ * A run has no sets, so its cost is converted from time on feet: RUN_SETS_PER_H
+ * × hours × effort scale (~30 kcal/min at hard effort, then capped like any
+ * session). Distance stands in for duration at a 6 min/km default when only
+ * distance was logged; a run with neither still costs the default half hour.
+ */
 export function workoutWeightedSets(w: Workout): number {
+  if (isRun(w)) {
+    const minutes =
+      w.run?.durationMin ?? (w.run?.distanceKm != null ? w.run.distanceKm * 6 : RUN_DEFAULT_MIN)
+    return RUN_SETS_PER_H * (minutes / 60) * setEffortScale(w.effort)
+  }
   // energy is driven by the primary movers; a session with no primary muscle
   // (only reachable via hand-edited imports) contributes no session load.
   if (w.primary.length === 0) return 0

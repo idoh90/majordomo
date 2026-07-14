@@ -52,6 +52,16 @@ export const PPL_LABELS: Record<PplType, string> = {
   legs: 'Legs',
 }
 
+/**
+ * Muscles a run loads, resolved at save time like PPL. Calves take the
+ * eccentric brunt and the quads brake every stride (primary); hamstrings,
+ * glutes and the trunk stabilize (secondary, weighted 0.5 by the strain model).
+ */
+export const RUN_MAP: { primary: MuscleId[]; secondary: MuscleId[] } = {
+  primary: ['calves', 'quads'],
+  secondary: ['hamstrings', 'glutes', 'abs', 'obliques'],
+}
+
 export function muscleLabel(id: MuscleId): string {
   return MUSCLES[id].label
 }

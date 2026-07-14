@@ -1,4 +1,4 @@
-import type { MuscleGroup, MuscleId, Workout } from '../types'
+import { isRun, type MuscleGroup, type MuscleId, type Workout } from '../types'
 import { ALL_MUSCLE_IDS, MUSCLES, PICKER_GROUPS } from '../data/muscles'
 import { addDays, localDayKey, startOfWeek, weekKey, type WeekStart } from '../../../core/dates'
 import { muscleLoad } from './strain'
@@ -30,6 +30,7 @@ export function weeklyCounts(
   }
   const byKey = new Map(buckets.map((b) => [b.key, b]))
   for (const w of workouts) {
+    if (isRun(w)) continue // runs are conditioning, not sessions against the goal
     const b = byKey.get(weekKey(new Date(w.performedAt), weekStart))
     if (b) b.count++
   }
@@ -59,10 +60,25 @@ export function topMuscles(
     .slice(0, top)
 }
 
+/** Sessions this calendar week, against the weekly goal — runs never count. */
 export function thisWeekCount(workouts: Workout[], now: Date, weekStart?: WeekStart): number {
   const wk = weekKey(now, weekStart)
   let n = 0
-  for (const w of workouts) if (weekKey(new Date(w.performedAt), weekStart) === wk) n++
+  for (const w of workouts) {
+    if (isRun(w)) continue
+    if (weekKey(new Date(w.performedAt), weekStart) === wk) n++
+  }
+  return n
+}
+
+/** Runs this calendar week (shown alongside the goal, not inside it). */
+export function thisWeekRuns(workouts: Workout[], now: Date, weekStart?: WeekStart): number {
+  const wk = weekKey(now, weekStart)
+  let n = 0
+  for (const w of workouts) {
+    if (!isRun(w)) continue
+    if (weekKey(new Date(w.performedAt), weekStart) === wk) n++
+  }
   return n
 }
 

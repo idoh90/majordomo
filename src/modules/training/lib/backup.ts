@@ -23,6 +23,14 @@ function isScore(x: unknown): x is number {
   return typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 10
 }
 
+function isRunDetail(x: unknown): boolean {
+  if (x === undefined) return true
+  if (typeof x !== 'object' || x === null) return false
+  const r = x as Record<string, unknown>
+  const num = (v: unknown) => v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0)
+  return num(r.distanceKm) && num(r.durationMin)
+}
+
 function isWorkout(x: unknown): x is Workout {
   if (typeof x !== 'object' || x === null) return false
   const w = x as Record<string, unknown>
@@ -31,7 +39,8 @@ function isWorkout(x: unknown): x is Workout {
     typeof w.performedAt === 'string' &&
     !Number.isNaN(Date.parse(w.performedAt)) &&
     typeof w.createdAt === 'string' &&
-    (w.method === 'ppl' || w.method === 'custom') &&
+    (w.method === 'ppl' || w.method === 'custom' || w.method === 'run') &&
+    isRunDetail(w.run) &&
     (w.ppl === undefined || w.ppl === 'push' || w.ppl === 'pull' || w.ppl === 'legs') &&
     (w.repStyle === undefined ||
       w.repStyle === 'light' ||

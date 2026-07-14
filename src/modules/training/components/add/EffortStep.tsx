@@ -10,6 +10,8 @@ import type { Selection } from './AddWorkoutSheet'
 const REP_STYLE_ORDER: RepStyle[] = ['light', 'mixed', 'heavy']
 
 interface EffortStepProps {
+  /** runs have no rep style — the eccentric load is fixed by the sport */
+  isRun?: boolean
   selection: Selection
   effort: number
   strainFeel: number
@@ -27,6 +29,7 @@ interface EffortStepProps {
 }
 
 export function EffortStep({
+  isRun = false,
   selection,
   effort,
   strainFeel,
@@ -72,7 +75,7 @@ export function EffortStep({
         ))}
       </div>
 
-      <div className="mb-5">
+      <div className={`mb-5 ${isRun ? 'hidden' : ''}`}>
         <span className="mb-1.5 block text-sm font-medium text-ink-dim">Workout style</span>
         <div className="flex gap-1.5" role="radiogroup" aria-label="Workout style">
           {REP_STYLE_ORDER.map((s) => {
@@ -159,7 +162,7 @@ export function EffortStep({
         onClick={onSave}
         className="btn-cta mt-6 w-full py-3.5 text-lg transition active:scale-[0.99]"
       >
-        {editing ? 'Save Changes' : 'Save Workout'}
+        {editing ? 'Save Changes' : isRun ? 'Save Run' : 'Save Workout'}
       </button>
     </div>
   )

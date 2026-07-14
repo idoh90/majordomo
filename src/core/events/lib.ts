@@ -5,10 +5,11 @@ import type { CalendarEvent, EventKind } from './types'
  * The duty-cycle seam (from the Week View design direction 1a): a Manor
  * "day" column runs from SEAM_HOUR to SEAM_HOUR of the next calendar day, so
  * a night watch and the sleep that pays for it live in ONE unbroken column
- * and midnight is a dashed line, not a wall. 16:00 is the fixture schedule's
- * quietest hour; deriving it from the user's actual events is backlog.
+ * and midnight is a dashed line, not a wall. Noon reads as the natural break
+ * (a column = "this afternoon through tomorrow morning"); deriving the seam
+ * from the user's own quietest hour is backlog.
  */
-export const SEAM_HOUR = 16
+export const SEAM_HOUR = 12
 
 /** wall-clock seam instant on a given calendar day (DST-safe: local ctor) */
 export function seamStart(day: Date, seamHour: number = SEAM_HOUR): Date {

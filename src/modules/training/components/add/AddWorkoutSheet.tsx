@@ -1,22 +1,27 @@
 import { useEffect, useReducer } from 'react'
 import type { MuscleId, PplType, RepStyle, Workout } from '../../types'
-import { PPL_MAP } from '../../data/muscles'
+import { PPL_MAP, RUN_MAP } from '../../data/muscles'
 import { makeId, useWorkoutStore } from '../../store'
 import { Sheet } from '../../../../core/ui/Sheet'
 import { EffortStep } from './EffortStep'
 import { MethodStep } from './MethodStep'
 import { MuscleStep } from './MuscleStep'
 import { PplStep } from './PplStep'
+import { RunStep } from './RunStep'
 
 export type Selection = Partial<Record<MuscleId, 'primary' | 'secondary'>>
 
-type Step = 'method' | 'ppl' | 'muscles' | 'effort'
+type Step = 'method' | 'ppl' | 'muscles' | 'run' | 'effort'
+type Method = 'ppl' | 'custom' | 'run'
 
 interface Draft {
   step: Step
-  method: 'ppl' | 'custom' | null
+  method: Method | null
   ppl: PplType | null
   selection: Selection
+  /** run fields kept as strings — empty means "not recorded" */
+  distanceKm: string
+  durationMin: string
   effort: number
   strainFeel: number
   repStyle: RepStyle
@@ -26,21 +31,35 @@ interface Draft {
 }
 
 type Action =
-  | { type: 'method'; method: 'ppl' | 'custom' }
+  | { type: 'method'; method: Method }
   | { type: 'ppl'; ppl: PplType }
   | { type: 'cycle'; muscle: MuscleId }
   | { type: 'continue' }
   | { type: 'back' }
+  | { type: 'distanceKm'; value: string }
+  | { type: 'durationMin'; value: string }
   | { type: 'effort'; value: number }
   | { type: 'strainFeel'; value: number }
   | { type: 'repStyle'; value: RepStyle }
   | { type: 'performedAt'; value: string }
   | { type: 'reset'; draft: Draft }
 
+/** a run's muscles are resolved at save time, like PPL — tuning RUN_MAP later
+ *  never rewrites history */
+function runSelection(): Selection {
+  const selection: Selection = {}
+  for (const m of RUN_MAP.primary) selection[m] = 'primary'
+  for (const m of RUN_MAP.secondary) selection[m] = 'secondary'
+  return selection
+}
+
 function reducer(d: Draft, a: Action): Draft {
   switch (a.type) {
     case 'method':
-      return { ...d, method: a.method, step: a.method === 'ppl' ? 'ppl' : 'muscles' }
+      if (a.method === 'ppl') return { ...d, method: 'ppl', step: 'ppl' }
+      if (a.method === 'run')
+        return { ...d, method: 'run', selection: runSelection(), repStyle: 'light', step: 'run' }
+      return { ...d, method: 'custom', step: 'muscles' }
     case 'ppl': {
       const selection: Selection = {}
       for (const m of PPL_MAP[a.ppl].primary) selection[m] = 'primary'
@@ -56,9 +75,15 @@ function reducer(d: Draft, a: Action): Draft {
     case 'continue':
       return { ...d, step: 'effort' }
     case 'back':
-      if (d.step === 'effort') return { ...d, step: d.method === 'ppl' ? 'ppl' : 'muscles' }
-      if (d.step === 'ppl' || d.step === 'muscles') return { ...d, step: 'method' }
+      if (d.step === 'effort')
+        return { ...d, step: d.method === 'ppl' ? 'ppl' : d.method === 'run' ? 'run' : 'muscles' }
+      if (d.step === 'ppl' || d.step === 'muscles' || d.step === 'run')
+        return { ...d, step: 'method' }
       return d
+    case 'distanceKm':
+      return { ...d, distanceKm: a.value }
+    case 'durationMin':
+      return { ...d, durationMin: a.value }
     case 'effort':
       return { ...d, effort: a.value }
     case 'strainFeel':
@@ -77,6 +102,8 @@ const freshDraft = (): Draft => ({
   method: null,
   ppl: null,
   selection: {},
+  distanceKm: '',
+  durationMin: '',
   effort: 7,
   strainFeel: 6,
   repStyle: 'mixed',
@@ -93,6 +120,8 @@ function draftFromWorkout(w: Workout): Draft {
     method: w.method,
     ppl: w.ppl ?? null,
     selection,
+    distanceKm: w.run?.distanceKm != null ? String(w.run.distanceKm) : '',
+    durationMin: w.run?.durationMin != null ? String(w.run.durationMin) : '',
     effort: w.effort,
     strainFeel: w.strainFeel,
     repStyle: w.repStyle ?? 'mixed',
@@ -105,10 +134,11 @@ const TITLES: Record<Step, string> = {
   method: 'Log Workout',
   ppl: 'What kind of day?',
   muscles: 'What did you hit?',
+  run: 'How far?',
   effort: 'How did it go?',
 }
 
-const STEP_INDEX: Record<Step, number> = { method: 0, ppl: 1, muscles: 1, effort: 2 }
+const STEP_INDEX: Record<Step, number> = { method: 0, ppl: 1, muscles: 1, run: 1, effort: 2 }
 
 interface AddWorkoutSheetProps {
   open: boolean
@@ -138,10 +168,18 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
       if (kind === 'primary') primary.push(m)
       else if (kind === 'secondary') secondary.push(m)
     }
+    const num = (s: string) => {
+      const n = Number(s)
+      return s.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined
+    }
     const base = {
       performedAt: draft.whenTouched ? draft.performedAt : new Date().toISOString(),
       method: draft.method ?? 'custom',
       ppl: draft.method === 'ppl' ? (draft.ppl ?? undefined) : undefined,
+      run:
+        draft.method === 'run'
+          ? { distanceKm: num(draft.distanceKm), durationMin: num(draft.durationMin) }
+          : undefined,
       primary,
       secondary,
       effort: draft.effort,
@@ -201,8 +239,18 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
             onContinue={() => dispatch({ type: 'continue' })}
           />
         )}
+        {draft.step === 'run' && (
+          <RunStep
+            distanceKm={draft.distanceKm}
+            durationMin={draft.durationMin}
+            onDistance={(value) => dispatch({ type: 'distanceKm', value })}
+            onDuration={(value) => dispatch({ type: 'durationMin', value })}
+            onContinue={() => dispatch({ type: 'continue' })}
+          />
+        )}
         {draft.step === 'effort' && (
           <EffortStep
+            isRun={draft.method === 'run'}
             selection={draft.selection}
             effort={draft.effort}
             strainFeel={draft.strainFeel}

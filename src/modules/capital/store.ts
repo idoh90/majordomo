@@ -1,10 +1,13 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { makeId } from '../../core/ids'
+import { adoptLegacyKey } from '../../core/storage'
 import { localDayKey } from '../../core/dates'
 import type { Account, Holding, Quote, RecurringExpense, Snapshot, SpendItem } from './types'
 import { monthKey } from './lib/budget'
 import { fetchFxToILS, fetchQuotes, fetchTimeSeries, type Candle } from './lib/prices'
+
+adoptLegacyKey('majordomo-capital', 'batman-capital')
 
 interface CapitalState {
   accounts: Account[]
@@ -146,7 +149,7 @@ export const useCapitalStore = create<CapitalState>()(
       },
     }),
     {
-      name: 'batman-capital',
+      name: 'majordomo-capital',
       version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({

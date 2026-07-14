@@ -113,8 +113,13 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 - **`majordomo-events` v1** (`core/events/store.ts`) — the shared calendar: every wing
   writes `CalendarEvent`s through the store's actions (that action surface is the
   future Supabase seam), the Manor reads them. ISO-instant start/end, exclusive end,
-  never day-bucketed; the duty-cycle grid (`core/events/lib.ts`, seam 16:00) renders
+  never day-bucketed; the duty-cycle grid (`core/events/lib.ts`, **seam 12:00**) renders
   cross-midnight events whole and splits seam-crossers with dotted cut edges.
+
+**Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
+`majordomo-events`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
+still applies; the old keys are left in place as insurance and never read again.
 
 ## Capital console — Wayne Fund (`src/modules/capital/`)
 
@@ -221,6 +226,13 @@ DEV `window.__strains` assignment so it's live even on the menu).
 - Still not modeled (needs data the app doesn't log): per-exercise contribution
   vectors (finer synergist/stabilizer tiers than flat ×0.5), per-set diminishing returns.
   Detail sheet uses `workoutActivity` (% of peak) + `recoveryPhase` for wording.
+- **Runs** — `method: 'run'` + optional `run { distanceKm, durationMin }`. Muscles are
+  denormalized at save time from `RUN_MAP` (calves/quads primary; hams, glutes, trunk
+  secondary) with `repStyle: 'light'`, so runs feed the **strain engine** like any
+  session. They are NOT lifting sessions: `isRun()` excludes them from the weekly goal
+  count, the workouts/week chart, and the RP set-volume landmarks. They DO cost energy —
+  `workoutWeightedSets` prices a run from time on feet (`RUN_SETS_PER_H`), distance at
+  6 min/km when only distance was logged.
 - **Weekly goal** — persisted in the training store (`weeklyGoal`, 0 = no goal).
   Tracked against the current *calendar* week (Monday-start). "Slacking this week" =
   groups trained in the prior 4 weeks but under 50% of their weekly baseline now

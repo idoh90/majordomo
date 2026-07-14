@@ -1,24 +1,28 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { DEFAULT_SKIN, isSkinId, normalizeSkin, type SkinId } from '../ui/skins'
+import { adoptLegacyKey } from '../storage'
 import { setWeekStartDefault, type WeekStart } from '../dates'
 
 /**
- * App-wide shell state, persisted at `batman-shell`. Console modules keep
- * their own stores (training's is the untouched `batman-workouts` v4 blob).
+ * App-wide shell state, persisted at `majordomo-shell` (adopted from the
+ * pre-pivot `batman-shell` blob on first boot). Wings keep their own stores.
  *
  * v2: skins are normalized through `normalizeSkin` — founder-only skins fall
  * back to the default unless VITE_FOUNDER_SKIN=1 (their CSS doesn't ship
  * otherwise), and corrupt values can never reach `SKINS[skin]` lookups.
  */
 
+adoptLegacyKey('majordomo-shell', 'batman-shell')
+
 // First boot only: inherit the skin the user picked before this store existed
-// (frozen in the legacy `batman-workouts` blob — that field is never written
-// again). If a `batman-shell` blob exists, persist rehydrates over this seed
-// synchronously during create().
+// (frozen in the training blob — that field is never written again). If a
+// shell blob exists, persist rehydrates over this seed synchronously during
+// create().
 function seedSkin(): SkinId {
   try {
-    const raw = localStorage.getItem('batman-workouts')
+    const raw =
+      localStorage.getItem('majordomo-training') ?? localStorage.getItem('batman-workouts')
     const skin: unknown = raw ? JSON.parse(raw)?.state?.skin : null
     return normalizeSkin(skin)
   } catch {
@@ -53,7 +57,7 @@ export const useShellStore = create<ShellState>()(
       },
     }),
     {
-      name: 'batman-shell',
+      name: 'majordomo-shell',
       version: 2,
       storage: createJSONStorage(() => localStorage),
       // v1 blobs may hold a founder-only skin (e.g. 'gotham'); normalize it

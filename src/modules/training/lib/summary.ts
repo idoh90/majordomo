@@ -1,11 +1,11 @@
-import type { MuscleId, Workout } from '../types'
+import { isRun, type MuscleId, type Workout } from '../types'
 import { ALL_MUSCLE_IDS, MUSCLES, PPL_LABELS } from '../data/muscles'
 import type { StrainMap } from './strain'
 import { repStyleOf } from './strain'
 import { REP_STYLES } from './strain'
 import { dailyTargets, proteinGrams, proteinPerMeal, weeklyProtein, type Profile } from './nutrition'
 import { relativeDayLabel, type WeekStart } from '../../../core/dates'
-import { thisWeekCount } from './insights'
+import { thisWeekCount, thisWeekRuns } from './insights'
 
 export interface DailySummary {
   workoutsLine: string
@@ -22,6 +22,10 @@ function describeLastWorkout(workouts: Workout[], now: number): string {
   const when = relativeDayLabel(last.performedAt, new Date(now))
   const whenLabel =
     when === 'Today' || when === 'Yesterday' ? when.toLowerCase() : `on ${when}`
+  if (isRun(last)) {
+    const km = last.run?.distanceKm
+    return ` — last out was a ${km ? `${km} km ` : ''}run ${whenLabel}`
+  }
   const kind = last.ppl ? PPL_LABELS[last.ppl] : 'custom'
   const style = repStyleOf(last)
   const styleWord = style === 'mixed' ? '' : `${REP_STYLES[style].title.toLowerCase()} `
@@ -60,10 +64,13 @@ export function buildDailySummary(
   const week = weeklyProtein(profile)
   const macros = dailyTargets(profile, workouts, new Date(now))
 
+  const runCount = thisWeekRuns(workouts, new Date(now), weekStart)
+  const runsPart = runCount ? ` (plus ${runCount} run${runCount === 1 ? '' : 's'})` : ''
+
   const workoutsLine =
     workouts.length === 0
       ? 'No workouts logged yet — add your first to start tracking strain and fuel.'
-      : `${weekCount} workout${weekCount === 1 ? '' : 's'} logged this week${describeLastWorkout(workouts, now)}.`
+      : `${weekCount} workout${weekCount === 1 ? '' : 's'} logged this week${runsPart}${describeLastWorkout(workouts, now)}.`
 
   const strainLine = workouts.length === 0 ? '' : describeStrain(strains)
 

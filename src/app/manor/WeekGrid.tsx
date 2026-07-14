@@ -31,8 +31,8 @@ const BODY_H = 24 * PXH
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
 // hour offsets from the seam for the axis + rules; midnight gets the accent
-const TICKS = [0, 3, 6, 8, 12, 16, 20, 24]
-const RULES = [3, 6, 8, 12, 16, 20]
+const TICKS = [0, 3, 6, 9, 12, 15, 18, 21, 24]
+const RULES = [3, 6, 9, 12, 15, 18, 21]
 const MIDNIGHT_OFFSET = (24 - SEAM_HOUR) % 24
 
 const px = (from: Date, to: Date) => ((to.getTime() - from.getTime()) / 3_600_000) * PXH

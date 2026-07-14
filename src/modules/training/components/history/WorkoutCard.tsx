@@ -1,9 +1,17 @@
 import { useState } from 'react'
-import type { Workout } from '../../types'
+import { isRun, type Workout } from '../../types'
 import { MUSCLES, PPL_LABELS } from '../../data/muscles'
 import { timeLabel } from '../../../../core/dates'
 import { useWorkoutStore } from '../../store'
 import { ConfirmDialog } from '../../../../core/ui/ConfirmDialog'
+
+/** "8 km", "45 min", "8 km · 45 min", or '' when neither was recorded */
+function runLabel(w: Workout): string {
+  const parts: string[] = []
+  if (w.run?.distanceKm) parts.push(`${w.run.distanceKm} km`)
+  if (w.run?.durationMin) parts.push(`${w.run.durationMin} min`)
+  return parts.join(' · ')
+}
 
 interface WorkoutCardProps {
   workout: Workout
@@ -43,7 +51,12 @@ export function WorkoutCard({ workout, onEdit, onOpen }: WorkoutCardProps) {
               {PPL_LABELS[workout.ppl]}
             </span>
           )}
-          {workout.repStyle && workout.repStyle !== 'mixed' && (
+          {isRun(workout) && (
+            <span className="rounded-md border border-accent/60 px-1.5 py-px font-display text-[11px] font-bold uppercase tracking-[0.14em] text-accent">
+              Run{runLabel(workout) && ` · ${runLabel(workout)}`}
+            </span>
+          )}
+          {!isRun(workout) && workout.repStyle && workout.repStyle !== 'mixed' && (
             <span className="rounded-md border border-line px-1.5 py-px font-display text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint">
               {workout.repStyle === 'heavy' ? 'Heavy' : 'High rep'}
             </span>

@@ -4,9 +4,12 @@ import type { Workout } from './types'
 import { DEFAULT_PROFILE, type Profile } from './lib/nutrition'
 import { DEFAULT_SKIN } from '../../core/ui/skins'
 import { makeId } from '../../core/ids'
+import { adoptLegacyKey } from '../../core/storage'
 
 // re-export so training components keep importing makeId from the store barrel
 export { makeId }
+
+adoptLegacyKey('majordomo-training', 'batman-workouts')
 
 export const DEFAULT_WEEKLY_GOAL = 4
 
@@ -53,7 +56,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       setSkin: (skin) => set({ skin }),
     }),
     {
-      name: 'batman-workouts',
+      name: 'majordomo-training',
       version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
@@ -115,7 +118,14 @@ if (import.meta.env.DEV) {
       repStyle,
     })
     const D = 24
+    const demoRun = (hoursAgo: number, distanceKm: number, durationMin: number, effort: number): Workout => ({
+      ...demo(hoursAgo, undefined, ['calves', 'quads'], ['hamstrings', 'glutes', 'abs', 'obliques'], effort, 5, 'light'),
+      method: 'run',
+      run: { distanceKm, durationMin },
+    })
     useWorkoutStore.getState().replaceAll([
+      demoRun(30, 8, 44, 7),
+      demoRun(4 * D + 6, 12, 70, 8),
       // this calendar week (recent) — note: no legs this week → legs should read "slacking"
       demo(2, 'push', ['chest'], ['front-delts', 'side-delts', 'triceps'], 9, 8, 'heavy'),
       demo(26, 'pull', ['lats'], ['biceps', 'rear-delts', 'forearms', 'traps'], 8, 7, 'light'),
