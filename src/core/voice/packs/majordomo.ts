@@ -10,6 +10,15 @@ export const majordomoPack: VoicePack = {
   manor: {
     name: 'THE MANOR',
     empty: 'Nothing on the books, sir. A rare quiet evening.',
+    crossesMidnight: 'Crosses midnight — one block, as it should be.',
+    monthNote: 'A night watch is written on the day it begins, sir; the small hours carry a reminder.',
+  },
+  kinds: {
+    shift: 'THE WATCH',
+    sleep: 'REST',
+    training: 'THE GROUNDS',
+    study: 'THE STUDY',
+    marker: 'THE LEDGER',
   },
   modules: {
     training: { name: 'THE GROUNDS', tagline: 'Conditioning · strain · fuel' },

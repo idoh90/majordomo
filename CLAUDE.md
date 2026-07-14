@@ -108,6 +108,11 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 - **`batman-capital` v1** (`modules/capital/store.ts`) — Wayne Fund's data: accounts,
   snapshots, holdings, budget/spends, blur flag, plus the Twelve Data `apiKey` and the
   `prices`/`fx` quote cache. Entirely separate from the others.
+- **`majordomo-events` v1** (`core/events/store.ts`) — the shared calendar: every wing
+  writes `CalendarEvent`s through the store's actions (that action surface is the
+  future Supabase seam), the Manor reads them. ISO-instant start/end, exclusive end,
+  never day-bucketed; the duty-cycle grid (`core/events/lib.ts`, seam 16:00) renders
+  cross-midnight events whole and splits seam-crossers with dotted cut edges.
 
 ## Capital console — Wayne Fund (`src/modules/capital/`)
 
@@ -249,9 +254,12 @@ The app opens on the **menu**. `?console=<id>` (e.g. `?console=capital`) opens a
 console directly; the training aids `?sheet` / `?detail` / `?map` / `?debugmap` also
 auto-enter Training so they land on the right screen.
 
-- `?demo` — seeds fixtures into empty stores: 10 workouts **and** the Wayne Fund
-  demo (8 accounts, 6 ~monthly snapshots ending today, budget + spend, 2 live-priced
-  holdings with cached quotes so the board renders without a key) — screenshot aid
+- `?demo` — seeds fixtures into empty stores: 10 workouts, the Wayne Fund demo
+  (8 accounts, 6 ~monthly snapshots ending today, budget + spend, 2 live-priced
+  holdings with cached quotes so the board renders without a key), **and** the
+  Manor's "brutal week" (4 night watches + sleep + training + study + payday,
+  plus a quieter next week) — screenshot aid
+- `?manor=month` — opens the Manor in month view · `window.__events` — events store
 - `?console=training|capital` — start the shell inside that console
 - `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by
   the **shell** store (founder machines also accept the seven legacy skin ids)

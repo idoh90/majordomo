@@ -25,6 +25,18 @@ export interface VoicePack {
     name: string
     /** empty-week state, the butler's line */
     empty: string
+    /** popover note on an event whose end lands past midnight */
+    crossesMidnight: string
+    /** footnote under the month view */
+    monthNote: string
+  }
+  /** wing chip labels per event kind */
+  kinds: {
+    shift: string
+    sleep: string
+    training: string
+    study: string
+    marker: string
   }
   modules: {
     training: { name: string; tagline: string }
