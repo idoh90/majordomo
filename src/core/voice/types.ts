@@ -33,6 +33,25 @@ export interface VoicePack {
     briefing: (count: number) => string
     /** briefing-strip stat readout */
     briefingStat: (v: { watchH: number; trainingCount: number; studyH: number }) => string
+    /** drop rejected: the target slot overlaps something */
+    occupied: string
+    /** drag ghost time-line when the slot is taken */
+    occupiedShort: string
+    /** move applied */
+    moved: string
+    /** undo applied */
+    restored: string
+    /** confirm dialog dismissed */
+    asYouWere: string
+    /** quick-add applied */
+    onTheBooks: string
+    /** cross-day move confirm dialog */
+    moveTitle: string
+    moveBody: (v: { title: string; from: string; to: string }) => string
+    moveYes: string
+    undoLabel: string
+    /** quick-add templates (title copy is pack content) */
+    templates: { kind: 'training' | 'study' | 'sleep'; title: string; hours: number }[]
   }
   watch: {
     onDuty: string

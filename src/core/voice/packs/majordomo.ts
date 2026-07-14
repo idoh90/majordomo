@@ -25,6 +25,23 @@ export const majordomoPack: VoicePack = {
       if (studyH > 0) parts.push(`${studyH.toFixed(0)} h study`)
       return parts.join(' · ')
     },
+    occupied: 'That hour is already spoken for, sir.',
+    occupiedShort: 'occupied, sir',
+    moved: 'Moved, sir.',
+    restored: 'Restored, sir.',
+    asYouWere: 'As you were, sir.',
+    onTheBooks: 'On the books, sir.',
+    moveTitle: 'Move to another day, sir?',
+    moveBody: ({ title, from, to }) => `${title} would run ${to} instead of ${from}.`,
+    moveYes: 'Move it',
+    undoLabel: 'UNDO',
+    templates: [
+      { kind: 'training', title: 'Strength — lower', hours: 1.5 },
+      { kind: 'training', title: 'Strength — upper', hours: 1.5 },
+      { kind: 'training', title: 'Run — hard', hours: 1 },
+      { kind: 'study', title: 'Study', hours: 2 },
+      { kind: 'sleep', title: 'Sleep', hours: 6 },
+    ],
   },
   kinds: {
     shift: 'THE WATCH',

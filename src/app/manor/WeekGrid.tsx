@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CalendarEvent } from '../../core/events/types'
-import { SEAM_HOUR, clipToWindow, hoursOf, type ClippedEvent, type ColumnWindow } from '../../core/events/lib'
+import type { CalendarEvent, EventKind } from '../../core/events/types'
+import {
+  SEAM_HOUR,
+  clipToWindow,
+  hoursOf,
+  overlaps,
+  type ClippedEvent,
+  type ColumnWindow,
+} from '../../core/events/lib'
+import { useEventsStore } from '../../core/events/store'
 import { localDayKey } from '../../core/dates'
+import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { voice } from '../../core/voice'
 import { KIND_META, hhmm } from './kinds'
 
@@ -10,8 +19,10 @@ import { KIND_META, hhmm } from './kinds'
  * seam→seam (16:00 → 16:00 next day), so a 19:00→08:00 night watch renders
  * as ONE unbroken block and midnight is a dashed accent line inside the
  * column. Events that cross the SEAM split across columns with dotted cut
- * edges. Desktop: seven columns; mobile: one duty cycle per screen behind
- * day chips + snap scrolling.
+ * edges. Desktop: seven columns with drag-to-move (0.5h snap, occupancy
+ * check, cross-day confirm, single-slot undo) and click-to-quick-add;
+ * mobile: one duty cycle per screen behind day chips + snap scrolling
+ * (tap for popover/quick-add; mobile drag is backlog).
  */
 
 const PXH = 24 // px per hour
@@ -25,6 +36,7 @@ const RULES = [3, 6, 8, 12, 16, 20]
 const MIDNIGHT_OFFSET = (24 - SEAM_HOUR) % 24
 
 const px = (from: Date, to: Date) => ((to.getTime() - from.getTime()) / 3_600_000) * PXH
+const HOUR_MS = 3_600_000
 
 function tickLabel(offset: number): string {
   return `${String((SEAM_HOUR + offset) % 24).padStart(2, '0')}:00`
@@ -36,6 +48,33 @@ interface Popover {
   y: number
 }
 
+interface QuickAdd {
+  col: number
+  /** snapped hours from the column seam */
+  ts: number
+  y: number
+}
+
+interface DragState {
+  id: string
+  tc: number
+  ts: number
+  durH: number
+  valid: boolean
+  fromCol: number
+  title: string
+  kind: EventKind
+}
+
+interface MoveConfirm {
+  id: string
+  start: Date
+  durH: number
+  body: string
+}
+
+type LastAction = { type: 'move'; id: string; prev: { start: string; end: string } } | { type: 'add'; id: string }
+
 export function WeekGrid({
   columns,
   events,
@@ -45,7 +84,33 @@ export function WeekGrid({
   events: CalendarEvent[]
   now: number
 }) {
+  const addEvent = useEventsStore((s) => s.addEvent)
+  const updateEvent = useEventsStore((s) => s.updateEvent)
+  const deleteEvent = useEventsStore((s) => s.deleteEvent)
+
   const [popover, setPopover] = useState<Popover | null>(null)
+  const [quickAdd, setQuickAdd] = useState<QuickAdd | null>(null)
+  const [drag, setDrag] = useState<DragState | null>(null)
+  const [confirm, setConfirm] = useState<MoveConfirm | null>(null)
+  const [toast, setToast] = useState<{ msg: string; undo: boolean } | null>(null)
+  const [lastAction, setLastAction] = useState<LastAction | null>(null)
+
+  const boxRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<DragState | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const suppressClickUntil = useRef(0)
+
+  const butler = (msg: string, undo = false) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    setToast({ msg, undo })
+    toastTimer.current = setTimeout(() => setToast(null), 5_200)
+  }
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current)
+    },
+    [],
+  )
 
   const clipsFor = (win: ColumnWindow): ClippedEvent[] =>
     events
@@ -55,8 +120,171 @@ export function WeekGrid({
   const markersFor = (win: ColumnWindow): CalendarEvent[] =>
     events.filter((e) => e.allDay && localDayKey(e.start) === localDayKey(win.day))
 
-  const openPopover = (event: CalendarEvent, col: number, y: number) =>
+  const openPopover = (event: CalendarEvent, col: number, y: number) => {
+    if (Date.now() < suppressClickUntil.current) return
+    setQuickAdd(null)
     setPopover((p) => (p?.event.id === event.id ? null : { event, col, y }))
+  }
+
+  /** is a [tc, ts, ts+durH) slot free of every other timed event? */
+  const slotFree = (ignoreId: string | null, tc: number, ts: number, durH: number): boolean => {
+    const start = new Date(columns[tc].start.getTime() + ts * HOUR_MS)
+    const end = new Date(start.getTime() + durH * HOUR_MS)
+    return !events.some(
+      (e) =>
+        !e.allDay &&
+        e.id !== ignoreId &&
+        overlaps(new Date(e.start), new Date(e.end), start, end),
+    )
+  }
+
+  /* ------------------------------------------------------------ mutations */
+
+  const applyMove = (id: string, start: Date, durH: number) => {
+    const prev = events.find((e) => e.id === id)
+    if (!prev) return
+    updateEvent(id, {
+      start: start.toISOString(),
+      end: new Date(start.getTime() + durH * HOUR_MS).toISOString(),
+    })
+    setLastAction({ type: 'move', id, prev: { start: prev.start, end: prev.end } })
+    butler(voice.manor.moved, true)
+  }
+
+  const undo = () => {
+    if (!lastAction) return
+    if (lastAction.type === 'move') updateEvent(lastAction.id, lastAction.prev)
+    else deleteEvent(lastAction.id)
+    setLastAction(null)
+    butler(voice.manor.restored)
+  }
+
+  const finishDrag = (d: DragState) => {
+    setDrag(null)
+    dragRef.current = null
+    if (!d.valid) {
+      butler(voice.manor.occupied)
+      return
+    }
+    const e = events.find((x) => x.id === d.id)
+    if (!e) return
+    const newStart = new Date(columns[d.tc].start.getTime() + d.ts * HOUR_MS)
+    if (newStart.getTime() === new Date(e.start).getTime()) return
+    if (d.tc !== d.fromCol) {
+      const newEnd = new Date(newStart.getTime() + d.durH * HOUR_MS)
+      const s = new Date(e.start)
+      const en = new Date(e.end)
+      setConfirm({
+        id: d.id,
+        start: newStart,
+        durH: d.durH,
+        body: voice.manor.moveBody({
+          title: e.title,
+          from: `${WD[s.getDay()]} ${hhmm(s)} → ${hhmm(en)}`,
+          to: `${WD[newStart.getDay()]} ${hhmm(newStart)} → ${hhmm(newEnd)}`,
+        }),
+      })
+      return
+    }
+    applyMove(d.id, newStart, d.durH)
+  }
+
+  /* ----------------------------------------------------------- drag start */
+
+  const onBlockPointerDown = (e: CalendarEvent, ev: React.PointerEvent) => {
+    if (ev.button !== 0 && ev.pointerType === 'mouse') return
+    const box = boxRef.current
+    if (!box) return
+    const rect = box.getBoundingClientRect()
+    const s = new Date(e.start)
+    const fromCol = columns.findIndex((w) => s >= w.start && s < w.end)
+    if (fromCol < 0) return // starts before this week's window — not draggable here
+    const startOffsetH = (s.getTime() - columns[fromCol].start.getTime()) / HOUR_MS
+    const grabH = (ev.clientY - rect.top) / PXH - startOffsetH
+    const durH = hoursOf(e)
+    const startX = ev.clientX
+    const startY = ev.clientY
+    let moved = false
+
+    const mm = (m: PointerEvent) => {
+      if (!moved && Math.hypot(m.clientX - startX, m.clientY - startY) < 5) return
+      moved = true
+      const x = m.clientX - rect.left
+      const y = m.clientY - rect.top
+      const colW = rect.width / 7
+      const tc = Math.max(0, Math.min(6, Math.floor(x / colW)))
+      let ts = Math.round(((y / PXH) - grabH) * 2) / 2
+      ts = Math.max(0, Math.min(24 - durH, ts))
+      const next: DragState = {
+        id: e.id,
+        tc,
+        ts,
+        durH,
+        valid: slotFree(e.id, tc, ts, durH),
+        fromCol,
+        title: e.title,
+        kind: e.kind,
+      }
+      dragRef.current = next
+      setDrag(next)
+      setPopover(null)
+      setQuickAdd(null)
+      m.preventDefault()
+    }
+    const mu = () => {
+      window.removeEventListener('pointermove', mm)
+      window.removeEventListener('pointerup', mu)
+      if (!moved) return // plain click → the block's onClick opens the popover
+      suppressClickUntil.current = Date.now() + 250
+      const d = dragRef.current
+      if (d) finishDrag(d)
+    }
+    window.addEventListener('pointermove', mm)
+    window.addEventListener('pointerup', mu)
+  }
+
+  /* ------------------------------------------------------------ quick-add */
+
+  const onColumnClick = (col: number, ev: React.MouseEvent) => {
+    if (Date.now() < suppressClickUntil.current) return
+    if ((ev.target as HTMLElement).closest('[data-event-block]')) return
+    if (popover) {
+      setPopover(null)
+      return
+    }
+    if (quickAdd) {
+      setQuickAdd(null)
+      return
+    }
+    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect()
+    const y = ev.clientY - rect.top
+    let ts = Math.floor((y / PXH) * 2) / 2
+    ts = Math.max(0, Math.min(23.5, ts))
+    setQuickAdd({ col, ts, y })
+  }
+
+  const quickAddPick = (tpl: { kind: EventKind; title: string; hours: number }) => {
+    if (!quickAdd) return
+    const ts = Math.min(quickAdd.ts, 24 - tpl.hours)
+    if (!slotFree(null, quickAdd.col, ts, tpl.hours)) {
+      butler(voice.manor.occupied)
+      setQuickAdd(null)
+      return
+    }
+    const start = new Date(columns[quickAdd.col].start.getTime() + ts * HOUR_MS)
+    const added = addEvent({
+      source: 'manual',
+      kind: tpl.kind,
+      title: tpl.title,
+      start: start.toISOString(),
+      end: new Date(start.getTime() + tpl.hours * HOUR_MS).toISOString(),
+    })
+    setLastAction({ type: 'add', id: added.id })
+    setQuickAdd(null)
+    butler(voice.manor.onTheBooks, true)
+  }
+
+  /* -------------------------------------------------------------- render */
 
   return (
     <>
@@ -70,23 +298,41 @@ export function WeekGrid({
         <div className="flex">
           <TickAxis />
           <div
+            ref={boxRef}
             className="relative flex-1 overflow-hidden rounded-xl border border-line"
             style={{ background: 'color-mix(in srgb, var(--color-panel) 55%, transparent)' }}
           >
             <Rules />
+            {drag && (
+              <div
+                className="pointer-events-none absolute bottom-0 top-0"
+                style={{
+                  left: `calc(${drag.tc} * 100% / 7)`,
+                  width: 'calc(100% / 7)',
+                  background: drag.valid
+                    ? 'color-mix(in srgb, var(--color-accent) 5%, transparent)'
+                    : 'color-mix(in srgb, var(--color-danger) 6%, transparent)',
+                  transition: 'left 120ms ease-out',
+                }}
+              />
+            )}
             <div className="flex">
               {columns.map((win, i) => (
-                <DayBody
-                  key={i}
-                  win={win}
-                  clips={clipsFor(win)}
-                  now={now}
-                  divider={i > 0}
-                  selectedId={popover?.event.id}
-                  onEventClick={(e, y) => openPopover(e, i, y)}
-                />
+                <div key={i} className="min-w-0 flex-1" onClick={(ev) => onColumnClick(i, ev)}>
+                  <DayBody
+                    win={win}
+                    clips={clipsFor(win)}
+                    now={now}
+                    divider={i > 0}
+                    selectedId={popover?.event.id}
+                    dragId={drag?.id}
+                    onEventClick={(e, y) => openPopover(e, i, y)}
+                    onEventPointerDown={onBlockPointerDown}
+                  />
+                </div>
               ))}
             </div>
+            {drag && <DragGhost drag={drag} columns={columns} />}
             {popover && (
               <EventPopover
                 popover={popover}
@@ -97,6 +343,21 @@ export function WeekGrid({
                       ? `calc(${popover.col + 1} * 100% / 7 + 6px)`
                       : `calc(${popover.col} * 100% / 7 - 242px)`,
                   top: Math.max(4, Math.min(popover.y, BODY_H - 190)),
+                }}
+              />
+            )}
+            {quickAdd && (
+              <QuickAddPopover
+                quickAdd={quickAdd}
+                columns={columns}
+                onPick={quickAddPick}
+                onClose={() => setQuickAdd(null)}
+                style={{
+                  left:
+                    quickAdd.col < 4
+                      ? `calc(${quickAdd.col + 1} * 100% / 7 + 6px)`
+                      : `calc(${quickAdd.col} * 100% / 7 - 218px)`,
+                  top: Math.max(4, Math.min(quickAdd.y, BODY_H - 236)),
                 }}
               />
             )}
@@ -113,7 +374,41 @@ export function WeekGrid({
         popover={popover}
         openPopover={openPopover}
         closePopover={() => setPopover(null)}
+        quickAdd={quickAdd}
+        onColumnClick={onColumnClick}
+        quickAddPick={quickAddPick}
+        closeQuickAdd={() => setQuickAdd(null)}
       />
+
+      <ConfirmDialog
+        open={confirm !== null}
+        title={voice.manor.moveTitle}
+        message={confirm?.body ?? ''}
+        confirmLabel={voice.manor.moveYes}
+        onCancel={() => {
+          setConfirm(null)
+          butler(voice.manor.asYouWere)
+        }}
+        onConfirm={() => {
+          if (confirm) applyMove(confirm.id, confirm.start, confirm.durH)
+          setConfirm(null)
+        }}
+      />
+
+      {toast && (
+        <div className="menu-panel fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3.5 px-4 py-2.5 text-[13px] animate-[fade-in_200ms_ease-out]">
+          {toast.msg}
+          {toast.undo && lastAction && (
+            <button
+              type="button"
+              onClick={undo}
+              className="font-bold tracking-[0.14em] text-accent hover:underline"
+            >
+              {voice.manor.undoLabel}
+            </button>
+          )}
+        </div>
+      )}
     </>
   )
 }
@@ -212,19 +507,23 @@ function DayBody({
   now,
   divider,
   selectedId,
+  dragId,
   onEventClick,
+  onEventPointerDown,
 }: {
   win: ColumnWindow
   clips: ClippedEvent[]
   now: number
   divider: boolean
   selectedId?: string
+  dragId?: string
   onEventClick: (e: CalendarEvent, y: number) => void
+  onEventPointerDown?: (e: CalendarEvent, ev: React.PointerEvent) => void
 }) {
   const nowInCol = now >= win.start.getTime() && now < win.end.getTime()
   return (
     <div
-      className="relative min-w-0 flex-1"
+      className="relative min-w-0"
       style={{
         height: BODY_H,
         borderLeft: divider
@@ -238,7 +537,9 @@ function DayBody({
           clip={c}
           win={win}
           selected={selectedId === c.event.id}
+          dimmed={dragId === c.event.id}
           onClick={(y) => onEventClick(c.event, y)}
+          onPointerDown={onEventPointerDown}
         />
       ))}
       {nowInCol && (
@@ -262,12 +563,16 @@ function EventBlock({
   clip,
   win,
   selected,
+  dimmed,
   onClick,
+  onPointerDown,
 }: {
   clip: ClippedEvent
   win: ColumnWindow
   selected: boolean
+  dimmed: boolean
   onClick: (y: number) => void
+  onPointerDown?: (e: CalendarEvent, ev: React.PointerEvent) => void
 }) {
   const e = clip.event
   const meta = KIND_META[e.kind]
@@ -286,11 +591,16 @@ function EventBlock({
   return (
     <button
       type="button"
+      data-event-block
       onClick={(ev) => onClick((ev.currentTarget as HTMLElement).offsetTop)}
-      className="absolute left-[3px] right-[3px] z-[2] overflow-hidden rounded-[7px] p-0 text-left"
+      onPointerDown={onPointerDown ? (ev) => onPointerDown(e, ev) : undefined}
+      className="absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left"
       style={{
         top: topPx + 1,
         height: Math.max(heightPx - 2, 12),
+        cursor: onPointerDown ? 'grab' : 'pointer',
+        touchAction: onPointerDown ? 'none' : undefined,
+        opacity: dimmed ? 0.3 : 1,
         borderLeft: isRest ? hairline : `3px solid ${meta.color}`,
         borderRight: hairline,
         borderTop: clip.continuesBefore ? cutEdge : hairline,
@@ -342,6 +652,43 @@ function EventBlock({
         )}
       </span>
     </button>
+  )
+}
+
+/** the lifted copy that follows the pointer during a drag */
+function DragGhost({ drag, columns }: { drag: DragState; columns: ColumnWindow[] }) {
+  const meta = KIND_META[drag.kind]
+  const start = new Date(columns[drag.tc].start.getTime() + drag.ts * HOUR_MS)
+  const end = new Date(start.getTime() + drag.durH * HOUR_MS)
+  return (
+    <div
+      className="pointer-events-none absolute z-[6] rounded-[7px] px-2 py-[5px]"
+      style={{
+        left: `calc(${drag.tc} * 100% / 7 + 3px)`,
+        width: 'calc(100% / 7 - 6px)',
+        top: drag.ts * PXH + 1,
+        height: drag.durH * PXH - 2,
+        transform: 'scale(1.02)',
+        border: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        background: drag.valid
+          ? `color-mix(in srgb, ${meta.color} 26%, var(--color-panel-2))`
+          : 'color-mix(in srgb, var(--color-danger) 22%, var(--color-panel-2))',
+        boxShadow: drag.valid
+          ? '0 14px 34px rgb(0 0 0 / 0.5), 0 0 18px var(--glow-accent)'
+          : '0 14px 34px rgb(0 0 0 / 0.5)',
+        transition: 'left 120ms ease-out, top 100ms ease-out',
+      }}
+    >
+      <div className="text-xs font-semibold leading-[1.2]">{drag.title}</div>
+      <div
+        className="text-[11px] [font-variant-numeric:tabular-nums]"
+        style={{ color: drag.valid ? 'var(--color-ink-dim)' : 'var(--color-danger)' }}
+      >
+        {drag.valid
+          ? `${WD[start.getDay()]} ${hhmm(start)} → ${hhmm(end)}`
+          : voice.manor.occupiedShort}
+      </div>
+    </div>
   )
 }
 
@@ -402,6 +749,67 @@ function EventPopover({
   )
 }
 
+function QuickAddPopover({
+  quickAdd,
+  columns,
+  onPick,
+  onClose,
+  style,
+}: {
+  quickAdd: QuickAdd
+  columns: ColumnWindow[]
+  onPick: (tpl: { kind: EventKind; title: string; hours: number }) => void
+  onClose: () => void
+  style: React.CSSProperties
+}) {
+  const when = new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS)
+  return (
+    <div
+      className="menu-panel absolute z-[11] w-[212px] animate-[fade-in_160ms_ease-out] p-3.5"
+      style={style}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-[12.5px] font-bold [font-variant-numeric:tabular-nums]">
+          {WD[when.getDay()]} · {hhmm(when)}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-auto text-[13px] text-ink-dim transition-colors hover:text-ink"
+          aria-label="Close"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="mt-2 flex flex-col gap-1.5">
+        {voice.manor.templates.map((tpl) => {
+          const meta = KIND_META[tpl.kind]
+          return (
+            <button
+              key={tpl.title}
+              type="button"
+              onClick={() => onPick(tpl)}
+              className="card flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs transition-colors"
+              style={{ borderColor: undefined }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = meta.color)}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '')}
+            >
+              <span
+                className="h-[7px] w-[7px] flex-none rounded-full"
+                style={{ background: meta.color }}
+              />
+              {tpl.title}
+              <span className="ml-auto text-[10.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
+                {tpl.hours.toFixed(1)} h
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /* --------------------------------------------------------------- mobile */
 
 function MobileWeek({
@@ -412,6 +820,10 @@ function MobileWeek({
   popover,
   openPopover,
   closePopover,
+  quickAdd,
+  onColumnClick,
+  quickAddPick,
+  closeQuickAdd,
 }: {
   columns: ColumnWindow[]
   clipsFor: (win: ColumnWindow) => ClippedEvent[]
@@ -420,6 +832,10 @@ function MobileWeek({
   popover: Popover | null
   openPopover: (e: CalendarEvent, col: number, y: number) => void
   closePopover: () => void
+  quickAdd: QuickAdd | null
+  onColumnClick: (col: number, ev: React.MouseEvent) => void
+  quickAddPick: (tpl: { kind: EventKind; title: string; hours: number }) => void
+  closeQuickAdd: () => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const todayIdx = columns.findIndex((w) => now >= w.start.getTime() && now < w.end.getTime())
@@ -508,7 +924,7 @@ function MobileWeek({
                   </span>
                 ))}
               </div>
-              <div className="relative" style={{ height: BODY_H }}>
+              <div className="relative" style={{ height: BODY_H }} onClick={(ev) => onColumnClick(i, ev)}>
                 <Rules />
                 <DayBody
                   win={win}
@@ -527,6 +943,20 @@ function MobileWeek({
                       right: 8,
                       width: 'auto',
                       top: Math.max(4, Math.min(popover.y, BODY_H - 190)),
+                    }}
+                  />
+                )}
+                {quickAdd && quickAdd.col === i && (
+                  <QuickAddPopover
+                    quickAdd={quickAdd}
+                    columns={columns}
+                    onPick={quickAddPick}
+                    onClose={closeQuickAdd}
+                    style={{
+                      left: 8,
+                      right: 8,
+                      width: 'auto',
+                      top: Math.max(4, Math.min(quickAdd.y, BODY_H - 236)),
                     }}
                   />
                 )}
