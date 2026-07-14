@@ -1,6 +1,6 @@
 import type * as React from 'react'
 
-/** A console plugged into the Batcomputer shell (menu tile + full screen). */
+/** A wing plugged into the app shell (nav tab + tile metadata + full screen). */
 export type ConsoleModule = {
   id: string
   name: string

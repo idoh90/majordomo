@@ -1,4 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0A0B0E"/>
-  <path d="M14 21 L32 29 L50 21 L46 37 L32 47 L18 37 Z" fill="#F5B301"/>
+  <!-- Majordomo "M" monogram — placeholder mark until the real wordmark/logo session -->
+  <rect width="64" height="64" rx="14" fill="#0c1017"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#232d40" stroke-width="3"/>
+  <path d="M 16 46 L 16 20 L 32 40 L 48 20 L 48 46" fill="none" stroke="#7da7d0" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

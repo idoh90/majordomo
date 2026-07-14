@@ -4,7 +4,7 @@ import { MUSCLES } from '../data/muscles'
 
 export function buildExport(workouts: Workout[]): ExportFile {
   return {
-    app: 'batman-workouts',
+    app: 'majordomo-training',
     version: 1,
     exportedAt: new Date().toISOString(),
     workouts,
@@ -60,7 +60,9 @@ export function parseImport(json: string): ImportResult {
     return { ok: false, error: 'Unexpected file format.' }
   }
   const d = data as Record<string, unknown>
-  if (d.app !== 'batman-workouts') {
+  // 'batman-workouts' is the pre-pivot tag — files exported before the rename
+  // live on people's disks, so it stays accepted forever
+  if (d.app !== 'majordomo-training' && d.app !== 'batman-workouts') {
     return { ok: false, error: voice.backup.notExportFile }
   }
   if (!Array.isArray(d.workouts)) {

@@ -49,7 +49,7 @@ export interface Workout {
 }
 
 export interface ExportFile {
-  app: 'batman-workouts'
+  app: 'majordomo-training'
   version: 1
   exportedAt: string
   workouts: Workout[]

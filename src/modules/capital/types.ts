@@ -77,7 +77,7 @@ export interface RecurringExpense {
 }
 
 export interface CapitalExport {
-  app: 'batman-capital'
+  app: 'majordomo-capital'
   version: 1
   exportedAt: string
   accounts: Account[]

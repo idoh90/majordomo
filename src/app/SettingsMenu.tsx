@@ -31,7 +31,7 @@ export function SettingsMenu() {
   const [copied, setCopied] = useState(false)
 
   const exportFile = () => {
-    downloadJson(`batman-workouts-${localDayKey(new Date())}.json`, serializeExport(workouts))
+    downloadJson(`majordomo-training-${localDayKey(new Date())}.json`, serializeExport(workouts))
     setMenuOpen(false)
   }
 
@@ -341,7 +341,7 @@ function ImportSheet({
           setText(e.target.value)
           setError(null)
         }}
-        placeholder='{"app":"batman-workouts", …}'
+        placeholder='{"app":"majordomo-training", …}'
         rows={5}
         className="card w-full resize-none p-3 font-mono text-xs text-ink outline-none placeholder:text-ink-faint focus:border-accent/60"
       />
