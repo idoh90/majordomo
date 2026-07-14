@@ -1,4 +1,5 @@
 import type { NetWorthDelta } from '../lib/networth'
+import { voice } from '../../../core/voice'
 import { formatPercent } from '../lib/money'
 import { Amount } from './Amount'
 
@@ -49,10 +50,7 @@ export function Vault({ netWorth, assets, liabilities, delta, hasData }: VaultPr
           </div>
         </>
       ) : (
-        <p className="mt-3 max-w-sm text-sm text-ink-dim">
-          No balances yet. Add your accounts, then log a snapshot to start charting the cave's
-          worth.
-        </p>
+        <p className="mt-3 max-w-sm text-sm text-ink-dim">{voice.capital.vaultEmpty}</p>
       )}
     </div>
   )

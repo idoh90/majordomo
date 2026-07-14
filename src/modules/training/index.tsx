@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { ConsoleModule } from '../../core/module'
+import { voice } from '../../core/voice'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
 import { DailySummary } from './components/DailySummary'
@@ -53,9 +54,9 @@ function Icon() {
 
 export const trainingConsole: ConsoleModule = {
   id: 'training',
-  name: 'TRAINING GROUNDS',
+  name: voice.modules.training.name,
   status: 'online',
-  tagline: 'Conditioning · strain · fuel',
+  tagline: voice.modules.training.tagline,
   Icon,
   Tile,
   Screen: TrainingScreen,

@@ -1,4 +1,5 @@
 import type { ExportFile, MuscleId, Workout } from '../types'
+import { voice } from '../../../core/voice'
 import { MUSCLES } from '../data/muscles'
 
 export function buildExport(workouts: Workout[]): ExportFile {
@@ -60,7 +61,7 @@ export function parseImport(json: string): ImportResult {
   }
   const d = data as Record<string, unknown>
   if (d.app !== 'batman-workouts') {
-    return { ok: false, error: 'Not a Batman Project export file.' }
+    return { ok: false, error: voice.backup.notExportFile }
   }
   if (!Array.isArray(d.workouts)) {
     return { ok: false, error: 'The file has no workout list.' }

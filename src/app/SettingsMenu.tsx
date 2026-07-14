@@ -3,7 +3,7 @@ import type { Workout } from '../modules/training/types'
 import { downloadJson, parseImport, serializeExport } from '../modules/training/lib/backup'
 import { localDayKey } from '../core/dates'
 import { SKINS, SKIN_IDS } from '../core/ui/skins'
-import { FOUNDER } from '../core/founder'
+import { voice } from '../core/voice'
 import { useShellStore } from '../core/store/shell'
 import { useWorkoutStore } from '../modules/training/store'
 import { ConfirmDialog } from '../core/ui/ConfirmDialog'
@@ -14,6 +14,8 @@ export function SettingsMenu() {
   const workouts = useWorkoutStore((s) => s.workouts)
   const weekStart = useShellStore((s) => s.weekStart)
   const setWeekStart = useShellStore((s) => s.setWeekStart)
+  const ambient = useShellStore((s) => s.ambient)
+  const setAmbient = useShellStore((s) => s.setAmbient)
   const replaceAll = useWorkoutStore((s) => s.replaceAll)
   const clearAll = useWorkoutStore((s) => s.clearAll)
 
@@ -100,6 +102,27 @@ export function SettingsMenu() {
                 ))}
               </div>
             </div>
+            <div className="px-3.5 py-2.5">
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+                Ambient motion
+              </div>
+              <div className="flex gap-1">
+                {([[true, 'On'], [false, 'Off']] as const).map(([v, label]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setAmbient(v)}
+                    className={`flex-1 rounded-pill border px-2 py-1 text-xs transition-colors ${
+                      ambient === v
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-line text-ink-dim hover:text-ink'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="border-t border-line" />
             <MenuItem onClick={exportFile}>Export backup file</MenuItem>
             <MenuItem onClick={copyJson}>{copied ? 'Copied ✓' : 'Copy backup JSON'}</MenuItem>
@@ -173,20 +196,12 @@ function SkinSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const skin = useShellStore((s) => s.skin)
   const setSkin = useShellStore((s) => s.setSkin)
 
-  // founder-only skins stay hidden from the picker unless the flag is set —
-  // but an *active* founder skin is never stomped, it just keeps its row
-  const visibleSkins = SKIN_IDS.filter(
-    (id) => FOUNDER || !SKINS[id].founderOnly || id === skin,
-  )
-
   return (
     <Sheet open={open} onClose={onClose}>
       <h2 className="mb-1 font-display text-xl font-bold tracking-wide">App skin</h2>
-      <p className="mb-4 text-sm text-ink-dim">
-        Seven looks for the same cave. Switches instantly — nothing else changes.
-      </p>
+      <p className="mb-4 text-sm text-ink-dim">{voice.skinPickerBlurb}</p>
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="App skin">
-        {visibleSkins.map((id) => {
+        {SKIN_IDS.map((id) => {
           const s = SKINS[id]
           const active = id === skin
           return (

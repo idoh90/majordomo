@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { ConsoleModule } from '../../core/module'
+import { voice } from '../../core/voice'
 import { useNow } from '../../core/useNow'
 import { useCapitalStore } from './store'
 import { monthKey, monthlySpent } from './lib/budget'
@@ -171,9 +172,9 @@ function Icon() {
 
 export const capitalConsole: ConsoleModule = {
   id: 'capital',
-  name: 'WAYNE FUND',
+  name: voice.modules.capital.name,
   status: 'online',
-  tagline: 'Net worth · markets · ledger',
+  tagline: voice.modules.capital.tagline,
   Icon,
   Tile,
   Screen: CapitalScreen,

@@ -5,6 +5,8 @@ import { SKINS, applySkin } from '../core/ui/skins'
 import { useNow } from '../core/useNow'
 import { storageAvailable } from '../core/storage'
 import { useTrainingUi } from '../modules/training/uiStore'
+import { AmbientLayer } from '../core/ui/AmbientLayer'
+import { voice } from '../core/voice'
 import { CONSOLES } from './consoles'
 import { SettingsMenu } from './SettingsMenu'
 
@@ -31,6 +33,7 @@ export default function App() {
 
   return (
     <>
+      <AmbientLayer />
       {SKINS[skin].statusStrip && <TacOpsStrip now={now} />}
       <div className="mx-auto min-h-dvh w-full max-w-[1200px] px-4 pb-28 lg:px-8 lg:pb-10">
         {!storageOk && (
@@ -167,7 +170,13 @@ function AppHeader({ now, onAdd }: { now: number; onAdd?: () => void }) {
           Personal training dossier
         </div>
         <h1 className="mt-2 font-display text-4xl text-ink">
-          The Batman <span className="italic text-accent">Project</span>
+          {voice.wordmark.lead}
+          {voice.wordmark.accent && (
+            <>
+              {' '}
+              <span className="italic text-accent">{voice.wordmark.accent}</span>
+            </>
+          )}
         </h1>
         <div className="mt-3.5 flex items-center gap-3">
           <span className="h-px flex-1 bg-line" />
@@ -184,10 +193,14 @@ function AppHeader({ now, onAdd }: { now: number; onAdd?: () => void }) {
     return (
       <header className="py-5">
         <div className="flex items-start justify-between">
-          <h1 className="font-display text-3xl leading-[1.02] text-ink sm:text-4xl">
-            THE BATMAN
-            <br />
-            <span className="text-accent">PROJECT</span>
+          <h1 className="font-display text-3xl uppercase leading-[1.02] text-ink sm:text-4xl">
+            {voice.wordmark.lead}
+            {voice.wordmark.accent && (
+              <>
+                <br />
+                <span className="text-accent">{voice.wordmark.accent}</span>
+              </>
+            )}
           </h1>
           <div className="flex items-center gap-2.5">
             {logButton}
@@ -211,8 +224,14 @@ function AppHeader({ now, onAdd }: { now: number; onAdd?: () => void }) {
     return (
       <header className="flex items-center justify-between py-6">
         <div>
-          <h1 className="font-display text-sm font-medium tracking-[0.42em] text-ink">
-            THE BATMAN <span className="text-accent">PROJECT</span>
+          <h1 className="font-display text-sm font-medium uppercase tracking-[0.42em] text-ink">
+            {voice.wordmark.lead}
+            {voice.wordmark.accent && (
+              <>
+                {' '}
+                <span className="text-accent">{voice.wordmark.accent}</span>
+              </>
+            )}
           </h1>
           <div className="mt-2 text-[9.5px] font-light tracking-[0.3em] text-ink-faint">
             {WD[d.getDay()]} {d.getDate()} {MO[d.getMonth()]} {d.getFullYear()} · {hhmm(d)}
@@ -230,8 +249,14 @@ function AppHeader({ now, onAdd }: { now: number; onAdd?: () => void }) {
     return (
       <header className="flex items-center justify-between py-5">
         <div>
-          <h1 className="font-display text-xl font-bold tracking-[0.14em] text-ink sm:text-2xl">
-            THE BATMAN <span className="text-accent">PROJECT</span>
+          <h1 className="font-display text-xl font-bold uppercase tracking-[0.14em] text-ink sm:text-2xl">
+            {voice.wordmark.lead}
+            {voice.wordmark.accent && (
+              <>
+                {' '}
+                <span className="text-accent">{voice.wordmark.accent}</span>
+              </>
+            )}
           </h1>
           <div className="mt-1 text-[9px] tracking-[0.22em] text-ink-faint">
             {'//'} OPERATOR: SINGLE-USER {'//'} NO UPLINK
@@ -245,12 +270,18 @@ function AppHeader({ now, onAdd }: { now: number; onAdd?: () => void }) {
     )
   }
 
-  // gotham (default)
+  // classic (default)
   return (
     <header className="flex items-center justify-between py-5">
       <div>
-        <h1 className="font-display text-xl font-bold tracking-[0.16em] sm:text-2xl">
-          THE BATMAN <span className="text-accent">PROJECT</span>
+        <h1 className="font-display text-xl font-bold uppercase tracking-[0.16em] sm:text-2xl">
+          {voice.wordmark.lead}
+          {voice.wordmark.accent && (
+            <>
+              {' '}
+              <span className="text-accent">{voice.wordmark.accent}</span>
+            </>
+          )}
         </h1>
         <div className="mt-1 flex items-center gap-2">
           <span className="h-px w-6 bg-gradient-to-r from-accent to-transparent" />

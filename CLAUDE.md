@@ -51,7 +51,7 @@ src/
     dates.ts      local-time day/week/streak helpers
     useNow.ts     ticking-now hook (minute interval + visibilitychange)
     ids.ts        makeId()   ·  storage.ts  storageAvailable()
-    store/shell.ts  app-wide store: { skin } @ localStorage `batman-shell` v1
+    store/shell.ts  app-wide store: { skin, ambient, weekStart } @ `batman-shell` v2
     ui/           index.css (skin bundles) + skins.ts (SKINS flags) +
                   Sheet / ConfirmDialog / SegmentedControl (shared primitives)
   modules/
@@ -100,9 +100,11 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   profile, skin }`. The `skin` field is **legacy/frozen**: nothing reads or writes it
   anymore, but it stays in the interface/partialize/migrate so old blobs and exports
   round-trip unchanged. Do not bump the version for shell concerns.
-- **`batman-shell` v1** (`core/store/shell.ts`) — `{ skin }`. On true first boot it
-  seeds from the legacy blob's `state.skin` (so pre-split users keep their skin);
-  an existing `batman-shell` blob always wins (persist rehydrates synchronously).
+- **`batman-shell` v2** (`core/store/shell.ts`) — `{ skin, ambient, weekStart }`. On
+  true first boot it seeds from the legacy blob's `state.skin`; an existing
+  `batman-shell` blob always wins (persist rehydrates synchronously). Skins pass
+  through `normalizeSkin` on migrate/rehydrate/set — founder-only ids fall back to
+  `midnight` unless `VITE_FOUNDER_SKIN=1` (their CSS ships only in the founder bundle).
 - **`batman-capital` v1** (`modules/capital/store.ts`) — Wayne Fund's data: accounts,
   snapshots, holdings, budget/spends, blur flag, plus the Twelve Data `apiKey` and the
   `prices`/`fx` quote cache. Entirely separate from the others.
@@ -251,8 +253,8 @@ auto-enter Training so they land on the right screen.
   demo (8 accounts, 6 ~monthly snapshots ending today, budget + spend, 2 live-priced
   holdings with cached quotes so the board renders without a key) — screenshot aid
 - `?console=training|capital` — start the shell inside that console
-- `?skin=gotham|gotham-day|tacops|noir|ghost|ironworks|ironworks-paper` — forces
-  (and persists) a skin — handled by the **shell** store
+- `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by
+  the **shell** store (founder machines also accept the seven legacy skin ids)
 - `?sheet=add` / `?sheet=effort` / `?sheet=when` — opens the add sheet on load
   (effort = edit mode on newest workout; when = also expands the calendar)
 - `?sheet=skin` — opens the App-skin picker sheet on load

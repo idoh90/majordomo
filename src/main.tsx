@@ -12,6 +12,7 @@ import '@fontsource/source-sans-3/700.css'
 import './core/ui/index.css'
 import App from './app/App'
 import { applySkin } from './core/ui/skins'
+import { voice } from './core/voice'
 import { useShellStore } from './core/store/shell'
 
 // Founder-only assets (the seven original skins + their typefaces) load
@@ -24,6 +25,7 @@ if (import.meta.env.VITE_FOUNDER_SKIN === '1') {
 // stamp the persisted skin on <html> before first paint so non-default skins
 // don't flash Midnight on load
 applySkin(useShellStore.getState().skin)
+document.title = voice.appName
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
