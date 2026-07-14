@@ -52,6 +52,20 @@ export interface VoicePack {
     undoLabel: string
     /** quick-add templates (title copy is pack content) */
     templates: { kind: 'training' | 'study' | 'sleep'; title: string; hours: number }[]
+    whatIf: {
+      button: string
+      banner: string
+      panelTitle: string
+      panelSub: string
+      /** no changes yet */
+      noteClean: string
+      /** ghosts visible */
+      noteDirty: string
+      changes: (n: number) => string
+      apply: string
+      discard: string
+      applied: string
+    }
   }
   watch: {
     onDuty: string

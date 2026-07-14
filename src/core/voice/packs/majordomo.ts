@@ -42,6 +42,18 @@ export const majordomoPack: VoicePack = {
       { kind: 'study', title: 'Study', hours: 2 },
       { kind: 'sleep', title: 'Sleep', hours: 6 },
     ],
+    whatIf: {
+      button: '⧉ WHAT-IF',
+      banner: 'The ledger is sandboxed, sir. Nothing binds until you apply.',
+      panelTitle: 'THE DIFFERENCE',
+      panelSub: 'hours this week, before → after',
+      noteClean: 'Drag freely, sir. I shall keep the originals in pencil.',
+      noteDirty: 'The faint blocks are how things stand today, sir.',
+      changes: (n) => (n === 0 ? 'no changes yet' : n === 1 ? '1 change' : `${n} changes`),
+      apply: 'APPLY',
+      discard: 'Discard',
+      applied: 'So arranged, sir.',
+    },
   },
   kinds: {
     shift: 'THE WATCH',

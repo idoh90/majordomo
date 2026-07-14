@@ -12,39 +12,90 @@ import type { CalendarEvent } from './types'
  * UI changes.
  */
 
+/** the what-if fork: a full draft copy + the ids the rehearsal touched */
+export interface EventsSandbox {
+  events: CalendarEvent[]
+  changed: string[]
+}
+
 interface EventsState {
   events: CalendarEvent[]
+  /** never persisted — a reload loses only the rehearsal */
+  sandbox: EventsSandbox | null
   addEvent: (e: Omit<CalendarEvent, 'id' | 'updatedAt'> & { id?: string }) => CalendarEvent
   updateEvent: (id: string, patch: Partial<Omit<CalendarEvent, 'id'>>) => void
   deleteEvent: (id: string) => void
   replaceAll: (events: CalendarEvent[]) => void
+  enterSandbox: () => void
+  /** fold the rehearsal into the committed events in one write */
+  applySandbox: () => void
+  discardSandbox: () => void
 }
 
 const byStartAsc = (a: CalendarEvent, b: CalendarEvent) => a.start.localeCompare(b.start)
+
+const touched = (changed: string[], id: string) =>
+  changed.includes(id) ? changed : [...changed, id]
 
 export const useEventsStore = create<EventsState>()(
   persist(
     (set) => ({
       events: [],
+      sandbox: null,
+      // mutations route to the sandbox draft while a rehearsal is active —
+      // committed events are structurally unreachable until applySandbox
       addEvent: (e) => {
         const full: CalendarEvent = {
           ...e,
           id: e.id ?? makeId(),
           updatedAt: new Date().toISOString(),
         }
-        set((s) => ({ events: [...s.events, full].sort(byStartAsc) }))
+        set((s) =>
+          s.sandbox
+            ? {
+                sandbox: {
+                  events: [...s.sandbox.events, full].sort(byStartAsc),
+                  changed: touched(s.sandbox.changed, full.id),
+                },
+              }
+            : { events: [...s.events, full].sort(byStartAsc) },
+        )
         return full
       },
       updateEvent: (id, patch) =>
-        set((s) => ({
-          events: s.events
-            .map((e) =>
-              e.id === id ? { ...e, ...patch, id, updatedAt: new Date().toISOString() } : e,
-            )
-            .sort(byStartAsc),
-        })),
-      deleteEvent: (id) => set((s) => ({ events: s.events.filter((e) => e.id !== id) })),
+        set((s) => {
+          const apply = (list: CalendarEvent[]) =>
+            list
+              .map((e) =>
+                e.id === id ? { ...e, ...patch, id, updatedAt: new Date().toISOString() } : e,
+              )
+              .sort(byStartAsc)
+          return s.sandbox
+            ? {
+                sandbox: {
+                  events: apply(s.sandbox.events),
+                  changed: touched(s.sandbox.changed, id),
+                },
+              }
+            : { events: apply(s.events) }
+        }),
+      deleteEvent: (id) =>
+        set((s) =>
+          s.sandbox
+            ? {
+                sandbox: {
+                  events: s.sandbox.events.filter((e) => e.id !== id),
+                  changed: touched(s.sandbox.changed, id),
+                },
+              }
+            : { events: s.events.filter((e) => e.id !== id) },
+        ),
       replaceAll: (events) => set({ events: [...events].sort(byStartAsc) }),
+      enterSandbox: () =>
+        set((s) => ({ sandbox: { events: s.events.map((e) => ({ ...e })), changed: [] } })),
+      applySandbox: () =>
+        set((s) => (s.sandbox ? { events: s.sandbox.events, sandbox: null } : {})),
+      discardSandbox: () => set({ sandbox: null }),
     }),
     {
       name: 'majordomo-events',

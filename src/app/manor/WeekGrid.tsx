@@ -79,10 +79,18 @@ export function WeekGrid({
   columns,
   events,
   now,
+  sandbox = false,
+  ghosts = [],
+  changedIds,
 }: {
   columns: ColumnWindow[]
   events: CalendarEvent[]
   now: number
+  /** what-if rehearsal active: silent draft mutations, no confirms/toasts */
+  sandbox?: boolean
+  /** committed originals of changed events, rendered as dashed pencil marks */
+  ghosts?: CalendarEvent[]
+  changedIds?: ReadonlySet<string>
 }) {
   const addEvent = useEventsStore((s) => s.addEvent)
   const updateEvent = useEventsStore((s) => s.updateEvent)
@@ -117,6 +125,11 @@ export function WeekGrid({
       .map((e) => clipToWindow(e, win.start, win.end))
       .filter((c): c is ClippedEvent => c !== null)
 
+  const ghostClipsFor = (win: ColumnWindow): ClippedEvent[] =>
+    ghosts
+      .map((e) => clipToWindow(e, win.start, win.end))
+      .filter((c): c is ClippedEvent => c !== null)
+
   const markersFor = (win: ColumnWindow): CalendarEvent[] =>
     events.filter((e) => e.allDay && localDayKey(e.start) === localDayKey(win.day))
 
@@ -147,8 +160,10 @@ export function WeekGrid({
       start: start.toISOString(),
       end: new Date(start.getTime() + durH * HOUR_MS).toISOString(),
     })
-    setLastAction({ type: 'move', id, prev: { start: prev.start, end: prev.end } })
-    butler(voice.manor.moved, true)
+    if (!sandbox) {
+      setLastAction({ type: 'move', id, prev: { start: prev.start, end: prev.end } })
+      butler(voice.manor.moved, true)
+    }
   }
 
   const undo = () => {
@@ -170,7 +185,7 @@ export function WeekGrid({
     if (!e) return
     const newStart = new Date(columns[d.tc].start.getTime() + d.ts * HOUR_MS)
     if (newStart.getTime() === new Date(e.start).getTime()) return
-    if (d.tc !== d.fromCol) {
+    if (d.tc !== d.fromCol && !sandbox) {
       const newEnd = new Date(newStart.getTime() + d.durH * HOUR_MS)
       const s = new Date(e.start)
       const en = new Date(e.end)
@@ -279,9 +294,11 @@ export function WeekGrid({
       start: start.toISOString(),
       end: new Date(start.getTime() + tpl.hours * HOUR_MS).toISOString(),
     })
-    setLastAction({ type: 'add', id: added.id })
     setQuickAdd(null)
-    butler(voice.manor.onTheBooks, true)
+    if (!sandbox) {
+      setLastAction({ type: 'add', id: added.id })
+      butler(voice.manor.onTheBooks, true)
+    }
   }
 
   /* -------------------------------------------------------------- render */
@@ -299,8 +316,13 @@ export function WeekGrid({
           <TickAxis />
           <div
             ref={boxRef}
-            className="relative flex-1 overflow-hidden rounded-xl border border-line"
-            style={{ background: 'color-mix(in srgb, var(--color-panel) 55%, transparent)' }}
+            className="relative flex-1 overflow-hidden rounded-xl"
+            style={{
+              border: sandbox ? '1px dashed var(--color-accent)' : '1px solid var(--color-line)',
+              boxShadow: sandbox ? '0 0 34px var(--glow-accent)' : 'none',
+              transition: 'box-shadow 250ms',
+              background: 'color-mix(in srgb, var(--color-panel) 55%, transparent)',
+            }}
           >
             <Rules />
             {drag && (
@@ -322,6 +344,8 @@ export function WeekGrid({
                   <DayBody
                     win={win}
                     clips={clipsFor(win)}
+                    ghostClips={ghostClipsFor(win)}
+                    changedIds={changedIds}
                     now={now}
                     divider={i > 0}
                     selectedId={popover?.event.id}
@@ -369,6 +393,8 @@ export function WeekGrid({
       <MobileWeek
         columns={columns}
         clipsFor={clipsFor}
+        ghostClipsFor={ghostClipsFor}
+        changedIds={changedIds}
         markersFor={markersFor}
         now={now}
         popover={popover}
@@ -504,6 +530,8 @@ function DayHeader({
 function DayBody({
   win,
   clips,
+  ghostClips = [],
+  changedIds,
   now,
   divider,
   selectedId,
@@ -513,6 +541,8 @@ function DayBody({
 }: {
   win: ColumnWindow
   clips: ClippedEvent[]
+  ghostClips?: ClippedEvent[]
+  changedIds?: ReadonlySet<string>
   now: number
   divider: boolean
   selectedId?: string
@@ -531,12 +561,16 @@ function DayBody({
           : 'none',
       }}
     >
+      {ghostClips.map((c) => (
+        <GhostBlock key={`ghost-${c.event.id}`} clip={c} win={win} />
+      ))}
       {clips.map((c) => (
         <EventBlock
           key={c.event.id}
           clip={c}
           win={win}
           selected={selectedId === c.event.id}
+          changed={changedIds?.has(c.event.id) ?? false}
           dimmed={dragId === c.event.id}
           onClick={(y) => onEventClick(c.event, y)}
           onPointerDown={onEventPointerDown}
@@ -563,6 +597,7 @@ function EventBlock({
   clip,
   win,
   selected,
+  changed = false,
   dimmed,
   onClick,
   onPointerDown,
@@ -570,6 +605,7 @@ function EventBlock({
   clip: ClippedEvent
   win: ColumnWindow
   selected: boolean
+  changed?: boolean
   dimmed: boolean
   onClick: (y: number) => void
   onPointerDown?: (e: CalendarEvent, ev: React.PointerEvent) => void
@@ -612,7 +648,11 @@ function EventBlock({
         background: isRest
           ? 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-ink-dim) 10%, transparent) 0 4px, transparent 4px 9px)'
           : `color-mix(in srgb, ${meta.color} 14%, transparent)`,
-        outline: selected ? `1.5px solid ${meta.color}` : 'none',
+        outline: selected
+          ? `1.5px solid ${meta.color}`
+          : changed
+            ? '1.5px solid var(--color-accent)'
+            : 'none',
         outlineOffset: 1.5,
       }}
     >
@@ -652,6 +692,27 @@ function EventBlock({
         )}
       </span>
     </button>
+  )
+}
+
+/** the committed original of a rehearsed change — kept in pencil */
+function GhostBlock({ clip, win }: { clip: ClippedEvent; win: ColumnWindow }) {
+  const meta = KIND_META[clip.event.kind]
+  return (
+    <div
+      className="pointer-events-none absolute left-[3px] right-[3px] z-[1] overflow-hidden rounded-[7px] px-2 py-[5px]"
+      style={{
+        top: px(win.start, clip.start) + 1,
+        height: Math.max(px(clip.start, clip.end) - 2, 12),
+        border: `1.5px dashed ${meta.color}`,
+        opacity: 0.32,
+      }}
+    >
+      <div className="text-xs font-semibold leading-[1.2]">{clip.event.title}</div>
+      <div className="text-[11px] text-ink-dim [font-variant-numeric:tabular-nums]">
+        {hhmm(new Date(clip.event.start))} → {hhmm(new Date(clip.event.end))}
+      </div>
+    </div>
   )
 }
 
@@ -815,6 +876,8 @@ function QuickAddPopover({
 function MobileWeek({
   columns,
   clipsFor,
+  ghostClipsFor,
+  changedIds,
   markersFor,
   now,
   popover,
@@ -827,6 +890,8 @@ function MobileWeek({
 }: {
   columns: ColumnWindow[]
   clipsFor: (win: ColumnWindow) => ClippedEvent[]
+  ghostClipsFor: (win: ColumnWindow) => ClippedEvent[]
+  changedIds?: ReadonlySet<string>
   markersFor: (win: ColumnWindow) => CalendarEvent[]
   now: number
   popover: Popover | null
@@ -929,6 +994,8 @@ function MobileWeek({
                 <DayBody
                   win={win}
                   clips={clipsFor(win)}
+                  ghostClips={ghostClipsFor(win)}
+                  changedIds={changedIds}
                   now={now}
                   divider={false}
                   selectedId={popover?.event.id}
