@@ -11,6 +11,10 @@ export const founderPack: VoicePack = {
   appName: 'The Batman Project',
   wordmark: { lead: 'The Batman', accent: 'Project' },
   skinPickerBlurb: 'Ten looks for the same cave. Switches instantly — nothing else changes.',
+  manor: {
+    name: 'THE CAVE',
+    empty: 'Nothing on the books, sir. A rare quiet evening.',
+  },
   modules: {
     training: { name: 'TRAINING GROUNDS', tagline: 'Conditioning · strain · fuel' },
     capital: { name: 'WAYNE FUND', tagline: 'Net worth · markets · ledger' },

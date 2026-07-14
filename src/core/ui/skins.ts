@@ -31,16 +31,12 @@ export interface SkinDef {
   themeColor: string
   /** which strain→color ramp the body map + legend use */
   heatRamp: 'standard' | 'noir' | 'daylight'
-  /** header layout variant rendered by App */
-  header: 'classic' | 'tacops' | 'noir' | 'ghost' | 'ironworks'
   /** ambient background layer (commercial presets only) */
   ambient?: 'rain' | 'scan' | 'blobs'
   /** multiplier on the body-map glow layer (light skins damp it) */
   glowScale?: number
   /** hologram floor reflection under the body map */
   reflection?: boolean
-  /** terminal status strip above the header */
-  statusStrip?: boolean
   /** body-map caption reads like a printed figure caption */
   figCaption?: boolean
   /** swatch dots for the skin picker: [bg, panel, accent, ink] */
@@ -54,7 +50,6 @@ const PRESET_SKINS: Record<PresetSkinId, SkinDef> = {
     tagline: 'Near-black blue-grey, steel-blue accent — a quiet house at night',
     themeColor: '#0c1017',
     heatRamp: 'standard',
-    header: 'classic',
     ambient: 'rain',
     swatches: ['#0c1017', '#131926', '#7da7d0', '#e6ebf2'],
   },
@@ -64,7 +59,6 @@ const PRESET_SKINS: Record<PresetSkinId, SkinDef> = {
     tagline: 'True black, green phosphor — for the OLED shift at 03:00',
     themeColor: '#000000',
     heatRamp: 'standard',
-    header: 'classic',
     ambient: 'scan',
     swatches: ['#000000', '#0a0f0c', '#3fe0a8', '#d9efe2'],
   },
@@ -74,7 +68,6 @@ const PRESET_SKINS: Record<PresetSkinId, SkinDef> = {
     tagline: 'Deep navy-purple, purple-gold — the estate under strange skies',
     themeColor: '#131022',
     heatRamp: 'standard',
-    header: 'classic',
     ambient: 'blobs',
     swatches: ['#131022', '#1a1630', '#b294f5', '#ece7f7'],
   },
@@ -89,7 +82,6 @@ const FOUNDER_SKINS: Record<FounderSkinId, SkinDef> = {
     tagline: 'Layered gunmetal, hairline gold, cinematic heat glow',
     themeColor: '#0a0b0e',
     heatRamp: 'standard',
-    header: 'classic',
     swatches: ['#0a0b0e', '#14171d', '#f5b301', '#e8eaed'],
   },
   'gotham-day': {
@@ -98,7 +90,6 @@ const FOUNDER_SKINS: Record<FounderSkinId, SkinDef> = {
     tagline: 'The refined identity at noon — porcelain, white panels, ink type',
     themeColor: '#f4f2ec',
     heatRamp: 'daylight',
-    header: 'classic',
     glowScale: 0.55,
     swatches: ['#f4f2ec', '#ffffff', '#d99b00', '#1d2129'],
   },
@@ -108,8 +99,6 @@ const FOUNDER_SKINS: Record<FounderSkinId, SkinDef> = {
     tagline: 'Armored field terminal — blueprint grid, mono, optic green',
     themeColor: '#0b0d0a',
     heatRamp: 'standard',
-    header: 'tacops',
-    statusStrip: true,
     swatches: ['#0b0d0a', '#0e120b', '#9ee22e', '#dbe4d2'],
   },
   noir: {
@@ -118,7 +107,6 @@ const FOUNDER_SKINS: Record<FounderSkinId, SkinDef> = {
     tagline: 'Printed dossier — soot paper, ivory serif, vermilion duotone',
     themeColor: '#161211',
     heatRamp: 'noir',
-    header: 'noir',
     figCaption: true,
     swatches: ['#161211', '#1d1916', '#e8481f', '#ece5da'],
   },
@@ -128,7 +116,6 @@ const FOUNDER_SKINS: Record<FounderSkinId, SkinDef> = {
     tagline: 'Pure-OLED void — hairlines, thin numerals, ice cyan',
     themeColor: '#000000',
     heatRamp: 'standard',
-    header: 'ghost',
     reflection: true,
     swatches: ['#000000', '#0b0d10', '#79d3ff', '#f2f3f5'],
   },
@@ -138,7 +125,6 @@ const FOUNDER_SKINS: Record<FounderSkinId, SkinDef> = {
     tagline: 'Brutalist gym poster — slab type, hard shadows, molten orange',
     themeColor: '#191714',
     heatRamp: 'standard',
-    header: 'ironworks',
     swatches: ['#191714', '#1f1c18', '#ff5a1f', '#ede6dc'],
   },
   'ironworks-paper': {
@@ -147,7 +133,6 @@ const FOUNDER_SKINS: Record<FounderSkinId, SkinDef> = {
     tagline: 'The poster screen-printed on bone paper — ink frames, print-ink heat',
     themeColor: '#ece7db',
     heatRamp: 'daylight',
-    header: 'ironworks',
     glowScale: 0.5,
     swatches: ['#ece7db', '#f6f2e9', '#e8490f', '#211d18'],
   },
@@ -164,6 +149,9 @@ export const SKINS = {
 } as Record<SkinId, SkinDef>
 
 export const SKIN_IDS = Object.keys(SKINS) as SkinId[]
+
+/** the commercial trio, for surfaces that only ever show presets (header dots) */
+export const PRESET_SKIN_IDS: readonly SkinId[] = ['midnight', 'terminal', 'aurora']
 
 export const DEFAULT_SKIN: SkinId = 'midnight'
 

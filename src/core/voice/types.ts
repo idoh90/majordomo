@@ -16,6 +16,16 @@ export interface VoicePack {
   wordmark: { lead: string; accent: string }
   /** one-liner under the "App skin" picker title */
   skinPickerBlurb: string
+  /** blocked-localStorage banner */
+  storageWarning: string
+  /** tiny label beside the header's preset dots */
+  presetLabel: string
+  manor: {
+    /** the home tab label */
+    name: string
+    /** empty-week state, the butler's line */
+    empty: string
+  }
   modules: {
     training: { name: string; tagline: string }
     capital: { name: string; tagline: string }
