@@ -1,5 +1,7 @@
 import type { ConsoleModule } from '../core/module'
 import { capitalConsole } from '../modules/capital'
 import { trainingConsole } from '../modules/training'
+import { watchConsole } from '../modules/watch'
 
-export const CONSOLES: ConsoleModule[] = [trainingConsole, capitalConsole]
+// registry order = tab order after the Manor
+export const CONSOLES: ConsoleModule[] = [watchConsole, trainingConsole, capitalConsole]

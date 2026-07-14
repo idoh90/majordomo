@@ -29,6 +29,25 @@ export interface VoicePack {
     crossesMidnight: string
     /** footnote under the month view */
     monthNote: string
+    /** briefing-strip line for a week with `count` watches */
+    briefing: (count: number) => string
+    /** briefing-strip stat readout */
+    briefingStat: (v: { watchH: number; trainingCount: number; studyH: number }) => string
+  }
+  watch: {
+    onDuty: string
+    nextWatch: string
+    noneAhead: string
+    post: string
+    weekList: string
+    dayShift: string
+    nightShift: string
+    duplicate: string
+    posted: string
+    postedWithSleep: string
+    note: string
+    openManor: string
+    status: { logged: string; next: string; ahead: string }
   }
   /** wing chip labels per event kind */
   kinds: {
@@ -39,6 +58,7 @@ export interface VoicePack {
     marker: string
   }
   modules: {
+    watch: { name: string; tagline: string }
     training: { name: string; tagline: string }
     capital: { name: string; tagline: string }
   }

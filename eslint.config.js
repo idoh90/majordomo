@@ -3,8 +3,26 @@
 // import each other. Regex (not glob) patterns because all project imports are
 // relative and glob matching of `../` specifiers is unreliable. Note the core
 // rule does not check dynamic import(); the only dynamic imports (training
-// store DEV block) are within-module, so no gap in practice.
+// store DEV block, the founder asset bundle) are within-zone, so no gap in
+// practice.
 import tsParser from '@typescript-eslint/parser'
+
+const wingRule = (self, others) => ({
+  files: [`src/modules/${self}/**/*.{ts,tsx}`],
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            regex: `^(\\.\\./)+(modules/)?(${others.join('|')})(/|$)`,
+            message: `wings must not import each other (${self} → ${others.join('/')}). Cross-wing data flows through core stores.`,
+          },
+        ],
+      },
+    ],
+  },
+})
 
 export default [
   { ignores: ['dist/**'] },
@@ -29,36 +47,7 @@ export default [
       ],
     },
   },
-  {
-    files: ['src/modules/training/**/*.{ts,tsx}'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              regex: '^(\\.\\./)+(modules/)?capital(/|$)',
-              message: 'consoles must not import each other (training → capital).',
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    files: ['src/modules/capital/**/*.{ts,tsx}'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              regex: '^(\\.\\./)+(modules/)?training(/|$)',
-              message: 'consoles must not import each other (capital → training).',
-            },
-          ],
-        },
-      ],
-    },
-  },
+  wingRule('training', ['capital', 'watch']),
+  wingRule('capital', ['training', 'watch']),
+  wingRule('watch', ['training', 'capital']),
 ]

@@ -55,6 +55,8 @@ src/
     ui/           index.css (skin bundles) + skins.ts (SKINS flags) +
                   Sheet / ConfirmDialog / SegmentedControl (shared primitives)
   modules/
+    watch/        'THE WATCH' — shifts: post day/night watches (writes core/events;
+                  night watches pencil a recovery-sleep block), duty ring, countdown
     training/     the whole workout tracker (see below)
     capital/      'WAYNE FUND' — net worth + budget console (see below)
 ```

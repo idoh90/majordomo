@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavStore } from '../core/store/nav'
 import { useShellStore } from '../core/store/shell'
 import { PRESET_SKIN_IDS, SKINS, applySkin } from '../core/ui/skins'
 import { AmbientLayer } from '../core/ui/AmbientLayer'
@@ -29,6 +30,16 @@ export default function App() {
   })
 
   useEffect(() => applySkin(skin), [skin])
+
+  // wings request navigation through the core mailbox (they can't import app/)
+  const requestedView = useNavStore((s) => s.requestedView)
+  useEffect(() => {
+    if (!requestedView) return
+    if (requestedView === 'manor' || CONSOLES.some((c) => c.id === requestedView)) {
+      setView(requestedView)
+    }
+    useNavStore.getState().consumeView()
+  }, [requestedView])
 
   const active = CONSOLES.find((c) => c.id === view) ?? null
 

@@ -7,6 +7,7 @@ import { addDays } from '../../core/dates'
 import { SegmentedControl } from '../../core/ui/SegmentedControl'
 import { voice } from '../../core/voice'
 import { CONSOLES } from '../consoles'
+import { BriefingStrip } from './BriefingStrip'
 import { MonthView, monthLabel } from './MonthView'
 import { WeekGrid } from './WeekGrid'
 
@@ -75,6 +76,8 @@ export function ManorScreen() {
           onChange={setMode}
         />
       </div>
+
+      <BriefingStrip weekEvents={weekEvents} />
 
       {mode === 'month' ? (
         <MonthView
