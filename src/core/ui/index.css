@@ -417,50 +417,56 @@ html[data-skin='aurora'] {
    reduced-motion freezes them to a static texture, which is fine — they
    never carry content.
 --------------------------------------------------------------------------- */
+/* Every ambient loop animates ONLY `transform` — a compositor property. The
+   layers used to animate `background-position` (rain) and `top` (scanline),
+   which repaint / re-layout a viewport-sized element on the main thread every
+   single frame, forever; that alone starved scrolling and dragging of frame
+   budget across the whole app. `will-change: transform` promotes each layer so
+   the gradient (and the blobs' 80px blur) is rasterized once and only moved. */
 @keyframes amb-rain-a {
   from {
-    background-position: 0 0;
+    transform: translate3d(0, 0, 0);
   }
   to {
-    background-position: -120px 210px;
+    transform: translate3d(-120px, 210px, 0);
   }
 }
 @keyframes amb-rain-b {
   from {
-    background-position: 0 0;
+    transform: translate3d(0, 0, 0);
   }
   to {
-    background-position: -190px 340px;
+    transform: translate3d(-190px, 340px, 0);
   }
 }
 @keyframes amb-scan {
   0% {
-    top: -16%;
+    transform: translate3d(0, 0, 0);
   }
   100% {
-    top: 116%;
+    transform: translate3d(0, 132vh, 0);
   }
 }
 @keyframes amb-blob-a {
   0% {
-    transform: translate(-6%, -5%);
+    transform: translate3d(-6%, -5%, 0);
   }
   50% {
-    transform: translate(8%, 7%);
+    transform: translate3d(8%, 7%, 0);
   }
   100% {
-    transform: translate(-6%, -5%);
+    transform: translate3d(-6%, -5%, 0);
   }
 }
 @keyframes amb-blob-b {
   0% {
-    transform: translate(9%, 8%);
+    transform: translate3d(9%, 8%, 0);
   }
   50% {
-    transform: translate(-8%, -7%);
+    transform: translate3d(-8%, -7%, 0);
   }
   100% {
-    transform: translate(9%, 8%);
+    transform: translate3d(9%, 8%, 0);
   }
 }
 
@@ -469,6 +475,7 @@ html[data-skin='aurora'] {
   inset: -45%;
   opacity: 0.05;
   background: repeating-linear-gradient(115deg, transparent 0 52px, var(--color-accent) 52px 53px);
+  will-change: transform;
   animation: amb-rain-a 8s linear infinite;
 }
 .amb-rain-b {
@@ -476,15 +483,18 @@ html[data-skin='aurora'] {
   inset: -45%;
   opacity: 0.035;
   background: repeating-linear-gradient(115deg, transparent 0 96px, var(--color-accent) 96px 97px);
+  will-change: transform;
   animation: amb-rain-b 13s linear infinite;
 }
 .amb-scan {
   position: absolute;
   left: 0;
   right: 0;
+  top: -16%;
   height: 90px;
   opacity: 0.05;
   background: linear-gradient(180deg, transparent, var(--color-accent), transparent);
+  will-change: transform;
   animation: amb-scan 10s linear infinite;
 }
 .amb-blob-a {
@@ -497,6 +507,7 @@ html[data-skin='aurora'] {
   filter: blur(80px);
   opacity: 0.08;
   background: var(--color-accent);
+  will-change: transform;
   animation: amb-blob-a 44s ease-in-out infinite;
 }
 .amb-blob-b {
@@ -509,5 +520,6 @@ html[data-skin='aurora'] {
   filter: blur(80px);
   opacity: 0.06;
   background: var(--color-w-ledger);
+  will-change: transform;
   animation: amb-blob-b 58s ease-in-out infinite;
 }

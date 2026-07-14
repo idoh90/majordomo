@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CalendarEvent, EventKind } from '../../core/events/types'
 import {
   SEAM_HOUR,
@@ -40,6 +40,9 @@ const isMidnight = (offset: number) => (SEAM_HOUR + offset) % 24 === 0
 const px = (from: Date, to: Date) => ((to.getTime() - from.getTime()) / 3_600_000) * PXH
 const HOUR_MS = 3_600_000
 
+/** stable identity for the "no ghosts" case — a fresh [] would defeat DayBody's memo */
+const EMPTY_CLIPS: ClippedEvent[] = []
+
 function tickLabel(offset: number): string {
   return `${String((SEAM_HOUR + offset) % 24).padStart(2, '0')}:00`
 }
@@ -66,6 +69,9 @@ interface DragState {
   fromCol: number
   title: string
   kind: EventKind
+  /** column width in px, measured once at grab — lets the ghost and the column
+   *  highlight position themselves with `transform` instead of `left`/`top` */
+  colW: number
 }
 
 interface MoveConfirm {
@@ -122,18 +128,34 @@ export function WeekGrid({
     [],
   )
 
-  const clipsFor = (win: ColumnWindow): ClippedEvent[] =>
-    events
-      .map((e) => clipToWindow(e, win.start, win.end))
-      .filter((c): c is ClippedEvent => c !== null)
-
-  const ghostClipsFor = (win: ColumnWindow): ClippedEvent[] =>
-    ghosts
-      .map((e) => clipToWindow(e, win.start, win.end))
-      .filter((c): c is ClippedEvent => c !== null)
-
-  const markersFor = (win: ColumnWindow): CalendarEvent[] =>
-    events.filter((e) => e.allDay && localDayKey(e.start) === localDayKey(win.day))
+  // Clipping is per (column × event) work. Memoized so a drag — which re-renders
+  // WeekGrid on every frame — hands the memoized DayBody/EventBlock children the
+  // SAME array identities and they bail out of re-rendering entirely.
+  const clipsByCol = useMemo(
+    () =>
+      columns.map((win) =>
+        events
+          .map((e) => clipToWindow(e, win.start, win.end))
+          .filter((c): c is ClippedEvent => c !== null),
+      ),
+    [columns, events],
+  )
+  const ghostsByCol = useMemo(
+    () =>
+      columns.map((win) =>
+        ghosts
+          .map((e) => clipToWindow(e, win.start, win.end))
+          .filter((c): c is ClippedEvent => c !== null),
+      ),
+    [columns, ghosts],
+  )
+  const markersByCol = useMemo(
+    () =>
+      columns.map((win) =>
+        events.filter((e) => e.allDay && localDayKey(e.start) === localDayKey(win.day)),
+      ),
+    [columns, events],
+  )
 
   const openPopover = (event: CalendarEvent, col: number, y: number) => {
     if (Date.now() < suppressClickUntil.current) return
@@ -221,17 +243,25 @@ export function WeekGrid({
     const durH = hoursOf(e)
     const startX = ev.clientX
     const startY = ev.clientY
+    const colW = rect.width / 7
     let moved = false
 
-    const mm = (m: PointerEvent) => {
-      if (!moved && Math.hypot(m.clientX - startX, m.clientY - startY) < 5) return
-      moved = true
-      const x = m.clientX - rect.left
-      const y = m.clientY - rect.top
-      const colW = rect.width / 7
+    // pointermove fires faster than the display refreshes (high-poll mice fire
+    // several times per frame). Coalesce to one setDrag per animation frame —
+    // otherwise every extra event buys a wasted React render nothing can paint.
+    let raf = 0
+    let pendingX = 0
+    let pendingY = 0
+
+    const apply = () => {
+      raf = 0
+      const x = pendingX - rect.left
+      const y = pendingY - rect.top
       const tc = Math.max(0, Math.min(6, Math.floor(x / colW)))
-      let ts = Math.round(((y / PXH) - grabH) * 2) / 2
+      let ts = Math.round((y / PXH - grabH) * 2) / 2
       ts = Math.max(0, Math.min(24 - durH, ts))
+      const prev = dragRef.current
+      if (prev && prev.tc === tc && prev.ts === ts) return // snapped to the same slot
       const next: DragState = {
         id: e.id,
         tc,
@@ -241,16 +271,31 @@ export function WeekGrid({
         fromCol,
         title: e.title,
         kind: e.kind,
+        colW,
       }
       dragRef.current = next
       setDrag(next)
-      setPopover(null)
-      setQuickAdd(null)
+    }
+
+    const mm = (m: PointerEvent) => {
+      if (!moved && Math.hypot(m.clientX - startX, m.clientY - startY) < 5) return
+      if (!moved) {
+        moved = true
+        setPopover(null)
+        setQuickAdd(null)
+      }
+      pendingX = m.clientX
+      pendingY = m.clientY
+      if (!raf) raf = requestAnimationFrame(apply)
       m.preventDefault()
     }
     const mu = () => {
       window.removeEventListener('pointermove', mm)
       window.removeEventListener('pointerup', mu)
+      if (raf) {
+        cancelAnimationFrame(raf)
+        apply() // flush the last frame so the drop lands where the pointer is
+      }
       if (!moved) return // plain click → the block's onClick opens the popover
       suppressClickUntil.current = Date.now() + 250
       const d = dragRef.current
@@ -259,6 +304,20 @@ export function WeekGrid({
     window.addEventListener('pointermove', mm)
     window.addEventListener('pointerup', mu)
   }
+
+  /* Stable identities for everything handed to a memoized child: the handlers
+     themselves are re-created each render (they close over `events`), so route
+     them through a ref — the children then never re-render during a drag. */
+  const latest = useRef({ onBlockPointerDown, openPopover })
+  latest.current = { onBlockPointerDown, openPopover }
+  const handleBlockPointerDown = useCallback(
+    (e: CalendarEvent, ev: React.PointerEvent) => latest.current.onBlockPointerDown(e, ev),
+    [],
+  )
+  const handleEventClick = useCallback(
+    (col: number, e: CalendarEvent, y: number) => latest.current.openPopover(e, col, y),
+    [],
+  )
 
   /* ------------------------------------------------------------ quick-add */
 
@@ -311,7 +370,7 @@ export function WeekGrid({
       <div className="hidden md:block">
         <div className="flex pl-12">
           {columns.map((win, i) => (
-            <DayHeader key={i} win={win} markers={markersFor(win)} now={now} />
+            <DayHeader key={i} win={win} markers={markersByCol[i]} now={now} />
           ))}
         </div>
         <div className="flex">
@@ -329,14 +388,14 @@ export function WeekGrid({
             <Rules />
             {drag && (
               <div
-                className="pointer-events-none absolute bottom-0 top-0"
+                className="pointer-events-none absolute bottom-0 left-0 top-0"
                 style={{
-                  left: `calc(${drag.tc} * 100% / 7)`,
-                  width: 'calc(100% / 7)',
+                  width: drag.colW,
+                  transform: `translate3d(${drag.tc * drag.colW}px, 0, 0)`,
                   background: drag.valid
                     ? 'color-mix(in srgb, var(--color-accent) 5%, transparent)'
                     : 'color-mix(in srgb, var(--color-danger) 6%, transparent)',
-                  transition: 'left 120ms ease-out',
+                  transition: 'transform 120ms ease-out',
                 }}
               />
             )}
@@ -344,16 +403,17 @@ export function WeekGrid({
               {columns.map((win, i) => (
                 <div key={i} className="min-w-0 flex-1" onClick={(ev) => onColumnClick(i, ev)}>
                   <DayBody
+                    col={i}
                     win={win}
-                    clips={clipsFor(win)}
-                    ghostClips={ghostClipsFor(win)}
+                    clips={clipsByCol[i]}
+                    ghostClips={ghostsByCol[i]}
                     changedIds={changedIds}
                     now={now}
                     divider={i > 0}
                     selectedId={popover?.event.id}
                     dragId={drag?.id}
-                    onEventClick={(e, y) => openPopover(e, i, y)}
-                    onEventPointerDown={onBlockPointerDown}
+                    onEventClick={handleEventClick}
+                    onEventPointerDown={handleBlockPointerDown}
                   />
                 </div>
               ))}
@@ -394,13 +454,13 @@ export function WeekGrid({
       {/* --------------------------------- mobile: one duty cycle per screen */}
       <MobileWeek
         columns={columns}
-        clipsFor={clipsFor}
-        ghostClipsFor={ghostClipsFor}
+        clipsByCol={clipsByCol}
+        ghostsByCol={ghostsByCol}
         changedIds={changedIds}
-        markersFor={markersFor}
+        markersByCol={markersByCol}
         now={now}
         popover={popover}
-        openPopover={openPopover}
+        onEventClick={handleEventClick}
         closePopover={() => setPopover(null)}
         quickAdd={quickAdd}
         onColumnClick={onColumnClick}
@@ -444,7 +504,7 @@ export function WeekGrid({
 /* ------------------------------------------------------------- pieces */
 
 /** horizontal hour rules; midnight is the dashed accent line */
-function Rules() {
+const Rules = memo(function Rules() {
   return (
     <>
       {RULES.map((h) => (
@@ -461,9 +521,9 @@ function Rules() {
       ))}
     </>
   )
-}
+})
 
-function TickAxis() {
+const TickAxis = memo(function TickAxis() {
   return (
     <div className="relative w-12 flex-none" style={{ height: BODY_H }}>
       {TICKS.map((h) => (
@@ -480,9 +540,9 @@ function TickAxis() {
       ))}
     </div>
   )
-}
+})
 
-function DayHeader({
+const DayHeader = memo(function DayHeader({
   win,
   markers,
   now,
@@ -523,12 +583,13 @@ function DayHeader({
       ))}
     </div>
   )
-}
+})
 
-function DayBody({
+const DayBody = memo(function DayBody({
+  col,
   win,
   clips,
-  ghostClips = [],
+  ghostClips = EMPTY_CLIPS,
   changedIds,
   now,
   divider,
@@ -537,6 +598,7 @@ function DayBody({
   onEventClick,
   onEventPointerDown,
 }: {
+  col: number
   win: ColumnWindow
   clips: ClippedEvent[]
   ghostClips?: ClippedEvent[]
@@ -545,7 +607,7 @@ function DayBody({
   divider: boolean
   selectedId?: string
   dragId?: string
-  onEventClick: (e: CalendarEvent, y: number) => void
+  onEventClick: (col: number, e: CalendarEvent, y: number) => void
   onEventPointerDown?: (e: CalendarEvent, ev: React.PointerEvent) => void
 }) {
   const nowInCol = now >= win.start.getTime() && now < win.end.getTime()
@@ -565,12 +627,13 @@ function DayBody({
       {clips.map((c) => (
         <EventBlock
           key={c.event.id}
+          col={col}
           clip={c}
           win={win}
           selected={selectedId === c.event.id}
           changed={changedIds?.has(c.event.id) ?? false}
           dimmed={dragId === c.event.id}
-          onClick={(y) => onEventClick(c.event, y)}
+          onClick={onEventClick}
           onPointerDown={onEventPointerDown}
         />
       ))}
@@ -589,9 +652,10 @@ function DayBody({
       )}
     </div>
   )
-}
+})
 
-function EventBlock({
+const EventBlock = memo(function EventBlock({
+  col,
   clip,
   win,
   selected,
@@ -600,12 +664,13 @@ function EventBlock({
   onClick,
   onPointerDown,
 }: {
+  col: number
   clip: ClippedEvent
   win: ColumnWindow
   selected: boolean
   changed?: boolean
   dimmed: boolean
-  onClick: (y: number) => void
+  onClick: (col: number, e: CalendarEvent, y: number) => void
   onPointerDown?: (e: CalendarEvent, ev: React.PointerEvent) => void
 }) {
   const e = clip.event
@@ -626,7 +691,7 @@ function EventBlock({
     <button
       type="button"
       data-event-block
-      onClick={(ev) => onClick((ev.currentTarget as HTMLElement).offsetTop)}
+      onClick={(ev) => onClick(col, e, (ev.currentTarget as HTMLElement).offsetTop)}
       onPointerDown={onPointerDown ? (ev) => onPointerDown(e, ev) : undefined}
       className="absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left"
       style={{
@@ -691,10 +756,16 @@ function EventBlock({
       </span>
     </button>
   )
-}
+})
 
 /** the committed original of a rehearsed change — kept in pencil */
-function GhostBlock({ clip, win }: { clip: ClippedEvent; win: ColumnWindow }) {
+const GhostBlock = memo(function GhostBlock({
+  clip,
+  win,
+}: {
+  clip: ClippedEvent
+  win: ColumnWindow
+}) {
   const meta = KIND_META[clip.event.kind]
   return (
     <div
@@ -712,22 +783,23 @@ function GhostBlock({ clip, win }: { clip: ClippedEvent; win: ColumnWindow }) {
       </div>
     </div>
   )
-}
+})
 
-/** the lifted copy that follows the pointer during a drag */
+/** the lifted copy that follows the pointer during a drag. Position is a
+ *  `transform` (compositor-only) — the old `left`/`top` transition re-laid-out
+ *  the block on every frame of the drag, which is what made it feel sticky. */
 function DragGhost({ drag, columns }: { drag: DragState; columns: ColumnWindow[] }) {
   const meta = KIND_META[drag.kind]
   const start = new Date(columns[drag.tc].start.getTime() + drag.ts * HOUR_MS)
   const end = new Date(start.getTime() + drag.durH * HOUR_MS)
   return (
     <div
-      className="pointer-events-none absolute z-[6] rounded-[7px] px-2 py-[5px]"
+      className="pointer-events-none absolute left-0 top-0 z-[6] rounded-[7px] px-2 py-[5px]"
       style={{
-        left: `calc(${drag.tc} * 100% / 7 + 3px)`,
-        width: 'calc(100% / 7 - 6px)',
-        top: drag.ts * PXH + 1,
+        width: drag.colW - 6,
         height: drag.durH * PXH - 2,
-        transform: 'scale(1.02)',
+        transform: `translate3d(${drag.tc * drag.colW + 3}px, ${drag.ts * PXH + 1}px, 0) scale(1.02)`,
+        willChange: 'transform',
         border: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
         background: drag.valid
           ? `color-mix(in srgb, ${meta.color} 26%, var(--color-panel-2))`
@@ -735,7 +807,7 @@ function DragGhost({ drag, columns }: { drag: DragState; columns: ColumnWindow[]
         boxShadow: drag.valid
           ? '0 14px 34px rgb(0 0 0 / 0.5), 0 0 18px var(--glow-accent)'
           : '0 14px 34px rgb(0 0 0 / 0.5)',
-        transition: 'left 120ms ease-out, top 100ms ease-out',
+        transition: 'transform 90ms ease-out',
       }}
     >
       <div className="text-xs font-semibold leading-[1.2]">{drag.title}</div>
@@ -873,13 +945,13 @@ function QuickAddPopover({
 
 function MobileWeek({
   columns,
-  clipsFor,
-  ghostClipsFor,
+  clipsByCol,
+  ghostsByCol,
   changedIds,
-  markersFor,
+  markersByCol,
   now,
   popover,
-  openPopover,
+  onEventClick,
   closePopover,
   quickAdd,
   onColumnClick,
@@ -887,13 +959,13 @@ function MobileWeek({
   closeQuickAdd,
 }: {
   columns: ColumnWindow[]
-  clipsFor: (win: ColumnWindow) => ClippedEvent[]
-  ghostClipsFor: (win: ColumnWindow) => ClippedEvent[]
+  clipsByCol: ClippedEvent[][]
+  ghostsByCol: ClippedEvent[][]
   changedIds?: ReadonlySet<string>
-  markersFor: (win: ColumnWindow) => CalendarEvent[]
+  markersByCol: CalendarEvent[][]
   now: number
   popover: Popover | null
-  openPopover: (e: CalendarEvent, col: number, y: number) => void
+  onEventClick: (col: number, e: CalendarEvent, y: number) => void
   closePopover: () => void
   quickAdd: QuickAdd | null
   onColumnClick: (col: number, ev: React.MouseEvent) => void
@@ -974,7 +1046,7 @@ function MobileWeek({
                 <span className="font-display text-[13px] font-semibold tracking-[0.12em] text-ink">
                   {WD[win.day.getDay()]} {win.day.getDate()}
                 </span>
-                {markersFor(win).map((m) => (
+                {markersByCol[i].map((m) => (
                   <span
                     key={m.id}
                     className="text-[10px]"
@@ -987,14 +1059,15 @@ function MobileWeek({
               <div className="relative" style={{ height: BODY_H }} onClick={(ev) => onColumnClick(i, ev)}>
                 <Rules />
                 <DayBody
+                  col={i}
                   win={win}
-                  clips={clipsFor(win)}
-                  ghostClips={ghostClipsFor(win)}
+                  clips={clipsByCol[i]}
+                  ghostClips={ghostsByCol[i]}
                   changedIds={changedIds}
                   now={now}
                   divider={false}
                   selectedId={popover?.event.id}
-                  onEventClick={(e, y) => openPopover(e, i, y)}
+                  onEventClick={onEventClick}
                 />
                 {popover && popover.col === i && (
                   <EventPopover
