@@ -1,5 +1,5 @@
 import { monthLabel } from '../lib/budget'
-import { formatILS } from '../lib/money'
+import { Amount } from './Amount'
 
 interface SpendCardProps {
   spent: number
@@ -29,8 +29,10 @@ export function SpendCard({ spent, budget, now, onEdit }: SpendCardProps) {
       {hasBudget ? (
         <>
           <div className="flex items-end gap-2">
-            <span className="stat-num text-3xl text-ink">{formatILS(spent)}</span>
-            <span className="mb-1 text-sm text-ink-faint">/ {formatILS(budget)}</span>
+            <Amount value={spent} className="stat-num text-3xl text-ink" />
+            <span className="mb-1 text-sm text-ink-faint">
+              / <Amount value={budget} />
+            </span>
           </div>
 
           <div className="mt-3 h-2 w-full overflow-hidden rounded-pill bg-panel-3">
@@ -42,7 +44,8 @@ export function SpendCard({ spent, budget, now, onEdit }: SpendCardProps) {
               day {dayOfMonth}/{daysInMonth}
             </span>
             <span className={over ? 'text-danger' : 'text-ink-dim'}>
-              {over ? `${formatILS(spent - budget)} over budget` : `${formatILS(budget - spent)} left`}
+              <Amount value={over ? spent - budget : budget - spent} />
+              {over ? ' over budget' : ' left'}
             </span>
           </div>
         </>

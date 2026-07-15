@@ -45,6 +45,10 @@ export interface VoicePack {
     asYouWere: string
     /** quick-add applied */
     onTheBooks: string
+    /** event deleted from the popover */
+    removed: string
+    /** popover delete button */
+    removeLabel: string
     /** cross-day move confirm dialog */
     moveTitle: string
     moveBody: (v: { title: string; from: string; to: string }) => string
@@ -52,6 +56,12 @@ export interface VoicePack {
     undoLabel: string
     /** quick-add templates (title copy is pack content) */
     templates: { kind: 'training' | 'study' | 'sleep'; title: string; hours: number }[]
+    strain: {
+      /** tooltip on a day's strain bar. `names` = muscles still hot at that
+       *  day's worst moment (hottest first, may be empty); `forecast` = the day
+       *  hasn't started yet, so the soreness is predicted, not logged. */
+      tooltip: (v: { names: string[]; forecast: boolean }) => string
+    }
     whatIf: {
       button: string
       banner: string
@@ -82,6 +92,12 @@ export interface VoicePack {
     openManor: string
     status: { logged: string; next: string; ahead: string }
   }
+  grounds: {
+    /** card of upcoming training sessions booked on the Manor */
+    scheduledTitle: string
+    /** footnote under the list */
+    scheduledNote: string
+  }
   /** wing chip labels per event kind */
   kinds: {
     shift: string
@@ -98,6 +114,8 @@ export interface VoicePack {
   capital: {
     /** Vault empty state — no accounts/snapshots yet */
     vaultEmpty: string
+    /** FX rate missing for these currencies — their figures render unconverted */
+    fxMissing: (currencies: string[]) => string
   }
   backup: {
     /** import rejected: wrong app tag */

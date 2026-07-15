@@ -21,6 +21,7 @@ export const founderPack: VoicePack = {
     capital: { name: 'WAYNE FUND', tagline: 'Net worth · markets · ledger' },
   },
   capital: {
+    ...majordomoPack.capital,
     vaultEmpty:
       "No balances yet. Add your accounts, then log a snapshot to start charting the cave's worth.",
   },

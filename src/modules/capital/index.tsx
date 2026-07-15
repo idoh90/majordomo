@@ -4,7 +4,7 @@ import { voice } from '../../core/voice'
 import { useNow } from '../../core/useNow'
 import { useCapitalStore } from './store'
 import { monthKey, monthlySpent } from './lib/budget'
-import { formatILS, formatPercent } from './lib/money'
+import { formatPercent } from './lib/money'
 import { holdingRow, portfolioTotals } from './lib/holdings'
 import { latestDelta, latestSnapshot, liveNetWorth, netWorthOf, netWorthSeries } from './lib/networth'
 import { Amount } from './components/Amount'
@@ -85,9 +85,15 @@ function Briefing() {
                 {' of '}
                 <Amount value={monthlyBudget} />
                 {overBudget ? (
-                  <span className="text-danger"> ({formatILS(spent - monthlyBudget)} over)</span>
+                  <span className="text-danger">
+                    {' ('}
+                    <Amount value={spent - monthlyBudget} /> over)
+                  </span>
                 ) : (
-                  <span className="text-ink-faint"> ({formatILS(monthlyBudget - spent)} left)</span>
+                  <span className="text-ink-faint">
+                    {' ('}
+                    <Amount value={monthlyBudget - spent} /> left)
+                  </span>
                 )}
               </>
             )}

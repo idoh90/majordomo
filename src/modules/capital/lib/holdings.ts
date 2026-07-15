@@ -9,8 +9,23 @@ export function quoteFor(h: Holding, prices: Prices): Quote | undefined {
   return prices[h.symbol.trim().toUpperCase()]
 }
 
+/** currency → ILS rate; 1 when the rate is missing (see missingFxCurrencies). */
 function rateFor(currency: string, fx: Fx): number {
-  return fx[currency.toUpperCase()] ?? (currency.toUpperCase() === 'ILS' ? 1 : 1)
+  return fx[currency.toUpperCase()] ?? 1
+}
+
+/**
+ * Non-₪ currencies in use (holding or quote side) with no cached FX rate —
+ * their values render UNCONVERTED (rate 1), so the UI must say so.
+ */
+export function missingFxCurrencies(holdings: Holding[], prices: Prices, fx: Fx): string[] {
+  const need = new Set<string>()
+  for (const h of holdings) {
+    need.add(h.currency.toUpperCase())
+    const q = quoteFor(h, prices)
+    if (q) need.add(q.currency.toUpperCase())
+  }
+  return [...need].filter((c) => c !== 'ILS' && fx[c] == null).sort()
 }
 
 /** Cost basis in ₪ (independent of any live quote). */
@@ -18,18 +33,24 @@ export function costValueILS(h: Holding, fx: Fx): number {
   return h.shares * h.costBasis * rateFor(h.currency, fx)
 }
 
+/** The price is denominated in the QUOTE's currency — the holding's declared
+ *  currency only covers the cost basis (and pre-quote fallbacks). */
+function priceCurrency(h: Holding, q: Quote): string {
+  return q.currency || h.currency
+}
+
 /** Live market value in ₪, or null when no quote is cached yet. */
 export function marketValueILS(h: Holding, prices: Prices, fx: Fx): number | null {
   const q = quoteFor(h, prices)
   if (!q) return null
-  return h.shares * q.price * rateFor(h.currency, fx)
+  return h.shares * q.price * rateFor(priceCurrency(h, q), fx)
 }
 
 /** Today's move in ₪, or null without a quote. */
 export function dayChangeILS(h: Holding, prices: Prices, fx: Fx): number | null {
   const q = quoteFor(h, prices)
   if (!q) return null
-  return h.shares * (q.price - q.prevClose) * rateFor(h.currency, fx)
+  return h.shares * (q.price - q.prevClose) * rateFor(priceCurrency(h, q), fx)
 }
 
 export interface HoldingRow {
@@ -125,10 +146,6 @@ export interface TenDayPL {
   hasData: boolean
 }
 
-function rate(currency: string, fx: Fx): number {
-  return fx[currency.toUpperCase()] ?? 1
-}
-
 /**
  * Portfolio ₪ P/L for each of the last ~10 trading days, from cached daily
  * closes. Days missing a close for some symbol carry that symbol's last known
@@ -164,7 +181,7 @@ export function tenDayPL(holdings: Holding[], history: History, fx: Fx): TenDayP
       const close = maps.get(sym)!.get(d) ?? lastClose.get(sym)
       if (close != null) {
         lastClose.set(sym, close)
-        v += h.shares * close * rate(h.currency, fx)
+        v += h.shares * close * rateFor(h.currency, fx)
       }
     }
     return v

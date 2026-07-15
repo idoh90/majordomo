@@ -2,15 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useShellStore } from '../../core/store/shell'
 import { useNow } from '../../core/useNow'
 import { useEventsStore } from '../../core/events/store'
-import { eventsInRange, hoursByKind, weekColumns } from '../../core/events/lib'
-import { addDays } from '../../core/dates'
+import { eventsInRange, hoursByKind, seamStart, weekColumns } from '../../core/events/lib'
+import { addDays, localDayKey } from '../../core/dates'
 import { SegmentedControl } from '../../core/ui/SegmentedControl'
 import { voice } from '../../core/voice'
 import type { CalendarEvent, EventKind } from '../../core/events/types'
+import { useWorkoutStore } from '../../modules/training/store'
 import { CONSOLES } from '../consoles'
 import { BriefingStrip } from './BriefingStrip'
 import { KIND_META } from './kinds'
-import { MonthView, monthLabel } from './MonthView'
+import { MonthView, monthCells, monthLabel } from './MonthView'
+import { dayStrains } from './strain'
 import { WeekGrid } from './WeekGrid'
 
 const MO = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
@@ -63,6 +65,26 @@ export function ManorScreen() {
     [sandbox, committedWeek],
   )
   const changedIds = useMemo(() => new Set(sandbox?.changed ?? []), [sandbox])
+
+  // Strain from the Grounds, drawn on the calendar. The engine scores any
+  // instant, so days ahead read as forecast — soreness already owed, not yet
+  // felt. Rounded to the hour so the minute tick doesn't re-run the model.
+  const workouts = useWorkoutStore((s) => s.workouts)
+  const nowH = Math.floor(now / 3_600_000) * 3_600_000
+  const weekStrain = useMemo(
+    () => (workouts.length ? dayStrains(workouts, columns, nowH) : null),
+    [workouts, columns, nowH],
+  )
+  const monthStrain = useMemo(() => {
+    if (mode !== 'month' || workouts.length === 0) return null
+    const days = monthCells(anchor, weekStart)
+    const scored = dayStrains(
+      workouts,
+      days.map((d) => ({ start: seamStart(d), end: seamStart(addDays(d, 1)) })),
+      nowH,
+    )
+    return new Map(days.map((d, i) => [localDayKey(d), scored[i]]))
+  }, [mode, anchor, weekStart, workouts, nowH])
 
   const nav = (dir: 1 | -1) =>
     setAnchor((a) =>
@@ -146,6 +168,7 @@ export function ManorScreen() {
           events={activeEvents}
           now={now}
           weekStart={weekStart}
+          strain={monthStrain}
           onOpenDay={(day) => {
             setAnchor(day)
             setMode('week')
@@ -160,6 +183,7 @@ export function ManorScreen() {
               columns={columns}
               events={weekEvents}
               now={now}
+              strain={weekStrain}
               sandbox={sandbox !== null}
               ghosts={ghosts}
               changedIds={changedIds}

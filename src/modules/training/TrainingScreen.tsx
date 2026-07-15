@@ -7,6 +7,7 @@ import { WorkoutCalendar } from './components/history/WorkoutCalendar'
 import { WorkoutDetailSheet } from './components/history/WorkoutDetailSheet'
 import { WorkoutList } from './components/history/WorkoutList'
 import { NutritionCard } from './components/insights/NutritionCard'
+import { ScheduledCard } from './components/insights/ScheduledCard'
 import { StatTiles } from './components/insights/StatTiles'
 import { TopMusclesChart } from './components/insights/TopMusclesChart'
 import { WeeklyChart } from './components/insights/WeeklyChart'
@@ -71,6 +72,7 @@ export function TrainingScreen() {
         </div>
         <div className="flex flex-col gap-4">
           <WeeklyGoalCard workouts={workouts} now={now} />
+          <ScheduledCard now={now} />
           <NutritionCard workouts={workouts} now={now} />
           <StatTiles workouts={workouts} now={now} />
           <div className="grid gap-4 sm:grid-cols-2">

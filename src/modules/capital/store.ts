@@ -16,7 +16,7 @@ interface CapitalState {
   holdings: Holding[]
   /** ₪ spend target for a calendar month */
   monthlyBudget: number
-  /** 'YYYY-MM' → quick overwrite total (used only when nothing is itemized) */
+  /** 'YYYY-MM' → card-app running total; ADDED to recurring + one-off items */
   spends: Record<string, number>
   /** one-off spend line items (itemized mode) */
   spendItems: SpendItem[]
@@ -131,7 +131,16 @@ export const useCapitalStore = create<CapitalState>()(
         set({ pricesLoading: true, pricesError: null })
         try {
           const { quotes, errors } = await fetchQuotes(holdings, apiKey)
-          const currencies = [...new Set(Object.values(quotes).map((q) => q.currency))]
+          // FX for every currency in play: holdings' declared currencies (cost
+          // basis converts even before a quote lands) + fresh AND cached quote
+          // currencies (the exchange may quote in a different one)
+          const currencies = [
+            ...new Set([
+              ...holdings.map((h) => h.currency),
+              ...Object.values(quotes).map((q) => q.currency),
+              ...Object.values(get().prices).map((q) => q.currency),
+            ]),
+          ]
           const { fx, errors: fxErrors } = await fetchFxToILS(currencies, apiKey)
           const { history, errors: histErrors } = await fetchTimeSeries(holdings, apiKey)
           const problems = [...errors, ...fxErrors, ...histErrors]

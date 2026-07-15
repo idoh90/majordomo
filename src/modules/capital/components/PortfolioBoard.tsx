@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import { useCapitalStore } from '../store'
 import type { Holding } from '../types'
-import { holdingRow, portfolioTotals } from '../lib/holdings'
+import { holdingRow, missingFxCurrencies, portfolioTotals } from '../lib/holdings'
 import { formatPercent } from '../lib/money'
+import { voice } from '../../../core/voice'
 import { Amount } from './Amount'
 
 interface PortfolioBoardProps {
@@ -27,6 +28,7 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
   )
   const totals = useMemo(() => portfolioTotals(rows), [rows])
   const anyClosed = rows.some((r) => r.quote && r.quote.marketOpen === false)
+  const missingFx = useMemo(() => missingFxCurrencies(holdings, prices, fx), [holdings, prices, fx])
 
   return (
     <div className="panel p-4">
@@ -147,6 +149,11 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
               </tfoot>
             </table>
           </div>
+          {missingFx.length > 0 && (
+            <p className="mt-2.5 text-[11px] leading-relaxed text-danger">
+              {voice.capital.fxMissing(missingFx)}
+            </p>
+          )}
           <div className="mt-3 flex items-center justify-between">
             <button
               type="button"

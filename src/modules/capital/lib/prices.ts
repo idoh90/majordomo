@@ -6,6 +6,16 @@ import type { Quote } from '../types'
 
 const BASE = 'https://api.twelvedata.com'
 
+/** Some listings quote in fractional units — LSE in pence (GBp/GBX), TASE in
+ *  agorot (ILA). Convert to the major unit so FX conversion stays sane. */
+function toMajorUnit(price: number, prevClose: number, currency: string) {
+  const c = currency.toUpperCase()
+  if (c === 'GBX' || currency === 'GBp' || c === 'ILA') {
+    return { price: price / 100, prevClose: prevClose / 100, currency: c === 'ILA' ? 'ILS' : 'GBP' }
+  }
+  return { price, prevClose, currency }
+}
+
 export interface QuoteFetch {
   quotes: Record<string, Quote> // key = UPPERCASE symbol
   errors: string[]
@@ -64,16 +74,21 @@ export async function fetchQuotes(refs: SymbolRef[], apiKey: string): Promise<Qu
         errors.push(`${sym}: ${(q as { message?: string })?.message ?? 'no data'}`)
         continue
       }
-      const price = parseFloat(String(q.close))
-      const prevClose = parseFloat(String(q.previous_close))
-      if (!Number.isFinite(price)) {
+      const rawPrice = parseFloat(String(q.close))
+      const rawPrev = parseFloat(String(q.previous_close))
+      if (!Number.isFinite(rawPrice)) {
         errors.push(`${sym}: no price`)
         continue
       }
+      const norm = toMajorUnit(
+        rawPrice,
+        Number.isFinite(rawPrev) ? rawPrev : rawPrice,
+        String(q.currency ?? 'USD'),
+      )
       quotes[sym] = {
-        price,
-        prevClose: Number.isFinite(prevClose) ? prevClose : price,
-        currency: String(q.currency ?? 'USD'),
+        price: norm.price,
+        prevClose: norm.prevClose,
+        currency: norm.currency,
         name: q.name ? String(q.name) : undefined,
         marketOpen: q.is_market_open === true,
         at,

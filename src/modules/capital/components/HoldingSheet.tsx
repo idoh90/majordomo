@@ -62,6 +62,9 @@ export function HoldingSheet({ open, editing, onClose, onAddAccount }: HoldingSh
     }
     if (editing) updateHolding(editing.id, patch)
     else addHolding(patch)
+    // fetch the new symbol's quote + FX right away so the board never shows
+    // an unconverted cost basis masquerading as ₪ (no-ops without a key)
+    void useCapitalStore.getState().refreshPrices()
     onClose()
   }
 

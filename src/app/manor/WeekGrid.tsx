@@ -13,6 +13,8 @@ import { localDayKey } from '../../core/dates'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { voice } from '../../core/voice'
 import { KIND_META, hhmm } from './kinds'
+import { StrainBar } from './StrainBar'
+import type { DayStrain } from './strain'
 
 /**
  * The duty-cycle week grid (design direction 1a): each column spans
@@ -81,12 +83,16 @@ interface MoveConfirm {
   body: string
 }
 
-type LastAction = { type: 'move'; id: string; prev: { start: string; end: string } } | { type: 'add'; id: string }
+type LastAction =
+  | { type: 'move'; id: string; prev: { start: string; end: string } }
+  | { type: 'add'; id: string }
+  | { type: 'delete'; event: CalendarEvent }
 
 export function WeekGrid({
   columns,
   events,
   now,
+  strain,
   sandbox = false,
   ghosts = [],
   changedIds,
@@ -94,6 +100,8 @@ export function WeekGrid({
   columns: ColumnWindow[]
   events: CalendarEvent[]
   now: number
+  /** per-column strain from the Grounds' engine; null until anything is logged */
+  strain?: DayStrain[] | null
   /** what-if rehearsal active: silent draft mutations, no confirms/toasts */
   sandbox?: boolean
   /** committed originals of changed events, rendered as dashed pencil marks */
@@ -193,9 +201,25 @@ export function WeekGrid({
   const undo = () => {
     if (!lastAction) return
     if (lastAction.type === 'move') updateEvent(lastAction.id, lastAction.prev)
-    else deleteEvent(lastAction.id)
+    else if (lastAction.type === 'add') deleteEvent(lastAction.id)
+    else {
+      // re-book the removed event under its original id
+      const { updatedAt: _updatedAt, ...rest } = lastAction.event
+      addEvent(rest)
+    }
     setLastAction(null)
     butler(voice.manor.restored)
+  }
+
+  const removeEvent = (id: string) => {
+    const e = events.find((x) => x.id === id)
+    if (!e) return
+    deleteEvent(id)
+    setPopover(null)
+    if (!sandbox) {
+      setLastAction({ type: 'delete', event: e })
+      butler(voice.manor.removed, true)
+    }
   }
 
   const finishDrag = (d: DragState) => {
@@ -370,7 +394,13 @@ export function WeekGrid({
       <div className="hidden md:block">
         <div className="flex pl-12">
           {columns.map((win, i) => (
-            <DayHeader key={i} win={win} markers={markersByCol[i]} now={now} />
+            <DayHeader
+              key={i}
+              win={win}
+              markers={markersByCol[i]}
+              strain={strain?.[i]}
+              now={now}
+            />
           ))}
         </div>
         <div className="flex">
@@ -423,12 +453,13 @@ export function WeekGrid({
               <EventPopover
                 popover={popover}
                 onClose={() => setPopover(null)}
+                onDelete={() => removeEvent(popover.event.id)}
                 style={{
                   left:
                     popover.col < 4
                       ? `calc(${popover.col + 1} * 100% / 7 + 6px)`
                       : `calc(${popover.col} * 100% / 7 - 242px)`,
-                  top: Math.max(4, Math.min(popover.y, BODY_H - 190)),
+                  top: Math.max(4, Math.min(popover.y, BODY_H - 232)),
                 }}
               />
             )}
@@ -458,10 +489,12 @@ export function WeekGrid({
         ghostsByCol={ghostsByCol}
         changedIds={changedIds}
         markersByCol={markersByCol}
+        strain={strain}
         now={now}
         popover={popover}
         onEventClick={handleEventClick}
         closePopover={() => setPopover(null)}
+        onDeleteEvent={removeEvent}
         quickAdd={quickAdd}
         onColumnClick={onColumnClick}
         quickAddPick={quickAddPick}
@@ -545,10 +578,12 @@ const TickAxis = memo(function TickAxis() {
 const DayHeader = memo(function DayHeader({
   win,
   markers,
+  strain,
   now,
 }: {
   win: ColumnWindow
   markers: CalendarEvent[]
+  strain?: DayStrain
   now: number
 }) {
   const isToday = localDayKey(win.day) === localDayKey(new Date(now))
@@ -568,6 +603,11 @@ const DayHeader = memo(function DayHeader({
           {win.day.getDate()}
         </span>
       </div>
+      {strain && (
+        <div className="mt-1.5">
+          <StrainBar day={strain} />
+        </div>
+      )}
       {markers.map((m) => (
         <span
           key={m.id}
@@ -826,10 +866,12 @@ function DragGhost({ drag, columns }: { drag: DragState; columns: ColumnWindow[]
 function EventPopover({
   popover,
   onClose,
+  onDelete,
   style,
 }: {
   popover: Popover
   onClose: () => void
+  onDelete: () => void
   style: React.CSSProperties
 }) {
   const e = popover.event
@@ -876,6 +918,23 @@ function EventPopover({
           {hoursOf(e).toFixed(1)} h
         </span>
       </div>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[11.5px] font-semibold tracking-[0.12em] text-danger transition-colors hover:bg-panel-2"
+        style={{ borderColor: 'color-mix(in srgb, var(--color-danger) 40%, transparent)' }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path
+            d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        {voice.manor.removeLabel}
+      </button>
     </div>
   )
 }
@@ -949,10 +1008,12 @@ function MobileWeek({
   ghostsByCol,
   changedIds,
   markersByCol,
+  strain,
   now,
   popover,
   onEventClick,
   closePopover,
+  onDeleteEvent,
   quickAdd,
   onColumnClick,
   quickAddPick,
@@ -963,10 +1024,12 @@ function MobileWeek({
   ghostsByCol: ClippedEvent[][]
   changedIds?: ReadonlySet<string>
   markersByCol: CalendarEvent[][]
+  strain?: DayStrain[] | null
   now: number
   popover: Popover | null
   onEventClick: (col: number, e: CalendarEvent, y: number) => void
   closePopover: () => void
+  onDeleteEvent: (id: string) => void
   quickAdd: QuickAdd | null
   onColumnClick: (col: number, ev: React.MouseEvent) => void
   quickAddPick: (tpl: { kind: EventKind; title: string; hours: number }) => void
@@ -1028,6 +1091,11 @@ function MobileWeek({
               <span className="block text-xs font-semibold [font-variant-numeric:tabular-nums]">
                 {win.day.getDate()}
               </span>
+              {strain?.[i] && (
+                <span className="mt-1 block px-0.5">
+                  <StrainBar day={strain[i]} height={3} />
+                </span>
+              )}
             </button>
           )
         })}
@@ -1073,11 +1141,12 @@ function MobileWeek({
                   <EventPopover
                     popover={popover}
                     onClose={closePopover}
+                    onDelete={() => onDeleteEvent(popover.event.id)}
                     style={{
                       left: 8,
                       right: 8,
                       width: 'auto',
-                      top: Math.max(4, Math.min(popover.y, BODY_H - 190)),
+                      top: Math.max(4, Math.min(popover.y, BODY_H - 232)),
                     }}
                   />
                 )}

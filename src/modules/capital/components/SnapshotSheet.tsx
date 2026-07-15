@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Sheet } from '../../../core/ui/Sheet'
-import { relativeDayLabel } from '../../../core/dates'
+import { localDayKey, relativeDayLabel } from '../../../core/dates'
 import { makeId } from '../../../core/ids'
 import { useCapitalStore } from '../store'
 import type { Snapshot } from '../types'
@@ -59,9 +59,14 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
   const previewNetWorth = netWorthOf({ id: '', takenAt: '', balances: parsed }, accounts)
 
   const save = () => {
+    // one snapshot per local day: saving again today revises today's point
+    // instead of stacking a second one on the trend chart
+    const latest = latestSnapshot(snapshots)
+    const sameDay =
+      !editing && latest && localDayKey(latest.takenAt) === localDayKey(new Date())
     const snap: Snapshot = editing
       ? { id: editing.id, takenAt: editing.takenAt, balances: parsed }
-      : { id: makeId(), takenAt: new Date().toISOString(), balances: parsed }
+      : { id: sameDay ? latest.id : makeId(), takenAt: new Date().toISOString(), balances: parsed }
     saveSnapshot(snap)
     onClose()
   }

@@ -2,6 +2,8 @@ import type { CalendarEvent } from '../../core/events/types'
 import { addDays, localDayKey, startOfWeek, type WeekStart } from '../../core/dates'
 import { voice } from '../../core/voice'
 import { KIND_META, hhmm } from './kinds'
+import { StrainBar } from './StrainBar'
+import type { DayStrain } from './strain'
 
 /**
  * Month view — chips per calendar day. A night watch is written on the day
@@ -29,6 +31,13 @@ export function monthLabel(anchor: Date): string {
   return `${MO_LONG[anchor.getMonth()]} ${anchor.getFullYear()}`
 }
 
+/** the 42 days the month grid draws — shared with the Manor so it can score
+ *  each cell's strain without re-deriving the grid */
+export function monthCells(anchor: Date, weekStart: WeekStart): Date[] {
+  const gridStart = startOfWeek(new Date(anchor.getFullYear(), anchor.getMonth(), 1), weekStart)
+  return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+}
+
 interface Chip {
   key: string
   text: string
@@ -43,17 +52,18 @@ export function MonthView({
   events,
   now,
   weekStart,
+  strain,
   onOpenDay,
 }: {
   anchor: Date
   events: CalendarEvent[]
   now: number
   weekStart: WeekStart
+  /** strain per cell, keyed by local day; null until anything is logged */
+  strain?: Map<string, DayStrain> | null
   onOpenDay: (day: Date) => void
 }) {
-  const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
-  const gridStart = startOfWeek(monthStart, weekStart)
-  const cells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+  const cells = monthCells(anchor, weekStart)
   const todayKey = localDayKey(new Date(now))
 
   // chips bucketed by local day
@@ -132,6 +142,11 @@ export function MonthView({
               >
                 {day.getDate()}
               </span>
+              {strain?.get(key) && (
+                <span className="mt-1 block">
+                  <StrainBar day={strain.get(key)!} height={3} />
+                </span>
+              )}
               <span className="mt-1 flex flex-col gap-[3px]">
                 {chips.slice(0, 3).map((c) => (
                   <span

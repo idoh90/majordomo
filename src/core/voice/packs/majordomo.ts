@@ -31,6 +31,8 @@ export const majordomoPack: VoicePack = {
     restored: 'Restored, sir.',
     asYouWere: 'As you were, sir.',
     onTheBooks: 'On the books, sir.',
+    removed: 'Struck from the books, sir.',
+    removeLabel: 'Remove',
     moveTitle: 'Move to another day, sir?',
     moveBody: ({ title, from, to }) => `${title} would run ${to} instead of ${from}.`,
     moveYes: 'Move it',
@@ -42,6 +44,20 @@ export const majordomoPack: VoicePack = {
       { kind: 'study', title: 'Study', hours: 2 },
       { kind: 'sleep', title: 'Sleep', hours: 6 },
     ],
+    strain: {
+      tooltip: ({ names, forecast }) => {
+        if (names.length === 0) return forecast ? 'Recovered by then, sir.' : 'Nothing sore, sir.'
+        const shown = names.slice(0, 3)
+        const rest = names.length - shown.length
+        const list =
+          rest > 0
+            ? `${shown.join(', ')} and ${rest} more`
+            : shown.length === 1
+              ? shown[0]
+              : `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`
+        return forecast ? `${list} — hot by then, sir.` : `${list} — still hot, sir.`
+      },
+    },
     whatIf: {
       button: '⧉ WHAT-IF',
       banner: 'The ledger is sandboxed, sir. Nothing binds until you apply.',
@@ -54,6 +70,10 @@ export const majordomoPack: VoicePack = {
       discard: 'Discard',
       applied: 'So arranged, sir.',
     },
+  },
+  grounds: {
+    scheduledTitle: 'On the books',
+    scheduledNote: 'Booked on the Manor, sir — move or remove them there.',
   },
   kinds: {
     shift: 'THE WATCH',
@@ -85,6 +105,8 @@ export const majordomoPack: VoicePack = {
   capital: {
     vaultEmpty:
       "No balances yet. Add your accounts, then log a snapshot to start charting the estate's worth.",
+    fxMissing: (currencies) =>
+      `No ₪ rate for ${currencies.join(', ')} yet, sir — these figures are unconverted. Refresh prices.`,
   },
   backup: {
     notExportFile: 'Not a Majordomo export file.',
