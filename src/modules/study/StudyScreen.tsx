@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
+import { addDays, atHour, localDayKey, startOfWeek } from '../../core/dates'
+import { hoursOf, rangeFree } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
+import type { CalendarEvent } from '../../core/events/types'
 import { useShellStore } from '../../core/store/shell'
 import { Sheet } from '../../core/ui/Sheet'
 import { useNow } from '../../core/useNow'
 import { voice } from '../../core/voice'
-import { reconcileMarkers, studyStats } from './lib'
+import {
+  awaitingReport,
+  metaOf,
+  reconcileMarkers,
+  studyStats,
+  subjRef,
+  subjectOfEvent,
+} from './lib'
 import { useStudyStore } from './store'
-import type { Subject } from './types'
+import type { SessionMeta, Subject } from './types'
 
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const MAX_RINGS = 8
 const RING_C = 2 * Math.PI * 48
 
 const fdate = (d: Date) => `${WD[d.getDay()]} ${d.getDate()}`
+const hhmm = (d: Date) =>
+  `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 
 /** The Study — subjects as progress rings, sessions planned then fulfilled. */
 export function StudyScreen() {
@@ -22,7 +34,7 @@ export function StudyScreen() {
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
 
-  const [sheet, setSheet] = useState<'enrol' | null>(null)
+  const [sheet, setSheet] = useState<'book' | 'enrol' | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const butler = (msg: string) => {
@@ -48,12 +60,28 @@ export function StudyScreen() {
 
   return (
     <div className="mt-4 flex flex-col gap-4">
-      <RingsPanel
-        subjects={active}
-        stats={stats}
-        onEnrol={() => setSheet('enrol')}
-      />
+      <RingsPanel subjects={active} stats={stats} onEnrol={() => setSheet('enrol')} />
 
+      <div className="grid items-start gap-4 lg:grid-cols-[300px_1fr]">
+        <Desk
+          events={activeEvents}
+          subjects={active}
+          sessions={sessions}
+          weekWindow={[stats.weekStart, stats.weekEnd]}
+          now={now}
+          onBook={() => setSheet('book')}
+          butler={butler}
+        />
+      </div>
+
+      <BookSheet
+        open={sheet === 'book'}
+        onClose={() => setSheet(null)}
+        subjects={active}
+        events={activeEvents}
+        now={now}
+        butler={butler}
+      />
       <EnrolSheet open={sheet === 'enrol'} onClose={() => setSheet(null)} butler={butler} />
 
       {toast && (
@@ -159,9 +187,236 @@ function SubjectRing({ subject, week }: { subject: Subject; week?: { fulfilledH:
   )
 }
 
+/* ---------------------------------------------------------------- the desk */
+
+function Desk({
+  events,
+  subjects,
+  sessions,
+  weekWindow,
+  now,
+  onBook,
+  butler,
+}: {
+  events: CalendarEvent[]
+  subjects: Subject[]
+  sessions: Record<string, SessionMeta>
+  weekWindow: [Date, Date]
+  now: number
+  onBook: () => void
+  butler: (msg: string) => void
+}) {
+  const [partialFor, setPartialFor] = useState<string | null>(null)
+  const [partialH, setPartialH] = useState(1)
+
+  const nameOf = (e: CalendarEvent) => {
+    const id = subjectOfEvent(e)
+    return id ? (subjects.find((s) => s.id === id)?.name ?? e.title) : e.title
+  }
+
+  const awaiting = awaitingReport(events, sessions, now)
+  const fulfill = (id: string, f: SessionMeta['fulfillment'], doneH?: number) => {
+    useStudyStore.getState().fulfill(id, f, doneH)
+    setPartialFor(null)
+    butler(
+      f === 'done'
+        ? voice.study.toast.markedDone
+        : f === 'skipped'
+          ? voice.study.toast.struck
+          : voice.study.toast.notedPartial(doneH ?? 0),
+    )
+  }
+  const file = (e: CalendarEvent, subjectId: string) => {
+    useEventsStore.getState().updateEvent(e.id, { sourceRef: subjRef(subjectId) })
+    useStudyStore.getState().setSessionMeta(e.id, { fulfillment: 'planned' })
+    butler(voice.study.toast.filed)
+  }
+
+  const [w0, w1] = weekWindow
+  const ledger = events
+    .filter((e) => {
+      if (e.kind !== 'study' || e.allDay) return false
+      const s = new Date(e.start)
+      return s >= w0 && s < w1
+    })
+    .sort((a, b) => a.start.localeCompare(b.start))
+
+  return (
+    <div className="flex flex-col gap-4">
+      <section className="panel p-5">
+        <h2 className="card-title">{voice.study.desk}</h2>
+        <button type="button" onClick={onBook} className="btn-cta mt-3 w-full py-3 text-[13px] tracking-[0.16em]">
+          {voice.study.book}
+        </button>
+
+        <div className="card-title mt-5">{voice.study.awaiting}</div>
+        {awaiting.length === 0 && (
+          <div className="py-2.5 text-[13px] italic text-ink-dim">{voice.study.noAwaiting}</div>
+        )}
+        {awaiting.map((e) => {
+          const s = new Date(e.start)
+          const en = new Date(e.end)
+          const unfiled = subjectOfEvent(e) === null
+          const open = partialFor === e.id
+          const maxP = Math.max(0.5, hoursOf(e) - 0.5)
+          return (
+            <div key={e.id} className="border-b border-line py-2.5 last:border-b-0">
+              <div className="flex flex-wrap items-baseline gap-2.5">
+                <span className="text-[13px] font-semibold">{nameOf(e)}</span>
+                <span className="text-xs text-ink-dim [font-variant-numeric:tabular-nums]">
+                  {fdate(s)} · {hhmm(s)} → {hhmm(en)}
+                </span>
+                <span className="ml-auto font-display text-sm font-semibold [font-variant-numeric:tabular-nums]">
+                  {hoursOf(e).toFixed(1)} h
+                </span>
+              </div>
+              {unfiled ? (
+                <div className="mt-2">
+                  <span className="font-display text-[9px] font-semibold tracking-[0.16em] text-ink-faint">
+                    {voice.study.fileUnder}
+                  </span>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {subjects.map((subj) => (
+                      <button
+                        key={subj.id}
+                        type="button"
+                        onClick={() => file(e, subj.id)}
+                        className="rounded-pill border border-line bg-panel-2 px-3 py-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-dim transition-colors hover:border-[var(--color-w-study)] hover:text-ink"
+                      >
+                        {subj.name.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <QueueAction
+                      label={voice.study.done}
+                      color="var(--color-positive)"
+                      onClick={() => fulfill(e.id, 'done')}
+                    />
+                    <QueueAction
+                      label={voice.study.partial}
+                      color="var(--color-ember)"
+                      onClick={() => {
+                        setPartialFor(open ? null : e.id)
+                        setPartialH(maxP)
+                      }}
+                    />
+                    <QueueAction
+                      label={voice.study.skipped}
+                      color="var(--color-ink-faint)"
+                      onClick={() => fulfill(e.id, 'skipped')}
+                    />
+                  </div>
+                  {open && (
+                    <div className="mt-2.5 flex items-center gap-2.5 animate-[fade-in_160ms_ease-out]">
+                      <button type="button" onClick={() => setPartialH((h) => Math.max(0.5, h - 0.5))} className="flex h-9 w-9 items-center justify-center rounded-[9px] border border-line bg-panel-2 text-base text-ink">−</button>
+                      <span className="min-w-[44px] text-center font-display text-base font-semibold [font-variant-numeric:tabular-nums]">
+                        {partialH.toFixed(1)} h
+                      </span>
+                      <button type="button" onClick={() => setPartialH((h) => Math.min(maxP, h + 0.5))} className="flex h-9 w-9 items-center justify-center rounded-[9px] border border-line bg-panel-2 text-base text-ink">+</button>
+                      <button
+                        type="button"
+                        onClick={() => fulfill(e.id, 'partial', partialH)}
+                        className="btn-cta px-4 py-2 text-[11px] tracking-[0.14em]"
+                      >
+                        {voice.study.logIt}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        })}
+        {awaiting.filter((e) => subjectOfEvent(e) !== null).length > 1 && (
+          <button
+            type="button"
+            onClick={() => {
+              for (const e of awaiting) {
+                if (subjectOfEvent(e) !== null) useStudyStore.getState().fulfill(e.id, 'skipped')
+              }
+              setPartialFor(null)
+              butler(voice.study.toast.restStruck)
+            }}
+            className="mt-2.5 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-faint transition-colors hover:text-ink-dim"
+          >
+            {voice.study.strikeRest}
+          </button>
+        )}
+      </section>
+
+      <section className="panel p-5">
+        <h2 className="card-title">{voice.study.weekLedger}</h2>
+        <div className="mt-1.5 flex flex-col">
+          {ledger.length === 0 && (
+            <div className="py-2 text-[13px] text-ink-dim">{voice.study.noLedger}</div>
+          )}
+          {ledger.map((e) => {
+            const s = new Date(e.start)
+            const en = new Date(e.end)
+            const meta = metaOf(sessions, e)
+            const past = en.getTime() <= now
+            const [st, stColor] =
+              meta.fulfillment === 'done'
+                ? [voice.study.status.done, 'var(--color-positive)']
+                : meta.fulfillment === 'partial'
+                  ? [voice.study.status.partial(meta.doneH ?? 0), 'var(--color-ember)']
+                  : meta.fulfillment === 'skipped'
+                    ? [voice.study.status.skipped, 'var(--color-ink-faint)']
+                    : past
+                      ? [voice.study.status.awaiting, 'var(--color-accent)']
+                      : [voice.study.status.ahead, 'var(--color-ink-dim)']
+            return (
+              <div key={e.id} className="flex flex-wrap items-baseline gap-2.5 border-b border-line py-2 last:border-b-0">
+                <span className="w-[52px] text-[12.5px] font-semibold [font-variant-numeric:tabular-nums]">
+                  {fdate(s)}
+                </span>
+                <span className="text-[12.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
+                  {hhmm(s)} → {hhmm(en)}
+                </span>
+                <span className="text-[12.5px]">{nameOf(e)}</span>
+                <span className="ml-auto font-display text-sm font-semibold [font-variant-numeric:tabular-nums]">
+                  {hoursOf(e).toFixed(1)} h
+                </span>
+                <span className="w-[88px] text-right font-display text-[9.5px] font-semibold tracking-[0.13em]" style={{ color: stColor }}>
+                  {st}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function QueueAction({
+  label,
+  color,
+  onClick,
+}: {
+  label: string
+  color: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-pill border bg-transparent px-3.5 py-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.14em] transition-[filter] hover:brightness-125"
+      style={{ borderColor: color, color }}
+    >
+      {label}
+    </button>
+  )
+}
+
 /* ---------------------------------------------------------------- sheets */
 
-export function SheetLabel({ children }: { children: React.ReactNode }) {
+function SheetLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="mb-2 mt-4 block font-display text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
       {children}
@@ -169,12 +424,14 @@ export function SheetLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function Stepper({
+function Stepper({
   label,
+  minWidth = 84,
   onDec,
   onInc,
 }: {
   label: string
+  minWidth?: number
   onDec: () => void
   onInc: () => void
 }) {
@@ -187,7 +444,10 @@ export function Stepper({
       >
         −
       </button>
-      <span className="min-w-[84px] text-center font-display text-[17px] font-semibold [font-variant-numeric:tabular-nums]">
+      <span
+        className="text-center font-display text-[17px] font-semibold [font-variant-numeric:tabular-nums]"
+        style={{ minWidth }}
+      >
         {label}
       </span>
       <button
@@ -201,7 +461,7 @@ export function Stepper({
   )
 }
 
-export function SheetActions({
+function SheetActions({
   cta,
   onCancel,
   onSave,
@@ -212,13 +472,240 @@ export function SheetActions({
 }) {
   return (
     <div className="mt-5 flex justify-end gap-2.5">
-      <button type="button" onClick={onCancel} className="btn-soft px-4 py-2.5 text-[11px] font-display font-bold uppercase tracking-[0.14em]">
+      <button
+        type="button"
+        onClick={onCancel}
+        className="btn-soft px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.14em]"
+      >
         {voice.study.sheet.cancel}
       </button>
       <button type="button" onClick={onSave} className="btn-cta px-5 py-2.5 text-[11px] tracking-[0.16em]">
         {cta}
       </button>
     </div>
+  )
+}
+
+/** subject picker chips shared by the sheets */
+function SubjectChips({
+  subjects,
+  value,
+  onPick,
+}: {
+  subjects: Subject[]
+  value: string
+  onPick: (id: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {subjects.map((s) => {
+        const on = s.id === value
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onPick(s.id)}
+            className="rounded-pill border px-3.5 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.1em] transition-colors"
+            style={{
+              borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
+              background: on
+                ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
+                : 'var(--color-panel-2)',
+              color: on ? 'var(--color-ink)' : 'var(--color-ink-dim)',
+            }}
+          >
+            {s.name.toUpperCase()}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** 14-day strip (this week + next), shared by book/homework sheets */
+function DayStrip({
+  now,
+  picked,
+  onPick,
+}: {
+  now: number
+  picked: number | null
+  onPick: (i: number) => void
+}) {
+  const strip0 = startOfWeek(new Date(now), useShellStore.getState().weekStart)
+  const days = Array.from({ length: 14 }, (_, i) => addDays(strip0, i))
+  const todayKey = localDayKey(new Date(now))
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {days.map((day, i) => {
+        const on = picked === i
+        const isToday = localDayKey(day) === todayKey
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onPick(i)}
+            className="w-[52px] rounded-[9px] border pb-1.5 pt-2 text-center transition-colors hover:border-accent"
+            style={{
+              borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
+              background: on
+                ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
+                : 'var(--color-panel-2)',
+            }}
+          >
+            <span
+              className="block text-[9px] tracking-[0.16em]"
+              style={{ color: isToday ? 'var(--color-accent)' : 'var(--color-ink-dim)' }}
+            >
+              {WD[day.getDay()]}
+            </span>
+            <span className="block font-display text-base font-semibold [font-variant-numeric:tabular-nums]">
+              {day.getDate()}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** index of today inside the 14-day strip */
+function todayStripIndex(now: number): number {
+  const strip0 = startOfWeek(new Date(now), useShellStore.getState().weekStart)
+  return Math.max(0, Math.min(13, Math.round((new Date(now).setHours(0, 0, 0, 0) - strip0.getTime()) / 86_400_000)))
+}
+
+function BookSheet({
+  open,
+  onClose,
+  subjects,
+  events,
+  now,
+  butler,
+}: {
+  open: boolean
+  onClose: () => void
+  subjects: Subject[]
+  events: CalendarEvent[]
+  now: number
+  butler: (msg: string) => void
+}) {
+  const homework = useStudyStore((s) => s.homework)
+  const [subj, setSubj] = useState<string>('')
+  const [dayIdx, setDayIdx] = useState<number | null>(null)
+  const [startH, setStartH] = useState(19)
+  const [dur, setDur] = useState(1.5)
+  const [hw, setHw] = useState('')
+  const [note, setNote] = useState('')
+
+  // (re)seed on open so the sheet always starts on today + the first subject
+  useEffect(() => {
+    if (!open) return
+    setSubj((prev) => (subjects.some((s) => s.id === prev) ? prev : (subjects[0]?.id ?? '')))
+    setDayIdx(todayStripIndex(now))
+    setStartH(19)
+    setDur(1.5)
+    setHw('')
+    setNote('')
+  }, [open])
+
+  const strip0 = startOfWeek(new Date(now), useShellStore.getState().weekStart)
+  const day = addDays(strip0, dayIdx ?? 0)
+  const start = atHour(day, startH)
+  const end = atHour(day, startH + dur)
+  const past = end.getTime() <= now
+
+  const save = () => {
+    const subject = subjects.find((s) => s.id === subj)
+    if (!subject || dayIdx === null) return
+    if (!rangeFree(events, start, end)) {
+      butler(voice.manor.occupied)
+      return
+    }
+    const ev = useEventsStore.getState().addEvent({
+      source: 'study',
+      sourceRef: subjRef(subject.id),
+      kind: 'study',
+      title: subject.name,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      notes: note.trim() || undefined,
+    })
+    useStudyStore.getState().setSessionMeta(ev.id, {
+      fulfillment: past ? 'done' : 'planned',
+      ...(hw ? { homeworkId: hw } : {}),
+    })
+    butler(past ? voice.study.toast.logged : voice.study.toast.onBooks)
+    onClose()
+  }
+
+  const hwOptions = homework.filter((h) => !h.done && h.subjectId === subj)
+
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <h2 className="card-title">{voice.study.book}</h2>
+      <SheetLabel>{voice.study.sheet.subject}</SheetLabel>
+      <SubjectChips subjects={subjects} value={subj} onPick={(id) => { setSubj(id); setHw('') }} />
+      <SheetLabel>{voice.study.sheet.day}</SheetLabel>
+      <DayStrip now={now} picked={dayIdx} onPick={setDayIdx} />
+      <div className="flex flex-wrap gap-x-6 gap-y-0">
+        <div>
+          <SheetLabel>{voice.study.sheet.start}</SheetLabel>
+          <select
+            value={startH}
+            onChange={(e) => setStartH(Number(e.target.value))}
+            className="rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink"
+          >
+            {Array.from({ length: 18 }, (_, i) => i + 6).map((h) => (
+              <option key={h} value={h}>
+                {String(h).padStart(2, '0')}:00
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <SheetLabel>{voice.study.sheet.duration}</SheetLabel>
+          <Stepper
+            label={`${dur.toFixed(1)} h`}
+            minWidth={52}
+            onDec={() => setDur((d) => Math.max(0.5, d - 0.5))}
+            onInc={() => setDur((d) => Math.min(8, d + 0.5))}
+          />
+        </div>
+      </div>
+      {hwOptions.length > 0 && (
+        <>
+          <SheetLabel>{voice.study.sheet.linkHomework}</SheetLabel>
+          <select
+            value={hw}
+            onChange={(e) => setHw(e.target.value)}
+            className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink"
+          >
+            <option value="">{voice.study.sheet.noHomework}</option>
+            {hwOptions.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.title}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+      <SheetLabel>{voice.study.sheet.note}</SheetLabel>
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder={voice.study.sheet.notePlaceholder}
+        className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+      />
+      <div className="mt-3.5 text-xs italic text-ink-dim">
+        {past ? voice.study.sheet.bookHintPast : voice.study.sheet.bookHintFuture}
+      </div>
+      <SheetActions
+        cta={past ? voice.study.sheet.ctaLog : voice.study.sheet.ctaBook}
+        onCancel={onClose}
+        onSave={save}
+      />
+    </Sheet>
   )
 }
 
