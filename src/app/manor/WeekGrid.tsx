@@ -12,7 +12,7 @@ import { useEventsStore } from '../../core/events/store'
 import { localDayKey } from '../../core/dates'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { voice } from '../../core/voice'
-import { KIND_META, hhmm } from './kinds'
+import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
 import { StrainBar } from './StrainBar'
 import type { DayStrain } from './strain'
 
@@ -517,7 +517,7 @@ export function WeekGrid({
       />
 
       {toast && (
-        <div className="menu-panel fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3.5 px-4 py-2.5 text-[13px] animate-[fade-in_200ms_ease-out]">
+        <div className="menu-panel fixed bottom-[calc(84px+env(safe-area-inset-bottom))] left-1/2 z-50 flex -translate-x-1/2 items-center gap-3.5 px-4 py-2.5 text-[13px] animate-[fade-in_200ms_ease-out] md:bottom-6">
           {toast.msg}
           {toast.undo && lastAction && (
             <button
@@ -608,19 +608,23 @@ const DayHeader = memo(function DayHeader({
           <StrainBar day={strain} />
         </div>
       )}
-      {markers.map((m) => (
-        <span
-          key={m.id}
-          className="mt-1 inline-block rounded-[5px] px-1.5 py-px text-[10px] tracking-[0.08em]"
-          style={{
-            color: 'var(--color-w-ledger)',
-            border: '1px solid color-mix(in srgb, var(--color-w-ledger) 55%, transparent)',
-            background: 'color-mix(in srgb, var(--color-w-ledger) 10%, transparent)',
-          }}
-        >
-          ₪ {m.title}
-        </span>
-      ))}
+      {markers.map((m) => {
+        const mm = markerMeta(m)
+        return (
+          <span
+            key={m.id}
+            className="mt-1 inline-block rounded-[5px] px-1.5 py-px text-[10px] tracking-[0.08em]"
+            style={{
+              color: mm.color,
+              border: `1px solid color-mix(in srgb, ${mm.color} 55%, transparent)`,
+              background: `color-mix(in srgb, ${mm.color} 10%, transparent)`,
+            }}
+          >
+            {mm.glyph ? `${mm.glyph} ` : ''}
+            {m.title}
+          </span>
+        )
+      })}
     </div>
   )
 })
@@ -875,7 +879,7 @@ function EventPopover({
   style: React.CSSProperties
 }) {
   const e = popover.event
-  const meta = KIND_META[e.kind]
+  const meta = eventMeta(e)
   const s = new Date(e.start)
   const en = new Date(e.end)
   const cross = localDayKey(s) !== localDayKey(en)
@@ -1114,15 +1118,15 @@ function MobileWeek({
                 <span className="font-display text-[13px] font-semibold tracking-[0.12em] text-ink">
                   {WD[win.day.getDay()]} {win.day.getDate()}
                 </span>
-                {markersByCol[i].map((m) => (
-                  <span
-                    key={m.id}
-                    className="text-[10px]"
-                    style={{ color: 'var(--color-w-ledger)' }}
-                  >
-                    ₪ {m.title}
-                  </span>
-                ))}
+                {markersByCol[i].map((m) => {
+                  const mm = markerMeta(m)
+                  return (
+                    <span key={m.id} className="text-[10px]" style={{ color: mm.color }}>
+                      {mm.glyph ? `${mm.glyph} ` : ''}
+                      {m.title}
+                    </span>
+                  )
+                })}
               </div>
               <div className="relative" style={{ height: BODY_H }} onClick={(ev) => onColumnClick(i, ev)}>
                 <Rules />

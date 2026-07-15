@@ -1,7 +1,7 @@
 import type { CalendarEvent } from '../../core/events/types'
 import { addDays, localDayKey, startOfWeek, type WeekStart } from '../../core/dates'
 import { voice } from '../../core/voice'
-import { KIND_META, hhmm } from './kinds'
+import { KIND_META, hhmm, markerMeta } from './kinds'
 import { StrainBar } from './StrainBar'
 import type { DayStrain } from './strain'
 
@@ -78,11 +78,12 @@ export function MonthView({
     const meta = KIND_META[e.kind]
     const s = new Date(e.start)
     if (e.allDay) {
+      const mm = markerMeta(e)
       push(localDayKey(s), {
         key: e.id,
-        text: `₪ ${e.title}`,
-        fg: meta.color,
-        bg: `color-mix(in srgb, ${meta.color} 14%, transparent)`,
+        text: mm.glyph ? `${mm.glyph} ${e.title}` : e.title,
+        fg: mm.color,
+        bg: `color-mix(in srgb, ${mm.color} 14%, transparent)`,
       })
       continue
     }

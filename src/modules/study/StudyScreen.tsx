@@ -4,11 +4,15 @@ import { hoursOf, rangeFree } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
 import { useShellStore } from '../../core/store/shell'
+import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { Sheet } from '../../core/ui/Sheet'
 import { useNow } from '../../core/useNow'
 import { voice } from '../../core/voice'
 import {
   awaitingReport,
+  dayKeyToDate,
+  daysUntil,
+  examProgress,
   metaOf,
   reconcileMarkers,
   studyStats,
@@ -16,7 +20,8 @@ import {
   subjectOfEvent,
 } from './lib'
 import { useStudyStore } from './store'
-import type { SessionMeta, Subject } from './types'
+import { useStudyUi } from './uiStore'
+import type { Exam, SessionMeta, Subject } from './types'
 
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const MAX_RINGS = 8
@@ -34,7 +39,8 @@ export function StudyScreen() {
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
 
-  const [sheet, setSheet] = useState<'book' | 'enrol' | null>(null)
+  const [sheet, setSheet] = useState<'book' | 'enrol' | 'hw' | 'exam' | 'topic' | null>(null)
+  const [selSubjId, setSelSubjId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const butler = (msg: string) => {
@@ -45,6 +51,14 @@ export function StudyScreen() {
   useEffect(() => () => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
   }, [])
+
+  // the tab bar's + posts a one-shot request through the mailbox
+  const addSheetRequested = useStudyUi((s) => s.addSheetRequested)
+  useEffect(() => {
+    if (!addSheetRequested) return
+    setSheet('book')
+    useStudyUi.getState().clearAddSheetRequest()
+  }, [addSheetRequested])
 
   // upkeep on entry: heal markers, drop meta for events deleted Manor-side.
   // Both are sandbox-guarded (reconcileMarkers internally; prune here).
@@ -57,10 +71,13 @@ export function StudyScreen() {
 
   const stats = studyStats(activeEvents, sessions, subjects, now, weekStart)
   const active = subjects.filter((s) => !s.archived)
+  const sel = active.find((s) => s.id === selSubjId) ?? active[0] ?? null
 
   return (
     <div className="mt-4 flex flex-col gap-4">
       <RingsPanel subjects={active} stats={stats} onEnrol={() => setSheet('enrol')} />
+
+      <ExamsPanel events={activeEvents} sessions={sessions} subjects={subjects} now={now} />
 
       <div className="grid items-start gap-4 lg:grid-cols-[300px_1fr]">
         <Desk
@@ -72,6 +89,18 @@ export function StudyScreen() {
           onBook={() => setSheet('book')}
           butler={butler}
         />
+        {sel && (
+          <Dossier
+            subjects={active}
+            sel={sel}
+            now={now}
+            onPick={setSelSubjId}
+            onAddHw={() => setSheet('hw')}
+            onAddExam={() => setSheet('exam')}
+            onAddTopic={() => setSheet('topic')}
+            butler={butler}
+          />
+        )}
       </div>
 
       <BookSheet
@@ -83,13 +112,298 @@ export function StudyScreen() {
         butler={butler}
       />
       <EnrolSheet open={sheet === 'enrol'} onClose={() => setSheet(null)} butler={butler} />
+      {sel && (
+        <>
+          <HwSheet
+            open={sheet === 'hw'}
+            onClose={() => setSheet(null)}
+            subjects={active}
+            defaultSubj={sel.id}
+            now={now}
+            butler={butler}
+          />
+          <ExamSheet
+            open={sheet === 'exam'}
+            onClose={() => setSheet(null)}
+            subjects={active}
+            defaultSubj={sel.id}
+            now={now}
+            butler={butler}
+          />
+          <TopicSheet open={sheet === 'topic'} onClose={() => setSheet(null)} sel={sel} butler={butler} />
+        </>
+      )}
 
       {toast && (
-        <div className="menu-panel fixed bottom-6 left-1/2 z-50 -translate-x-1/2 px-4 py-2.5 text-[13px] animate-[fade-in_200ms_ease-out]">
+        <div className="menu-panel fixed bottom-[calc(84px+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 px-4 py-2.5 text-[13px] animate-[fade-in_200ms_ease-out] md:bottom-6">
           {toast}
         </div>
       )}
     </div>
+  )
+}
+
+/* ---------------------------------------------------------------- exams */
+
+function ExamsPanel({
+  events,
+  sessions,
+  subjects,
+  now,
+}: {
+  events: CalendarEvent[]
+  sessions: Record<string, SessionMeta>
+  subjects: Subject[]
+  now: number
+}) {
+  const exams = useStudyStore((s) => s.exams)
+  const todayKey = localDayKey(new Date(now))
+  const upcoming = [...exams]
+    .filter((x) => x.on >= todayKey)
+    .sort((a, b) => a.on.localeCompare(b.on))
+  const nameOf = (x: Exam) => subjects.find((s) => s.id === x.subjectId)?.name ?? '—'
+
+  return (
+    <section className="panel px-5 py-5 sm:px-6">
+      <h2 className="card-title">{voice.study.mattersPending}</h2>
+      {upcoming.length === 0 ? (
+        <div className="mt-2 text-[13px] italic text-ink-dim">{voice.study.noExams}</div>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-3.5">
+          {upcoming.map((x, i) => (
+            <div key={x.id} className="min-w-[230px] flex-1 rounded-xl border border-line bg-panel-2 px-4 py-3.5">
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--color-w-study)' }} />
+                <span className="font-display text-[13.5px] font-bold tracking-[0.1em]">
+                  {nameOf(x).toUpperCase()}
+                </span>
+                <span className="text-[10px] tracking-[0.12em] text-ink-faint">
+                  {x.title.toUpperCase()}
+                </span>
+              </div>
+              <div
+                className="stat-num mt-2 font-display text-[28px] font-semibold leading-none"
+                style={{ color: i === 0 ? 'var(--color-accent)' : 'var(--color-ink)' }}
+              >
+                {voice.study.countdown(daysUntil(x.on, now))}
+              </div>
+              <div className="mt-1.5 text-xs text-ink-dim [font-variant-numeric:tabular-nums]">
+                {voice.study.hoursToward(examProgress(x, events, sessions))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/* ---------------------------------------------------------------- dossier */
+
+function Dossier({
+  subjects,
+  sel,
+  now,
+  onPick,
+  onAddHw,
+  onAddExam,
+  onAddTopic,
+  butler,
+}: {
+  subjects: Subject[]
+  sel: Subject
+  now: number
+  onPick: (id: string) => void
+  onAddHw: () => void
+  onAddExam: () => void
+  onAddTopic: () => void
+  butler: (msg: string) => void
+}) {
+  const homework = useStudyStore((s) => s.homework)
+  const topics = useStudyStore((s) => s.topics)
+  const [confirmArchive, setConfirmArchive] = useState(false)
+  const todayKey = localDayKey(new Date(now))
+  const tomorrowKey = localDayKey(addDays(new Date(now), 1))
+
+  const dueInfo = (due: string | undefined, done: boolean): [string, string] => {
+    if (done) return [voice.study.due.done, 'var(--color-ink-faint)']
+    if (!due) return ['', 'var(--color-ink-dim)']
+    if (due < todayKey) return [voice.study.due.overdue, 'var(--color-danger)']
+    if (due === todayKey) return [voice.study.due.today, 'var(--color-ember)']
+    if (due === tomorrowKey) return [voice.study.due.tomorrow, 'var(--color-ink-dim)']
+    return [voice.study.due.on(fdate(dayKeyToDate(due))), 'var(--color-ink-dim)']
+  }
+
+  const hwRows = [...homework].sort(
+    (a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || (a.due ?? '9999').localeCompare(b.due ?? '9999'),
+  )
+  const selTopics = topics.filter((t) => t.subjectId === sel.id).sort((a, b) => a.order - b.order)
+  const covered = selTopics.filter((t) => t.covered).length
+  const pct = selTopics.length ? Math.round((covered / selTopics.length) * 100) : 0
+  const nameOf = (subjectId: string) => subjects.find((s) => s.id === subjectId)?.name ?? '—'
+
+  return (
+    <section className="panel p-5">
+      <h2 className="card-title">{voice.study.dossier}</h2>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {subjects.map((s) => {
+          const on = s.id === sel.id
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => onPick(s.id)}
+              className="rounded-pill border px-3.5 py-1.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em] transition-colors hover:border-[var(--color-w-study)]"
+              style={{
+                borderColor: on ? 'var(--color-w-study)' : 'var(--color-line)',
+                background: on
+                  ? 'color-mix(in srgb, var(--color-w-study) 14%, transparent)'
+                  : 'var(--color-panel-2)',
+                color: on ? 'var(--color-ink)' : 'var(--color-ink-dim)',
+              }}
+            >
+              {s.name.toUpperCase()}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="mt-3.5 flex items-center gap-2.5 rounded-xl border border-line bg-panel-2 px-3.5 py-2.5">
+        <span className="font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
+          {voice.study.weeklyGoal}
+        </span>
+        <span className="ml-auto">
+          <Stepper
+            label={`${sel.goalH.toFixed(1)} h / wk`}
+            minWidth={74}
+            onDec={() =>
+              useStudyStore.getState().updateSubject(sel.id, { goalH: Math.max(0, sel.goalH - 0.5) })
+            }
+            onInc={() =>
+              useStudyStore.getState().updateSubject(sel.id, { goalH: sel.goalH + 0.5 })
+            }
+          />
+        </span>
+      </div>
+
+      <div className="mt-5 flex items-baseline gap-2.5">
+        <div className="card-title">{voice.study.homework}</div>
+        <button
+          type="button"
+          onClick={onAddHw}
+          className="ml-auto font-display text-[10px] font-semibold tracking-[0.14em] text-accent hover:underline"
+        >
+          {voice.study.add}
+        </button>
+      </div>
+      <div className="mt-1 flex flex-col">
+        {hwRows.map((h) => {
+          const [dueL, dueC] = dueInfo(h.due, h.done)
+          return (
+            <div key={h.id} className="flex items-center gap-2.5 border-b border-line py-2 last:border-b-0">
+              <button
+                type="button"
+                aria-label="Toggle done"
+                onClick={() => {
+                  useStudyStore.getState().setHomeworkDone(h.id, !h.done)
+                  butler(h.done ? voice.study.toast.hwUndone : voice.study.toast.hwDone)
+                }}
+                className="flex h-5 w-5 flex-none items-center justify-center rounded-md border text-xs leading-none"
+                style={{
+                  background: h.done ? 'var(--color-w-study)' : 'var(--color-panel-2)',
+                  borderColor: h.done ? 'var(--color-w-study)' : 'var(--color-line)',
+                  color: 'var(--color-bg)',
+                }}
+              >
+                {h.done ? '✓' : ''}
+              </button>
+              <span
+                className="min-w-0 flex-1 text-[13px]"
+                style={{
+                  color: h.done ? 'var(--color-ink-faint)' : 'var(--color-ink)',
+                  textDecoration: h.done ? 'line-through' : 'none',
+                }}
+              >
+                {h.title}
+                <span className="ml-1.5 font-display text-[9px] font-semibold tracking-[0.13em] text-ink-faint">
+                  {nameOf(h.subjectId).toUpperCase()}
+                </span>
+              </span>
+              <span className="flex-none text-[11px] [font-variant-numeric:tabular-nums]" style={{ color: dueC }}>
+                {dueL}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-baseline gap-2.5">
+        <div className="card-title">{voice.study.syllabus(sel.name.toUpperCase())}</div>
+        <span className="ml-auto text-[11px] text-ink-dim [font-variant-numeric:tabular-nums]">
+          {voice.study.syllabusPct({ covered, total: selTopics.length, pct })}
+        </span>
+      </div>
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-panel-2">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${pct}%`, background: 'var(--color-w-study)' }}
+        />
+      </div>
+      <div className="mt-1 flex flex-col">
+        {selTopics.map((t) => (
+          <div key={t.id} className="flex items-center gap-2.5 border-b border-line py-2 last:border-b-0">
+            <button
+              type="button"
+              aria-label="Toggle covered"
+              onClick={() => useStudyStore.getState().toggleTopic(t.id)}
+              className="flex h-5 w-5 flex-none items-center justify-center rounded-md border text-xs leading-none"
+              style={{
+                background: t.covered ? 'var(--color-w-study)' : 'var(--color-panel-2)',
+                borderColor: t.covered ? 'var(--color-w-study)' : 'var(--color-line)',
+                color: 'var(--color-bg)',
+              }}
+            >
+              {t.covered ? '✓' : ''}
+            </button>
+            <span
+              className="text-[13px]"
+              style={{ color: t.covered ? 'var(--color-ink-faint)' : 'var(--color-ink)' }}
+            >
+              {t.title}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3.5 flex flex-wrap items-center gap-2">
+        <button type="button" onClick={onAddTopic} className="btn-soft px-3 py-2 font-display text-[10px] font-bold uppercase tracking-[0.14em]">
+          {voice.study.addTopic}
+        </button>
+        <button type="button" onClick={onAddExam} className="btn-soft px-3 py-2 font-display text-[10px] font-bold uppercase tracking-[0.14em]">
+          {voice.study.addExam}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmArchive(true)}
+          className="ml-auto font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint transition-colors hover:text-danger"
+        >
+          {voice.study.archive}
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={confirmArchive}
+        title={voice.study.archiveTitle}
+        message={voice.study.archiveBody(sel.name)}
+        confirmLabel={voice.study.archiveYes}
+        onConfirm={() => {
+          useStudyStore.getState().archiveSubject(sel.id)
+          setConfirmArchive(false)
+          butler(voice.study.toast.archived)
+        }}
+        onCancel={() => setConfirmArchive(false)}
+      />
+    </section>
   )
 }
 
@@ -752,6 +1066,190 @@ function EnrolSheet({
       />
       <div className="mt-3.5 text-xs italic text-ink-dim">{voice.study.sheet.goalZeroHint}</div>
       <SheetActions cta={voice.study.sheet.ctaEnrol} onCancel={onClose} onSave={save} />
+    </Sheet>
+  )
+}
+
+function HwSheet({
+  open,
+  onClose,
+  subjects,
+  defaultSubj,
+  now,
+  butler,
+}: {
+  open: boolean
+  onClose: () => void
+  subjects: Subject[]
+  defaultSubj: string
+  now: number
+  butler: (msg: string) => void
+}) {
+  const [title, setTitle] = useState('')
+  const [subj, setSubj] = useState(defaultSubj)
+  const [dueIdx, setDueIdx] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    setTitle('')
+    setSubj(defaultSubj)
+    setDueIdx(null)
+  }, [open, defaultSubj])
+
+  const save = () => {
+    const trimmed = title.trim()
+    if (!trimmed) {
+      butler(voice.study.toast.titleFirst)
+      return
+    }
+    const strip0 = startOfWeek(new Date(now), useShellStore.getState().weekStart)
+    const due = dueIdx === null ? undefined : localDayKey(addDays(strip0, dueIdx))
+    useStudyStore.getState().addHomework(subj, trimmed, due)
+    butler(voice.study.toast.hwAdded(due !== undefined))
+    onClose()
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <h2 className="card-title">{voice.study.sheet.addHomework}</h2>
+      <SheetLabel>{voice.study.sheet.title}</SheetLabel>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder={voice.study.sheet.hwPlaceholder}
+        className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+      />
+      <SheetLabel>{voice.study.sheet.subject}</SheetLabel>
+      <SubjectChips subjects={subjects} value={subj} onPick={setSubj} />
+      <SheetLabel>{voice.study.sheet.due}</SheetLabel>
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={() => setDueIdx(null)}
+          className="rounded-[9px] border px-3 py-2 font-display text-[10px] font-semibold tracking-[0.14em] text-ink-dim transition-colors"
+          style={{
+            borderColor: dueIdx === null ? 'var(--color-accent)' : 'var(--color-line)',
+            background:
+              dueIdx === null
+                ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
+                : 'var(--color-panel-2)',
+          }}
+        >
+          {voice.study.sheet.noDate}
+        </button>
+      </div>
+      <div className="mt-1.5">
+        <DayStrip now={now} picked={dueIdx} onPick={setDueIdx} />
+      </div>
+      <div className="mt-3.5 text-xs italic text-ink-dim">{voice.study.sheet.hwDueHint}</div>
+      <SheetActions cta={voice.study.sheet.ctaHw} onCancel={onClose} onSave={save} />
+    </Sheet>
+  )
+}
+
+function ExamSheet({
+  open,
+  onClose,
+  subjects,
+  defaultSubj,
+  now,
+  butler,
+}: {
+  open: boolean
+  onClose: () => void
+  subjects: Subject[]
+  defaultSubj: string
+  now: number
+  butler: (msg: string) => void
+}) {
+  const [title, setTitle] = useState('')
+  const [subj, setSubj] = useState(defaultSubj)
+  const [onDays, setOnDays] = useState(7)
+
+  useEffect(() => {
+    if (!open) return
+    setTitle('')
+    setSubj(defaultSubj)
+    setOnDays(7)
+  }, [open, defaultSubj])
+
+  const day = addDays(new Date(now), onDays)
+
+  const save = () => {
+    const trimmed = title.trim()
+    if (!trimmed) {
+      butler(voice.study.toast.titleFirst)
+      return
+    }
+    useStudyStore.getState().addExam(subj, trimmed, localDayKey(day))
+    butler(voice.study.toast.examNoted)
+    onClose()
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <h2 className="card-title">{voice.study.sheet.addExam}</h2>
+      <SheetLabel>{voice.study.sheet.title}</SheetLabel>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder={voice.study.sheet.examPlaceholder}
+        className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+      />
+      <SheetLabel>{voice.study.sheet.subject}</SheetLabel>
+      <SubjectChips subjects={subjects} value={subj} onPick={setSubj} />
+      <SheetLabel>{voice.study.sheet.theDay}</SheetLabel>
+      <Stepper
+        label={`${voice.study.countdown(onDays)} — ${fdate(day)}`}
+        minWidth={170}
+        onDec={() => setOnDays((d) => Math.max(1, d - 1))}
+        onInc={() => setOnDays((d) => Math.min(90, d + 1))}
+      />
+      <div className="mt-3.5 text-xs italic text-ink-dim">{voice.study.sheet.examHint}</div>
+      <SheetActions cta={voice.study.sheet.ctaExam} onCancel={onClose} onSave={save} />
+    </Sheet>
+  )
+}
+
+function TopicSheet({
+  open,
+  onClose,
+  sel,
+  butler,
+}: {
+  open: boolean
+  onClose: () => void
+  sel: Subject
+  butler: (msg: string) => void
+}) {
+  const [title, setTitle] = useState('')
+
+  useEffect(() => {
+    if (open) setTitle('')
+  }, [open])
+
+  const save = () => {
+    const trimmed = title.trim()
+    if (!trimmed) {
+      butler(voice.study.toast.titleFirst)
+      return
+    }
+    useStudyStore.getState().addTopic(sel.id, trimmed)
+    butler(voice.study.toast.topicAdded)
+    onClose()
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <h2 className="card-title">{voice.study.sheet.addTopic(sel.name.toUpperCase())}</h2>
+      <SheetLabel>{voice.study.sheet.title}</SheetLabel>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder={voice.study.sheet.topicPlaceholder}
+        className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+      />
+      <SheetActions cta={voice.study.sheet.ctaTopic} onCancel={onClose} onSave={save} />
     </Sheet>
   )
 }

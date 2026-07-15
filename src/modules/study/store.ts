@@ -302,7 +302,7 @@ if (import.meta.env.DEV) {
       sessions: {
         'demo-study-1': { fulfillment: 'done' },
         'demo-study-2': { fulfillment: 'planned' },
-        'demo-study-3': { fulfillment: 'partial', doneH: 1, homeworkId: 'demo-hw-pset' },
+        'demo-study-3': { fulfillment: 'partial', doneH: 1, homeworkId: 'demo-hw-draft' },
       },
     })
   }

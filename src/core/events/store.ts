@@ -152,8 +152,10 @@ if (import.meta.env.DEV) {
       ev(2, 17, 18.5, 'training', 'Strength — lower', 'grounds'),
       ev(5, 17, 18.5, 'training', 'Strength — upper', 'grounds'),
       ev(6, 10, 11.5, 'training', 'Intervals', 'grounds'),
-      ev(2, 20, 22, 'study', 'Course reading'),
-      ev(6, 16, 18, 'study', 'Lecture recap'),
+      // literal ids + subj: refs so the study-store demo can pin fulfillment metas
+      { ...ev(2, 15, 16.5, 'study', 'Linear Algebra', 'study'), id: 'demo-study-1', sourceRef: 'subj:demo-subj-math' },
+      { ...ev(2, 20, 22, 'study', 'Physics', 'study'), id: 'demo-study-2', sourceRef: 'subj:demo-subj-physics' },
+      { ...ev(6, 16, 18, 'study', 'Academic Writing', 'study'), id: 'demo-study-3', sourceRef: 'subj:demo-subj-writing' },
       ev(3, 0, 0, 'marker', 'Payday', 'capital', true),
       // next week — a quieter stretch
       ev(8, 19, 32, 'shift', 'Night Watch', 'watch'),

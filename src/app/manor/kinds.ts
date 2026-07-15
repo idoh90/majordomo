@@ -1,4 +1,4 @@
-import type { EventKind } from '../../core/events/types'
+import type { CalendarEvent, EventKind } from '../../core/events/types'
 import { voice } from '../../core/voice'
 
 /** per-kind presentation: wing accent + chip label (colors are skin tokens) */
@@ -8,6 +8,18 @@ export const KIND_META: Record<EventKind, { color: string; label: string }> = {
   training: { color: 'var(--color-w-grounds)', label: voice.kinds.training },
   study: { color: 'var(--color-w-study)', label: voice.kinds.study },
   marker: { color: 'var(--color-w-ledger)', label: voice.kinds.marker },
+}
+
+/** marker chips color by the wing that owns them (payday = ledger ₪; a study
+ *  due/exam day = study accent, its title already says what it is) */
+export function markerMeta(e: CalendarEvent): { color: string; label: string; glyph: string } {
+  if (e.source === 'study') return { color: 'var(--color-w-study)', label: voice.kinds.study, glyph: '' }
+  return { color: 'var(--color-w-ledger)', label: voice.kinds.marker, glyph: '₪' }
+}
+
+/** KIND_META, except markers resolve per-source */
+export function eventMeta(e: CalendarEvent): { color: string; label: string } {
+  return e.kind === 'marker' ? markerMeta(e) : KIND_META[e.kind]
 }
 
 export function hhmm(d: Date): string {
