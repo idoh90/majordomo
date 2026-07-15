@@ -10,7 +10,7 @@
 export type EventKind = 'shift' | 'sleep' | 'training' | 'study' | 'marker'
 
 /** which wing wrote the event ('manual' = placed by hand on the Manor) */
-export type EventSource = 'manual' | 'watch' | 'grounds' | 'capital'
+export type EventSource = 'manual' | 'watch' | 'grounds' | 'capital' | 'study'
 
 export interface CalendarEvent {
   id: string

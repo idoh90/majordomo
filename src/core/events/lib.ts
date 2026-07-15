@@ -71,6 +71,13 @@ export function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): bo
   return aStart < bEnd && bStart < aEnd
 }
 
+/** is [start,end) free of every timed event? */
+export function rangeFree(events: CalendarEvent[], start: Date, end: Date): boolean {
+  return !events.some(
+    (e) => !e.allDay && overlaps(new Date(e.start), new Date(e.end), start, end),
+  )
+}
+
 /** Timed events intersecting [start, end) plus all-day markers anchored inside. */
 export function eventsInRange(events: CalendarEvent[], start: Date, end: Date): CalendarEvent[] {
   return events.filter((e) => {

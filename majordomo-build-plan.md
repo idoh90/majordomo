@@ -117,7 +117,9 @@ that never ships.
 ## §3 · LATER backlog (post-M8, order negotiable)
 
 Auto quietest-hour seam · Watch rotation patterns (materialized instances,
-future-only regeneration) · the Study wing · onboarding flow · weekly report
+future-only regeneration) · ~~the Study wing~~ **in build** (spec:
+`majordomo-study-spec.md`, milestones S1–S3, jumped the queue ahead of M7/M8
+after its design session) · onboarding flow · weekly report
 card · Supabase swap behind the events action surface · PWA push briefings
 (shift-aware timing) · Hebrew/persona voice packs · landing page + waitlist.
 

@@ -1,6 +1,10 @@
-import { addDays, localDayKey, startOfWeek, type WeekStart } from '../../core/dates'
-import { hoursOf, overlaps } from '../../core/events/lib'
+import { addDays, atHour, localDayKey, startOfWeek, type WeekStart } from '../../core/dates'
+import { hoursOf, rangeFree } from '../../core/events/lib'
 import type { CalendarEvent } from '../../core/events/types'
+
+// atHour / rangeFree moved to core when the Study became their second
+// consumer (extract-on-contact); re-exported so existing imports hold.
+export { atHour, rangeFree }
 
 /** the two shift shapes of the beachhead schedule; rotations are backlog */
 export const SHIFT_PRESETS = {
@@ -9,12 +13,6 @@ export const SHIFT_PRESETS = {
 } as const
 export type ShiftKey = keyof typeof SHIFT_PRESETS
 
-/** local wall-clock instant `hour` hours after midnight of `day` (may be >24) */
-export function atHour(day: Date, hour: number): Date {
-  const h = Math.floor(hour)
-  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, (hour - h) * 60)
-}
-
 export function shiftsOf(events: CalendarEvent[]): CalendarEvent[] {
   return events.filter((e) => e.kind === 'shift' && !e.allDay)
 }
@@ -22,13 +20,6 @@ export function shiftsOf(events: CalendarEvent[]): CalendarEvent[] {
 export function hasShiftOnDay(events: CalendarEvent[], day: Date): boolean {
   const key = localDayKey(day)
   return shiftsOf(events).some((e) => localDayKey(e.start) === key)
-}
-
-/** is [start,end) free of every timed event? */
-export function rangeFree(events: CalendarEvent[], start: Date, end: Date): boolean {
-  return !events.some(
-    (e) => !e.allDay && overlaps(new Date(e.start), new Date(e.end), start, end),
-  )
 }
 
 export interface WatchStats {

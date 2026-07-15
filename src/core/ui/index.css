@@ -43,6 +43,7 @@
   --font-body: "Source Sans 3", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --glow-accent: color-mix(in srgb, var(--color-accent) 35%, transparent);
   --glow-accent-lg: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  --glow-study: color-mix(in srgb, var(--color-w-study) 40%, transparent);
   /* body-map silhouette material */
   --sil-fill: #10141d;
   --sil-stroke: #232d40;

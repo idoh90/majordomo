@@ -17,6 +17,12 @@ export function addDays(d: Date, days: number): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days)
 }
 
+/** local wall-clock instant `hour` hours after midnight of `day` (may be >24) */
+export function atHour(day: Date, hour: number): Date {
+  const h = Math.floor(hour)
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, (hour - h) * 60)
+}
+
 // App-wide week-start (0 = Sunday, 1 = Monday). The shell store owns the user's
 // choice and syncs it here via setWeekStartDefault so the many week-bucketing
 // callers don't each have to thread the value through.

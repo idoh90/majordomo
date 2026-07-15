@@ -13,10 +13,10 @@ with a butler persona. Strategy in `majordomo-playbook.md`; engineering mileston
 in `majordomo-build-plan.md` (M0–M8); target UI in the Claude Design project
 "Majordomo: Calendar OS" (`Majordomo Manor.dc.html` + `Majordomo Tokens.dc.html`).
 What changes as milestones land: the Manor (a duty-cycle-seamed week calendar)
-becomes home behind a tab nav (MANOR / WATCH / GROUNDS / LEDGER); consoles become
-Wings; three commercial presets (Midnight / Terminal / Aurora) join and the seven
-Batman-era skins move behind a local `VITE_FOUNDER_SKIN` flag (`.env.local`, never
-committed, tree-shaken from builds). Two standing rules from the pivot onward:
+becomes home behind a tab nav (MANOR / WATCH / GROUNDS / STUDY / LEDGER); consoles
+become Wings; three commercial presets (Midnight / Terminal / Aurora) join and the
+seven Batman-era skins move behind a local `VITE_FOUNDER_SKIN` flag (`.env.local`,
+never committed, tree-shaken from builds). Two standing rules from the pivot onward:
 
 1. **All NEW user-facing strings go through `src/core/voice/`** — no inline copy.
    Register per playbook Appendix B: dry, composed, one sentence-final "sir",
@@ -58,6 +58,10 @@ src/
     watch/        'THE WATCH' — shifts: post day/night watches (writes core/events;
                   night watches pencil a recovery-sleep block), duty ring, countdown
     training/     the whole workout tracker (see below)
+    study/        'THE STUDY' (founder: THE ACADEMY) — subjects w/ weekly-hour rings,
+                  plan-then-fulfill sessions (kind 'study' events, sourceRef
+                  'subj:<id>'), homework/exam allDay markers ('hw:'/'exam:'),
+                  syllabus checklists; spec: majordomo-study-spec.md
     capital/      'WAYNE FUND' — net worth + budget console (see below)
 ```
 
@@ -115,9 +119,14 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   future Supabase seam), the Manor reads them. ISO-instant start/end, exclusive end,
   never day-bucketed; the duty-cycle grid (`core/events/lib.ts`, **seam 12:00**) renders
   cross-midnight events whole and splits seam-crossers with dotted cut edges.
+- **`majordomo-study` v1** (`modules/study/store.ts`) — the Study's records: subjects,
+  syllabus topics, homework, exams, plus per-session fulfillment metadata keyed by
+  event id (sessions themselves are `majordomo-events` entries). Homework/exam actions
+  write their Manor marker through the events store; `reconcileMarkers` heals drift
+  (and trails overdue homework chips to today), never while a what-if sandbox is open.
 
 **Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
-`majordomo-events`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+`majordomo-events` / `majordomo-study`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
 boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
 still applies; the old keys are left in place as insurance and never read again.
 
@@ -285,6 +294,7 @@ auto-enter Training so they land on the right screen.
 - `?debugmap` — rainbow-colors every muscle plate to spot gaps/overlaps
 - `window.__store` / `window.__strains` — training store handle + live strain map in dev
 - `window.__capital` — the Wayne Fund store handle in dev
+- `window.__study` — the Study store handle in dev
 - `window.__engine` — the strain module (sample `recoveryEnvelope(t, style, muscleFactor, nf)`
   to plot recovery curves without React round-trips)
 - `window.__nutrition` — the nutrition module (`dailyTargets`, `bmr`, … for macro checks)
