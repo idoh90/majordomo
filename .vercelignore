@@ -1,0 +1,14 @@
+# Vercel builds from source, so only what the build needs should travel.
+node_modules
+dist
+
+# The founder flag must never reach a public build — .env.local is gitignored
+# for the same reason, and this keeps a CLI deploy from smuggling it up.
+.env.local
+
+# Local tooling and the strategy/design docs have no business on a web host.
+.claude
+docs
+majordomo-playbook.md
+majordomo-build-plan.md
+CLAUDE.md
