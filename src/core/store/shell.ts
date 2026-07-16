@@ -11,6 +11,8 @@ import { setWeekStartDefault, type WeekStart } from '../dates'
  * v2: skins are normalized through `normalizeSkin` — founder-only skins fall
  * back to the default unless VITE_FOUNDER_SKIN=1 (their CSS doesn't ship
  * otherwise), and corrupt values can never reach `SKINS[skin]` lookups.
+ * v3: the ambient background layer is gone (it cost idle frames on old
+ * machines) — migrate drops the `ambient` key from older blobs.
  */
 
 adoptLegacyKey('majordomo-shell', 'batman-shell')
@@ -34,12 +36,9 @@ function seedSkin(): SkinId {
 interface ShellState {
   /** active visual skin */
   skin: SkinId
-  /** ambient background layer (rain / scanline / blobs) on the presets */
-  ambient: boolean
   /** first day of the week app-wide: 0 = Sunday, 1 = Monday */
   weekStart: WeekStart
   setSkin: (skin: SkinId) => void
-  setAmbient: (on: boolean) => void
   setWeekStart: (ws: WeekStart) => void
 }
 
@@ -47,10 +46,8 @@ export const useShellStore = create<ShellState>()(
   persist(
     (set) => ({
       skin: seedSkin(),
-      ambient: true,
       weekStart: 1,
       setSkin: (skin) => set({ skin: normalizeSkin(skin) }),
-      setAmbient: (on) => set({ ambient: on }),
       setWeekStart: (ws) => {
         setWeekStartDefault(ws) // keep core/dates in sync before the re-render
         set({ weekStart: ws })
@@ -58,14 +55,15 @@ export const useShellStore = create<ShellState>()(
     }),
     {
       name: 'majordomo-shell',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
-      // v1 blobs may hold a founder-only skin (e.g. 'gotham'); normalize it
+      partialize: (s) => ({ skin: s.skin, weekStart: s.weekStart }),
+      // v1 blobs may hold a founder-only skin (e.g. 'gotham'); v1/v2 blobs
+      // carry a now-dead `ambient` key that this simply doesn't return
       migrate: (persisted) => {
-        const p = (persisted ?? {}) as Partial<Pick<ShellState, 'skin' | 'ambient' | 'weekStart'>>
+        const p = (persisted ?? {}) as Partial<Pick<ShellState, 'skin' | 'weekStart'>>
         return {
           skin: normalizeSkin(p.skin),
-          ambient: p.ambient !== false,
           weekStart: p.weekStart === 0 ? 0 : 1,
         }
       },

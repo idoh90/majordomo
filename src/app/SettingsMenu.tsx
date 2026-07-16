@@ -22,8 +22,6 @@ export function SettingsMenu() {
   const workouts = useWorkoutStore((s) => s.workouts)
   const weekStart = useShellStore((s) => s.weekStart)
   const setWeekStart = useShellStore((s) => s.setWeekStart)
-  const ambient = useShellStore((s) => s.ambient)
-  const setAmbient = useShellStore((s) => s.setAmbient)
   const replaceAll = useWorkoutStore((s) => s.replaceAll)
   const clearAll = useWorkoutStore((s) => s.clearAll)
 
@@ -108,27 +106,6 @@ export function SettingsMenu() {
                     onClick={() => setWeekStart(v)}
                     className={`flex-1 rounded-pill border px-2 py-1 text-xs transition-colors ${
                       weekStart === v
-                        ? 'border-accent bg-accent/10 text-accent'
-                        : 'border-line text-ink-dim hover:text-ink'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="px-3.5 py-2.5">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
-                Ambient motion
-              </div>
-              <div className="flex gap-1">
-                {([[true, 'On'], [false, 'Off']] as const).map(([v, label]) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => setAmbient(v)}
-                    className={`flex-1 rounded-pill border px-2 py-1 text-xs transition-colors ${
-                      ambient === v
                         ? 'border-accent bg-accent/10 text-accent'
                         : 'border-line text-ink-dim hover:text-ink'
                     }`}

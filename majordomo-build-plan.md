@@ -45,8 +45,10 @@ that never ships.
    otherwise untouched).
 3. **Fonts** — `@fontsource/big-shoulders` (display: wordmark, view titles, hero
    numerals) + `@fontsource/source-sans-3` (body). Tabular numerals on every stat.
-   Motion doctrine: ambient 30–60s at ≤5% opacity, interactive 150–250ms,
-   springy drag, `prefers-reduced-motion` always respected.
+   Motion doctrine: interactive 150–250ms, springy drag,
+   `prefers-reduced-motion` always respected. (Ambient loops were built in M1
+   and later removed — idle animation cost on old machines; no background
+   motion ships.)
 4. **The duty-cycle week grid** (direction 1a) — each column spans
    `[seam, seam+24h)`, seam = 16:00 constant for now (auto "quietest hour" is
    backlog). A 19:00→08:00 night watch renders as ONE block; midnight is a dashed
@@ -97,15 +99,15 @@ that never ships.
     migrate chain applies; old keys kept as insurance). `scripts/check-brand.mjs`
     greps a founder-flag-less `dist/` for `/batman|gotham|wayne/i` → must be empty.
 13. **Settings gear stays** (restyled): skin picker shows the 3 presets (+ legacy
-    skins only under FOUNDER; an active hidden skin is never stomped), ambient
-    on/off, profile & nutrition, week start, backup export/import, clear-all.
+    skins only under FOUNDER; an active hidden skin is never stomped), profile
+    & nutrition, week start, backup export/import, clear the workout log.
 
 ## §2 · Milestones
 
 | # | Milestone | Contents | Gate |
 |---|---|---|---|
 | ✅ M0 | Foundation | git baseline · this doc · CLAUDE.md Direction section · **USER: backup ritual (still pending)** | docs committed |
-| ✅ M1 | Theme foundation | fonts · new tokens + 3 preset bundles · SKINS entries + founder split · DEFAULT_SKIN midnight · shell v2 normalize · AmbientLayer · voice scaffold + wave-1 strings | old screens legible under midnight; screenshots ×3 presets |
+| ✅ M1 | Theme foundation | fonts · new tokens + 3 preset bundles · SKINS entries + founder split · DEFAULT_SKIN midnight · shell v2 normalize · AmbientLayer *(later removed — idle cost)* · voice scaffold + wave-1 strings | old screens legible under midnight; screenshots ×3 presets |
 | 🟡 M2 | New shell + identity | tab header ✓ · view state ✓ · old shell furniture deleted ✓ · identity sweep ✓ · check-brand gate ✓ · **key renames: waiting on the backup ritual** | check-brand clean; real data intact |
 | ✅ M3 | Events + Manor read-only | core/events store+lib · seamed WeekGrid (desktop+mobile) · month view · empty state · popover · briefing strip · ?demo fixtures | night watch = one block ✓ |
 | ✅ M4 | The Watch | POST A WATCH strip · ON DUTY ring · NEXT WATCH · week list · sleep pencilled after nights · eslint zone · nav mailbox | posting a watch lands it on the Manor ✓ |

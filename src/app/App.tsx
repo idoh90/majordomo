@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavStore } from '../core/store/nav'
 import { useShellStore } from '../core/store/shell'
 import { PRESET_SKIN_IDS, SKINS, applySkin } from '../core/ui/skins'
-import { AmbientLayer } from '../core/ui/AmbientLayer'
 import { voice } from '../core/voice'
 import { useNow } from '../core/useNow'
 import { storageAvailable } from '../core/storage'
@@ -46,7 +45,6 @@ export default function App() {
 
   return (
     <>
-      <AmbientLayer />
       {/* Installed to a home screen, black-translucent + viewport-fit=cover run
           the page under the iOS status bar. Reserve that inset (zero in a
           browser tab) and give scrolled content a glass strip to pass under —

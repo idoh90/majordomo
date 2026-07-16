@@ -31,8 +31,6 @@ export interface SkinDef {
   themeColor: string
   /** which strain→color ramp the body map + legend use */
   heatRamp: 'standard' | 'noir' | 'daylight'
-  /** ambient background layer (commercial presets only) */
-  ambient?: 'rain' | 'scan' | 'blobs'
   /** multiplier on the body-map glow layer (light skins damp it) */
   glowScale?: number
   /** hologram floor reflection under the body map */
@@ -50,7 +48,6 @@ const PRESET_SKINS: Record<PresetSkinId, SkinDef> = {
     tagline: 'Near-black blue-grey, steel-blue accent — a quiet house at night',
     themeColor: '#0c1017',
     heatRamp: 'standard',
-    ambient: 'rain',
     swatches: ['#0c1017', '#131926', '#7da7d0', '#e6ebf2'],
   },
   terminal: {
@@ -59,7 +56,6 @@ const PRESET_SKINS: Record<PresetSkinId, SkinDef> = {
     tagline: 'True black, green phosphor — for the OLED shift at 03:00',
     themeColor: '#000000',
     heatRamp: 'standard',
-    ambient: 'scan',
     swatches: ['#000000', '#0a0f0c', '#3fe0a8', '#d9efe2'],
   },
   aurora: {
@@ -68,7 +64,6 @@ const PRESET_SKINS: Record<PresetSkinId, SkinDef> = {
     tagline: 'Deep navy-purple, purple-gold — the estate under strange skies',
     themeColor: '#131022',
     heatRamp: 'standard',
-    ambient: 'blobs',
     swatches: ['#131022', '#1a1630', '#b294f5', '#ece7f7'],
   },
 }
