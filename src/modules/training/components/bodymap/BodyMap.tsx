@@ -37,7 +37,7 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
   )
   const [selected, setSelected] = useState<MuscleId | null>(null)
   const debugRainbow = useMemo(
-    () => new URLSearchParams(window.location.search).has('debugmap'),
+    () => import.meta.env.DEV && new URLSearchParams(window.location.search).has('debugmap'),
     [],
   )
 

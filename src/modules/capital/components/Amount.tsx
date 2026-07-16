@@ -13,7 +13,7 @@ export function Amount({ value, kind = 'full', className = '' }: AmountProps) {
   const text = kind === 'delta' ? formatDelta(value) : kind === 'compact' ? formatCompact(value) : formatILS(value)
   return (
     <span
-      className={`${blur ? 'blur-[6px] transition-[filter] duration-150 hover:blur-none' : ''} ${className}`}
+      className={`[font-variant-numeric:tabular-nums] ${blur ? 'blur-[6px] transition-[filter] duration-150 hover:blur-none' : ''} ${className}`}
     >
       {text}
     </span>

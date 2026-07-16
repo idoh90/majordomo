@@ -29,8 +29,9 @@ export default defineConfig({
         theme_color: '#0c1017',
         icons: [
           { src: './icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          // no maskable entry: the placeholder M has no safe-zone padding, and a
+          // cropped mark is worse than the OS fallback — revisit at the logo session
           { src: './icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: './icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           { src: './favicon.svg', sizes: 'any', type: 'image/svg+xml' },
         ],
       },

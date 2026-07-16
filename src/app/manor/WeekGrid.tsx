@@ -21,11 +21,11 @@ import type { DayStrain } from './strain'
 import { useManorUi } from './uiStore'
 
 /**
- * The duty-cycle week grid (design direction 1a): each column spans
- * seam→seam (16:00 → 16:00 next day), so a 19:00→08:00 night watch renders
- * as ONE unbroken block and midnight is a dashed accent line inside the
- * column. Events that cross the SEAM split across columns with dotted cut
- * edges. Desktop: seven columns with drag-to-move (0.5h snap, occupancy
+ * The week grid. Columns span seam→seam; with SEAM_HOUR = 0 that is the
+ * ordinary calendar day (00:00 → 00:00), so a 19:00→08:00 night watch splits
+ * across its two columns with dotted "continues" edges (the data is never
+ * day-bucketed, only its rendering — a duty-cycle seam stays one constant
+ * away). Desktop: seven columns with drag-to-move (0.5h snap, occupancy
  * check, cross-day confirm, single-slot undo) and click-to-quick-add;
  * mobile: one duty cycle per screen behind day chips + snap scrolling — tap
  * opens bottom sheets, long-press (350 ms) lifts a block into the mobile
@@ -38,7 +38,7 @@ const BODY_H = 24 * PXH
 
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
-// hour offsets from the seam for the axis + rules; midnight gets the accent
+// hour offsets from the seam for the axis + rules; midnight ticks get the accent
 const TICKS = [0, 3, 6, 9, 12, 15, 18, 21, 24]
 const RULES = [3, 6, 9, 12, 15, 18, 21]
 /** does this offset from the seam land on midnight? (with SEAM_HOUR = 0 the
@@ -705,7 +705,7 @@ export function WeekGrid({
 
 /* ------------------------------------------------------------- pieces */
 
-/** horizontal hour rules; midnight is the dashed accent line */
+/** horizontal hour rules (midnight is the column edge, never mid-column) */
 const Rules = memo(function Rules() {
   return (
     <>
@@ -715,9 +715,7 @@ const Rules = memo(function Rules() {
           className="pointer-events-none absolute left-0 right-0 z-[1]"
           style={{
             top: h * PXH,
-            borderTop: isMidnight(h)
-              ? '1px dashed color-mix(in srgb, var(--color-accent) 45%, transparent)'
-              : '1px solid color-mix(in srgb, var(--color-line) 60%, transparent)',
+            borderTop: '1px solid color-mix(in srgb, var(--color-line) 60%, transparent)',
           }}
         />
       ))}

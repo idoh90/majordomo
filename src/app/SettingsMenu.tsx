@@ -220,7 +220,7 @@ function MenuItem({
   )
 }
 
-/** Skin picker — all five design directions, applied live on tap. */
+/** Skin picker — the registered skins (3 presets; +7 under FOUNDER), applied live on tap. */
 function SkinSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const skin = useShellStore((s) => s.skin)
   const setSkin = useShellStore((s) => s.setSkin)

@@ -55,7 +55,11 @@ export function WatchScreen() {
     const todayKey = localDayKey(new Date(Date.now()))
     const idx = stripDays.findIndex((d) => localDayKey(d) === todayKey)
     if (idx >= 0) setPickedDay(idx)
-    rosterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    rosterRef.current?.scrollIntoView({
+      // the CSS reduced-motion reset can't reach a JS scroll argument
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    })
     useWatchUi.getState().clearPostRequest()
   }, [postRequested])
 

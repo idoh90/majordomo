@@ -7,7 +7,7 @@ interface CapitalSettingsSheetProps {
   onClose: () => void
 }
 
-/** Twelve Data API key entry. The key is stored in localStorage (batman-capital),
+/** Twelve Data API key entry. The key is stored in localStorage (majordomo-capital),
  *  used only to fetch quotes — it grants no account access. */
 export function CapitalSettingsSheet({ open, onClose }: CapitalSettingsSheetProps) {
   const apiKey = useCapitalStore((s) => s.apiKey)

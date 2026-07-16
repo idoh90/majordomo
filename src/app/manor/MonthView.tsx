@@ -114,7 +114,11 @@ export function MonthView({
       solid: isShift,
     })
     dot(localDayKey(s), meta.color)
-    if (isShift && localDayKey(en) !== localDayKey(s)) {
+    // any timed event that runs into the next day gets a continuation chip
+    // there — unless the exclusive end IS that day's midnight (nothing runs
+    // into the day, the event just touches its edge)
+    const endsAtMidnight = en.getHours() === 0 && en.getMinutes() === 0
+    if (localDayKey(en) !== localDayKey(s) && !endsAtMidnight) {
       push(localDayKey(en), {
         key: `${e.id}-cont`,
         text: `→ until ${hhmm(en)}`,
