@@ -45,9 +45,9 @@ export function Sheet({ open, onClose, children }: SheetProps) {
       <div
         role="dialog"
         aria-modal="true"
-        className="sheet-surface absolute inset-x-0 bottom-0 max-h-[92dvh] animate-[sheet-up_280ms_cubic-bezier(0.22,1,0.36,1)] overflow-y-auto rounded-t-3xl border-t px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-2 lg:inset-auto lg:left-1/2 lg:top-1/2 lg:w-[540px] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:animate-[fade-in_180ms_ease-out] lg:rounded-2xl lg:border lg:px-7 lg:pb-7 lg:pt-5"
+        className="sheet-surface absolute inset-x-0 bottom-0 max-h-[92dvh] animate-[sheet-up_280ms_cubic-bezier(0.22,1,0.36,1)] overflow-y-auto rounded-t-3xl border-t px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-2 md:inset-auto md:left-1/2 md:top-1/2 md:w-[540px] md:-translate-x-1/2 md:-translate-y-1/2 md:animate-[fade-in_180ms_ease-out] md:rounded-2xl md:border md:px-7 md:pb-7 md:pt-5"
       >
-        <div className="mx-auto mb-3 mt-1 h-1 w-10 rounded-full bg-panel-3 lg:hidden" />
+        <div className="mx-auto mb-3 mt-1 h-1 w-10 rounded-full bg-panel-3 md:hidden" />
         {children}
       </div>
     </div>

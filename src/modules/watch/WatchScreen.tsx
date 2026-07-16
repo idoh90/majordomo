@@ -15,6 +15,7 @@ import {
   watchStats,
   type ShiftKey,
 } from './lib'
+import { useWatchUi } from './uiStore'
 
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
@@ -45,6 +46,18 @@ export function WatchScreen() {
   // the roster strip: this calendar week + the next
   const strip0 = startOfWeek(new Date(now), weekStart)
   const stripDays = Array.from({ length: 14 }, (_, i) => addDays(strip0, i))
+
+  // the tab bar's + posts here: select today in the roster, bring it into view
+  const rosterRef = useRef<HTMLDivElement>(null)
+  const postRequested = useWatchUi((s) => s.postRequested)
+  useEffect(() => {
+    if (!postRequested) return
+    const todayKey = localDayKey(new Date(Date.now()))
+    const idx = stripDays.findIndex((d) => localDayKey(d) === todayKey)
+    if (idx >= 0) setPickedDay(idx)
+    rosterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    useWatchUi.getState().clearPostRequest()
+  }, [postRequested])
 
   const post = (key: ShiftKey) => {
     if (pickedDay === null) return
@@ -85,8 +98,31 @@ export function WatchScreen() {
   const ringC = 2 * Math.PI * 72
   const ringFrac = stats.expectedH > 0 ? Math.min(1, stats.doneH / stats.expectedH) : 0
 
+  // mobile header pill: time until the next watch begins
+  const nextInMs = stats.next ? new Date(stats.next.start).getTime() - now : null
+  const nextIn =
+    nextInMs !== null && nextInMs > 0
+      ? voice.watch.nextIn({
+          h: Math.floor(nextInMs / 3_600_000),
+          m: Math.floor((nextInMs % 3_600_000) / 60_000),
+        })
+      : null
+
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-[300px_1fr]">
+      {nextIn && (
+        <div className="-mb-1 flex justify-end md:hidden">
+          <span
+            className="rounded-pill border px-3 py-1 text-[9.5px] tracking-[0.14em] [font-variant-numeric:tabular-nums]"
+            style={{
+              color: 'var(--color-accent)',
+              borderColor: 'color-mix(in srgb, var(--color-accent) 50%, transparent)',
+            }}
+          >
+            {nextIn}
+          </span>
+        </div>
+      )}
       {/* ---------------------------------------------------- left rail */}
       <div className="flex flex-col gap-4">
         <div className="panel p-5 text-center">
@@ -144,7 +180,7 @@ export function WatchScreen() {
 
       {/* ---------------------------------------------------- right rail */}
       <div className="flex flex-col gap-4">
-        <div className="panel p-5">
+        <div ref={rosterRef} className="panel scroll-mt-4 p-5">
           <div className="card-title">{voice.watch.post}</div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {stripDays.map((day, i) => {
@@ -156,12 +192,18 @@ export function WatchScreen() {
                   key={i}
                   type="button"
                   onClick={() => setPickedDay(picked ? null : i)}
-                  className="w-[58px] rounded-[9px] border pb-1.5 pt-2 text-center transition-colors hover:border-accent"
+                  className="min-h-[56px] w-[calc((100%-36px)/7)] rounded-[9px] border pb-1.5 pt-2 text-center transition-colors hover:border-accent md:min-h-0 md:w-[58px]"
                   style={{
-                    borderColor: picked ? 'var(--color-accent)' : 'var(--color-line)',
+                    borderColor: picked
+                      ? 'var(--color-accent)'
+                      : has
+                        ? 'color-mix(in srgb, var(--color-w-watch) 55%, transparent)'
+                        : 'var(--color-line)',
                     background: picked
                       ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
-                      : 'var(--color-panel-2)',
+                      : has
+                        ? 'color-mix(in srgb, var(--color-w-watch) 14%, var(--color-panel-2))'
+                        : 'var(--color-panel-2)',
                   }}
                 >
                   <span
@@ -173,7 +215,16 @@ export function WatchScreen() {
                   <span className="block font-display text-base font-semibold [font-variant-numeric:tabular-nums]">
                     {day.getDate()}
                   </span>
-                  <span className="block h-[5px]">
+                  {/* mobile: the tile states its verb; desktop keeps the dot */}
+                  <span
+                    className="block text-[11px] leading-tight md:hidden"
+                    style={{
+                      color: has ? 'var(--color-ink)' : 'var(--color-ink-dim)',
+                    }}
+                  >
+                    {has ? '✓' : '+'}
+                  </span>
+                  <span className="hidden h-[5px] md:block">
                     {has && (
                       <span
                         className="inline-block h-[5px] w-[5px] rounded-full"
@@ -264,7 +315,7 @@ export function WatchScreen() {
       </div>
 
       {toast && (
-        <div className="menu-panel fixed bottom-6 left-1/2 z-50 -translate-x-1/2 px-4 py-2.5 text-[13px] animate-[fade-in_200ms_ease-out]">
+        <div className="menu-panel fixed bottom-[calc(84px+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 px-4 py-2.5 text-[13px] animate-[fade-in_200ms_ease-out] md:bottom-6">
           {toast}
         </div>
       )}

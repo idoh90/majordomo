@@ -1,0 +1,339 @@
+import { useEffect, useState } from 'react'
+import type { CalendarEvent, EventKind } from '../../core/events/types'
+import { hoursOf } from '../../core/events/lib'
+import { localDayKey } from '../../core/dates'
+import { useNavStore } from '../../core/store/nav'
+import { Sheet } from '../../core/ui/Sheet'
+import { voice } from '../../core/voice'
+import { KIND_META, eventMeta, hhmm } from './kinds'
+import type { NearWatch } from './nearWatch'
+
+/**
+ * The Manor's mobile bottom sheets (the design's thumb-zone surfaces).
+ * Desktop keeps its in-grid popovers; below md these take over. Mounted only
+ * on mobile (useIsMobile in WeekGrid) so the Sheet scroll-lock never fires
+ * for a desktop popover.
+ */
+
+const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+
+/** which wing opens an event of this kind, and the view id to request */
+const OPEN_IN: Partial<Record<EventKind, { view: string; name: () => string }>> = {
+  shift: { view: 'watch', name: () => voice.modules.watch.name },
+  training: { view: 'training', name: () => voice.modules.training.name },
+  study: { view: 'study', name: () => voice.modules.study.name },
+}
+
+/* ------------------------------------------------------------- quick add */
+
+export function MobileQuickAddSheet({
+  open,
+  when,
+  free,
+  onPick,
+  onClose,
+}: {
+  open: boolean
+  when: Date | null
+  /** the tapped half-hour is unoccupied (the footer's reassurance line) */
+  free: boolean
+  onPick: (tpl: { kind: EventKind; title: string; hours: number }) => void
+  onClose: () => void
+}) {
+  return (
+    <Sheet open={open} onClose={onClose}>
+      {when && (
+        <div className="pb-1">
+          <div className="flex items-baseline gap-2.5 pt-1">
+            <span className="font-display text-xs font-semibold tracking-[0.24em] text-ink-dim">
+              {voice.manor.quickAddTitle}
+            </span>
+            <span className="text-[13px] font-bold [font-variant-numeric:tabular-nums]">
+              {WD[when.getDay()]} {when.getDate()} · {hhmm(when)}
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="ml-auto p-1 text-[14px] text-ink-dim transition-colors hover:text-ink"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="mt-2.5 flex flex-col gap-1.5">
+            {voice.manor.templates.map((tpl) => {
+              const meta = KIND_META[tpl.kind]
+              return (
+                <button
+                  key={tpl.title}
+                  type="button"
+                  onClick={() => onPick(tpl)}
+                  className="card flex h-[46px] w-full items-center gap-2.5 px-3.5 text-left text-[13px] font-semibold transition-colors"
+                >
+                  <span
+                    className="h-2 w-2 flex-none rounded-full"
+                    style={{ background: meta.color }}
+                  />
+                  {tpl.title}
+                  <span className="ml-auto text-[11px] font-normal text-ink-dim [font-variant-numeric:tabular-nums]">
+                    {tpl.hours.toFixed(1)} h
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <div
+            className="mt-2.5 text-[11px] italic"
+            style={{ color: free ? 'var(--color-ink-dim)' : 'var(--color-danger)' }}
+          >
+            {free ? voice.manor.slotClear : voice.manor.occupied}
+          </div>
+        </div>
+      )}
+    </Sheet>
+  )
+}
+
+/* ----------------------------------------------------------- event sheet */
+
+export function MobileEventSheet({
+  open,
+  event,
+  hotNames,
+  near,
+  onClose,
+  onDelete,
+  onMove,
+  onEdit,
+}: {
+  open: boolean
+  event: CalendarEvent | null
+  /** muscles still hot on this event's day (training events only) */
+  hotNames: string[]
+  near: NearWatch | null
+  onClose: () => void
+  onDelete: () => void
+  onMove: () => void
+  onEdit: () => void
+}) {
+  const e = event
+  const meta = e ? eventMeta(e) : null
+  const openIn = e ? OPEN_IN[e.kind] : undefined
+  return (
+    <Sheet open={open} onClose={onClose}>
+      {e && meta && (
+        <div className="relative pb-1">
+          {/* the kind's accent on the sheet's left edge */}
+          <span
+            aria-hidden
+            className="absolute -left-5 bottom-0 top-0 w-[3px] rounded-full"
+            style={{ background: meta.color }}
+          />
+          <div className="flex items-center gap-2.5 pt-1">
+            <span className="h-2 w-2 flex-none rounded-full" style={{ background: meta.color }} />
+            <span className="text-[15px] font-bold">{e.title}</span>
+            <button
+              type="button"
+              onClick={onDelete}
+              className="ml-auto p-1 text-[10px] font-semibold tracking-[0.16em] text-danger transition-colors hover:brightness-125"
+            >
+              {voice.manor.removeLabel.toUpperCase()}
+            </button>
+          </div>
+          <EventTimeLine e={e} />
+          <div className="mt-2 flex items-center gap-2">
+            <span
+              className="chip px-2.5 py-0.5 text-[9.5px] tracking-[0.12em]"
+              style={{
+                color: meta.color,
+                border: `1px solid color-mix(in srgb, ${meta.color} 50%, transparent)`,
+              }}
+            >
+              {meta.label}
+            </span>
+            <span className="text-[11px] text-ink-dim [font-variant-numeric:tabular-nums]">
+              {hoursOf(e).toFixed(1)} h
+            </span>
+          </div>
+          {e.kind === 'training' && hotNames.length > 0 && (
+            <div className="mt-2.5 text-[11.5px]" style={{ color: 'var(--color-w-grounds)' }}>
+              {voice.manor.strain.tooltip({ names: hotNames, forecast: false })}
+            </div>
+          )}
+          {near && (
+            <div className="mt-1 text-[11.5px] text-danger">
+              ▲ {voice.manor.nearWatchLine(near)}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onMove}
+            className="btn-cta mt-3.5 h-12 w-full font-display text-[13.5px] font-semibold tracking-[0.18em]"
+          >
+            {voice.manor.eventSheet.move}
+          </button>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="card h-11 flex-1 px-3 text-[12.5px] transition-colors hover:border-accent"
+            >
+              {voice.manor.eventSheet.edit}
+            </button>
+            {openIn && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  useNavStore.getState().requestView(openIn.view)
+                }}
+                className="card h-11 flex-[1.5] px-3 text-[12.5px] transition-colors hover:border-accent"
+              >
+                {voice.manor.eventSheet.openIn(openIn.name())}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </Sheet>
+  )
+}
+
+function EventTimeLine({ e }: { e: CalendarEvent }) {
+  const s = new Date(e.start)
+  const en = new Date(e.end)
+  const cross = localDayKey(s) !== localDayKey(en)
+  return (
+    <>
+      <div className="mt-1.5 text-[12.5px] [font-variant-numeric:tabular-nums]">
+        {cross
+          ? `${WD[s.getDay()]} ${s.getDate()} · ${hhmm(s)} → ${WD[en.getDay()]} ${hhmm(en)}`
+          : `${WD[s.getDay()]} ${s.getDate()} · ${hhmm(s)} → ${hhmm(en)}`}
+      </div>
+      {cross && (
+        <div className="mt-0.5 text-[11px] italic text-ink-dim">{voice.manor.crossesMidnight}</div>
+      )}
+    </>
+  )
+}
+
+/* ------------------------------------------------------------ edit sheet */
+
+export function MobileEventEditSheet({
+  open,
+  event,
+  onSave,
+  onClose,
+}: {
+  open: boolean
+  event: CalendarEvent | null
+  /** returns false when the corrected slot is occupied (sheet stays open) */
+  onSave: (id: string, title: string, start: Date, durH: number) => boolean
+  onClose: () => void
+}) {
+  const [title, setTitle] = useState('')
+  const [startMin, setStartMin] = useState(0) // minutes since the event day's midnight
+  const [durH, setDurH] = useState(1)
+
+  // seed the form each time a different event opens
+  useEffect(() => {
+    if (!open || !event) return
+    const s = new Date(event.start)
+    setTitle(event.title)
+    setStartMin(s.getHours() * 60 + s.getMinutes())
+    setDurH(hoursOf(event))
+  }, [open, event])
+
+  if (!event) return <Sheet open={false} onClose={onClose}>{null}</Sheet>
+
+  const day = new Date(event.start)
+  const startDate = new Date(
+    day.getFullYear(),
+    day.getMonth(),
+    day.getDate(),
+    Math.floor(startMin / 60),
+    startMin % 60,
+  )
+
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <div className="pb-1">
+        <div className="pt-1 font-display text-xs font-semibold tracking-[0.24em] text-ink-dim">
+          {voice.manor.eventSheet.editTitle}
+        </div>
+        <label className="mt-3 block">
+          <span className="text-[10px] tracking-[0.2em] text-ink-dim">
+            {voice.manor.eventSheet.titleLabel}
+          </span>
+          <input
+            type="text"
+            value={title}
+            onChange={(ev) => setTitle(ev.target.value)}
+            className="card mt-1.5 h-11 w-full px-3.5 text-[13.5px] outline-none focus:border-accent"
+          />
+        </label>
+        <Stepper
+          label={voice.manor.eventSheet.startLabel}
+          value={`${WD[startDate.getDay()]} ${startDate.getDate()} · ${hhmm(startDate)}`}
+          onDec={() => setStartMin((m) => Math.max(0, m - 30))}
+          onInc={() => setStartMin((m) => Math.min(23.5 * 60, m + 30))}
+        />
+        <Stepper
+          label={voice.manor.eventSheet.durationLabel}
+          value={`${durH.toFixed(1)} h`}
+          onDec={() => setDurH((d) => Math.max(0.5, d - 0.5))}
+          onInc={() => setDurH((d) => Math.min(24, d + 0.5))}
+        />
+        <button
+          type="button"
+          disabled={title.trim() === ''}
+          onClick={() => {
+            if (onSave(event.id, title.trim(), startDate, durH)) onClose()
+          }}
+          className="btn-cta mt-4 h-12 w-full font-display text-[13.5px] font-semibold tracking-[0.18em] disabled:opacity-40"
+        >
+          {voice.manor.eventSheet.save}
+        </button>
+      </div>
+    </Sheet>
+  )
+}
+
+function Stepper({
+  label,
+  value,
+  onDec,
+  onInc,
+}: {
+  label: string
+  value: string
+  onDec: () => void
+  onInc: () => void
+}) {
+  return (
+    <div className="mt-3">
+      <span className="text-[10px] tracking-[0.2em] text-ink-dim">{label}</span>
+      <div className="mt-1.5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onDec}
+          className="card h-11 w-12 flex-none text-[16px] leading-none transition-colors hover:border-accent"
+          aria-label={`${label} down`}
+        >
+          −
+        </button>
+        <div className="card flex h-11 flex-1 items-center justify-center text-[13.5px] font-semibold [font-variant-numeric:tabular-nums]">
+          {value}
+        </div>
+        <button
+          type="button"
+          onClick={onInc}
+          className="card h-11 w-12 flex-none text-[16px] leading-none transition-colors hover:border-accent"
+          aria-label={`${label} up`}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  )
+}

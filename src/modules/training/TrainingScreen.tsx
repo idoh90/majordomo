@@ -7,6 +7,7 @@ import { WorkoutCalendar } from './components/history/WorkoutCalendar'
 import { WorkoutDetailSheet } from './components/history/WorkoutDetailSheet'
 import { WorkoutList } from './components/history/WorkoutList'
 import { NutritionCard } from './components/insights/NutritionCard'
+import { RecoveryCard } from './components/insights/RecoveryCard'
 import { ScheduledCard } from './components/insights/ScheduledCard'
 import { StatTiles } from './components/insights/StatTiles'
 import { TopMusclesChart } from './components/insights/TopMusclesChart'
@@ -27,10 +28,6 @@ export function TrainingScreen() {
 
   const detailWorkout = detailId ? (workouts.find((w) => w.id === detailId) ?? null) : null
 
-  const openAdd = () => {
-    setEditing(null)
-    setSheetOpen(true)
-  }
   const openEdit = (w: Workout) => {
     setEditing(w)
     setSheetOpen(true)
@@ -68,6 +65,9 @@ export function TrainingScreen() {
       <main className="mt-4 flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:items-start">
         <div className="flex flex-col gap-4">
           <BodyMap workouts={workouts} strains={strains} now={now} />
+          {/* mobile: the design's RECOVERY rows under the hero map (desktop
+              reads the same truth off the map + detail sheets) */}
+          <RecoveryCard workouts={workouts} now={now} />
           <WorkoutCalendar workouts={workouts} now={now} onOpen={(w) => setDetailId(w.id)} />
         </div>
         <div className="flex flex-col gap-4">
@@ -87,17 +87,6 @@ export function TrainingScreen() {
           />
         </div>
       </main>
-
-      {/* mobile FAB */}
-      <button
-        type="button"
-        aria-label="Log workout"
-        onClick={openAdd}
-        className="btn-cta btn-log fixed right-5 z-40 flex h-14 w-14 items-center justify-center transition hover:brightness-110 active:scale-95 lg:hidden"
-        style={{ bottom: 'max(20px, env(safe-area-inset-bottom))' }}
-      >
-        <PlusIcon />
-      </button>
 
       <AddWorkoutSheet
         open={sheetOpen}
@@ -119,15 +108,3 @@ export function TrainingScreen() {
   )
 }
 
-function PlusIcon() {
-  return (
-    <svg width={26} height={26} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 5v14M5 12h14"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}

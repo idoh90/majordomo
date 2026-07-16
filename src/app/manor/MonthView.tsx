@@ -9,6 +9,9 @@ import type { DayStrain } from './strain'
  * Month view — chips per calendar day. A night watch is written on the day
  * it begins; the morning it spills into carries a "→ until" reminder chip
  * (the design's continuation convention). Sleep stays off the month view.
+ * Below md the seven columns survive as a heat/dot grid: wing dots instead
+ * of text chips, the continuation chip condensed to an arrow, a strain tint
+ * on sore days, and the current week carrying the accent outline.
  */
 
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -65,13 +68,26 @@ export function MonthView({
 }) {
   const cells = monthCells(anchor, weekStart)
   const todayKey = localDayKey(new Date(now))
+  const thisWeek = new Set(
+    Array.from({ length: 7 }, (_, i) =>
+      localDayKey(addDays(startOfWeek(new Date(now), weekStart), i)),
+    ),
+  )
 
-  // chips bucketed by local day
+  // chips bucketed by local day, plus the mobile grid's condensed signals:
+  // one dot per wing present that day, an arrow where a watch spills in
   const byDay = new Map<string, Chip[]>()
+  const dotsByDay = new Map<string, string[]>()
+  const contDays = new Set<string>()
   const push = (key: string, chip: Chip) => {
     const list = byDay.get(key) ?? []
     list.push(chip)
     byDay.set(key, list)
+  }
+  const dot = (key: string, color: string) => {
+    const list = dotsByDay.get(key) ?? []
+    if (!list.includes(color) && list.length < 3) list.push(color)
+    dotsByDay.set(key, list)
   }
   for (const e of events) {
     if (e.kind === 'sleep') continue
@@ -85,6 +101,7 @@ export function MonthView({
         fg: mm.color,
         bg: `color-mix(in srgb, ${mm.color} 14%, transparent)`,
       })
+      dot(localDayKey(s), mm.color)
       continue
     }
     const en = new Date(e.end)
@@ -96,6 +113,7 @@ export function MonthView({
       bg: isShift ? meta.color : `color-mix(in srgb, ${meta.color} 13%, transparent)`,
       solid: isShift,
     })
+    dot(localDayKey(s), meta.color)
     if (isShift && localDayKey(en) !== localDayKey(s)) {
       push(localDayKey(en), {
         key: `${e.id}-cont`,
@@ -104,6 +122,7 @@ export function MonthView({
         bg: 'transparent',
         italic: true,
       })
+      contDays.add(localDayKey(en))
     }
   }
 
@@ -121,16 +140,25 @@ export function MonthView({
           const key = localDayKey(day)
           const inMonth = day.getMonth() === anchor.getMonth()
           const isToday = key === todayKey
+          const inThisWeek = thisWeek.has(key)
           const chips = byDay.get(key) ?? []
+          const dots = dotsByDay.get(key) ?? []
+          const sore = (strain?.get(key)?.hot.length ?? 0) > 0
           return (
             <button
               key={key}
               type="button"
               onClick={() => onOpenDay(day)}
-              className="min-h-24 rounded-[10px] border p-2 text-left transition-colors hover:border-accent"
+              className="relative min-h-[58px] rounded-[9px] border p-1.5 text-left transition-colors hover:border-accent md:min-h-24 md:rounded-[10px] md:p-2"
               style={{
-                borderColor: isToday ? 'var(--color-accent)' : 'var(--color-line)',
-                background: 'color-mix(in srgb, var(--color-panel) 55%, transparent)',
+                borderColor: isToday
+                  ? 'var(--color-accent)'
+                  : inThisWeek
+                    ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)'
+                    : 'var(--color-line)',
+                background: sore
+                  ? 'color-mix(in srgb, var(--color-danger) 9%, color-mix(in srgb, var(--color-panel) 55%, transparent))'
+                  : 'color-mix(in srgb, var(--color-panel) 55%, transparent)',
                 opacity: inMonth ? 1 : 0.35,
               }}
             >
@@ -143,12 +171,31 @@ export function MonthView({
               >
                 {day.getDate()}
               </span>
+              {contDays.has(key) && (
+                <span
+                  aria-hidden
+                  className="absolute right-1.5 top-1.5 text-[9px] leading-none md:hidden"
+                  style={{ color: 'var(--color-w-watch)' }}
+                >
+                  →
+                </span>
+              )}
               {strain?.get(key) && (
-                <span className="mt-1 block">
+                <span className="mt-1 hidden md:block">
                   <StrainBar day={strain.get(key)!} height={3} />
                 </span>
               )}
-              <span className="mt-1 flex flex-col gap-[3px]">
+              {/* mobile: one dot per wing present */}
+              <span className="mt-1.5 flex gap-[3px] md:hidden">
+                {dots.map((c) => (
+                  <span
+                    key={c}
+                    className="h-[5px] w-[5px] rounded-full"
+                    style={{ background: c }}
+                  />
+                ))}
+              </span>
+              <span className="mt-1 hidden flex-col gap-[3px] md:flex">
                 {chips.slice(0, 3).map((c) => (
                   <span
                     key={c.key}
@@ -169,6 +216,29 @@ export function MonthView({
             </button>
           )
         })}
+      </div>
+      {/* mobile legend — the dots decoded */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] lowercase text-ink-dim md:hidden">
+        {(['shift', 'training', 'study', 'marker'] as const).map((k) => (
+          <span key={k} className="inline-flex items-center gap-1.5">
+            <span
+              className="h-[5px] w-[5px] rounded-full"
+              style={{ background: KIND_META[k].color }}
+            />
+            {KIND_META[k].label}
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1.5">
+          <span style={{ color: 'var(--color-w-watch)' }}>→</span>
+          {voice.manor.monthLegend.runsPast}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className="h-2.5 w-2.5 rounded-[3px]"
+            style={{ background: 'color-mix(in srgb, var(--color-danger) 12%, var(--color-panel))' }}
+          />
+          {voice.manor.monthLegend.strain}
+        </span>
       </div>
       <div className="mt-2.5 text-[11.5px] italic text-ink-dim">{voice.manor.monthNote}</div>
     </div>

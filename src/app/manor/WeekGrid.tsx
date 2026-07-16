@@ -12,9 +12,13 @@ import { useEventsStore } from '../../core/events/store'
 import { localDayKey } from '../../core/dates'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { voice } from '../../core/voice'
+import { useIsMobile } from '../useIsMobile'
 import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
+import { MobileEventEditSheet, MobileEventSheet, MobileQuickAddSheet } from './MobileSheets'
+import { nearWatch } from './nearWatch'
 import { StrainBar } from './StrainBar'
 import type { DayStrain } from './strain'
+import { useManorUi } from './uiStore'
 
 /**
  * The duty-cycle week grid (design direction 1a): each column spans
@@ -23,8 +27,10 @@ import type { DayStrain } from './strain'
  * column. Events that cross the SEAM split across columns with dotted cut
  * edges. Desktop: seven columns with drag-to-move (0.5h snap, occupancy
  * check, cross-day confirm, single-slot undo) and click-to-quick-add;
- * mobile: one duty cycle per screen behind day chips + snap scrolling
- * (tap for popover/quick-add; mobile drag is backlog).
+ * mobile: one duty cycle per screen behind day chips + snap scrolling — tap
+ * opens bottom sheets, long-press (350 ms) lifts a block into the mobile
+ * drag: 0.5 h snap with a live time badge, cross-day by dragging onto a day
+ * chip, escape strip to cancel, drops through the same confirm/undo pipeline.
  */
 
 const PXH = 24 // px per hour
@@ -80,7 +86,22 @@ interface MoveConfirm {
   id: string
   start: Date
   durH: number
+  title: string
   body: string
+}
+
+/** the lifted block on mobile — one visible column, chips as day targets */
+interface MobileDrag {
+  id: string
+  title: string
+  kind: EventKind
+  tc: number
+  ts: number
+  durH: number
+  valid: boolean
+  fromCol: number
+  /** pointer is in the RELEASE TO CANCEL strip */
+  escape: boolean
 }
 
 type LastAction =
@@ -112,12 +133,17 @@ export function WeekGrid({
   const updateEvent = useEventsStore((s) => s.updateEvent)
   const deleteEvent = useEventsStore((s) => s.deleteEvent)
 
+  const isMobile = useIsMobile()
   const [popover, setPopover] = useState<Popover | null>(null)
   const [quickAdd, setQuickAdd] = useState<QuickAdd | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
   const [confirm, setConfirm] = useState<MoveConfirm | null>(null)
   const [toast, setToast] = useState<{ msg: string; undo: boolean } | null>(null)
   const [lastAction, setLastAction] = useState<LastAction | null>(null)
+  /** mobile MOVE flow: the event awaiting a tapped destination */
+  const [placing, setPlacing] = useState<CalendarEvent | null>(null)
+  /** mobile edit sheet */
+  const [editing, setEditing] = useState<CalendarEvent | null>(null)
 
   const boxRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -165,6 +191,16 @@ export function WeekGrid({
     [columns, events],
   )
 
+  // training blocks sitting hard by a watch carry a computed ▲ — never stored
+  const warnIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const e of events) {
+      if (e.kind !== 'training' || e.allDay) continue
+      if (nearWatch(events, new Date(e.start), new Date(e.end), e.id)) ids.add(e.id)
+    }
+    return ids
+  }, [events])
+
   const openPopover = (event: CalendarEvent, col: number, y: number) => {
     if (Date.now() < suppressClickUntil.current) return
     setQuickAdd(null)
@@ -194,7 +230,7 @@ export function WeekGrid({
     })
     if (!sandbox) {
       setLastAction({ type: 'move', id, prev: { start: prev.start, end: prev.end } })
-      butler(voice.manor.moved, true)
+      butler(voice.manor.movedTo(hhmm(start)), true)
     }
   }
 
@@ -222,7 +258,7 @@ export function WeekGrid({
     }
   }
 
-  const finishDrag = (d: DragState) => {
+  const finishDrag = (d: Pick<DragState, 'id' | 'tc' | 'ts' | 'durH' | 'valid' | 'fromCol'>) => {
     setDrag(null)
     dragRef.current = null
     if (!d.valid) {
@@ -233,19 +269,34 @@ export function WeekGrid({
     if (!e) return
     const newStart = new Date(columns[d.tc].start.getTime() + d.ts * HOUR_MS)
     if (newStart.getTime() === new Date(e.start).getTime()) return
+    const newEnd = new Date(newStart.getTime() + d.durH * HOUR_MS)
+    // a training block landing hard by a watch earns a word first (drag
+    // contract row 7); appended to the cross-day confirm when both apply
+    const nw = !sandbox && e.kind === 'training' ? nearWatch(events, newStart, newEnd, e.id) : null
     if (d.tc !== d.fromCol && !sandbox) {
-      const newEnd = new Date(newStart.getTime() + d.durH * HOUR_MS)
       const s = new Date(e.start)
       const en = new Date(e.end)
       setConfirm({
         id: d.id,
         start: newStart,
         durH: d.durH,
-        body: voice.manor.moveBody({
-          title: e.title,
-          from: `${WD[s.getDay()]} ${hhmm(s)} → ${hhmm(en)}`,
-          to: `${WD[newStart.getDay()]} ${hhmm(newStart)} → ${hhmm(newEnd)}`,
-        }),
+        title: voice.manor.moveTitle,
+        body:
+          voice.manor.moveBody({
+            title: e.title,
+            from: `${WD[s.getDay()]} ${hhmm(s)} → ${hhmm(en)}`,
+            to: `${WD[newStart.getDay()]} ${hhmm(newStart)} → ${hhmm(newEnd)}`,
+          }) + (nw ? ` ▲ ${voice.manor.nearWatchLine(nw)}` : ''),
+      })
+      return
+    }
+    if (nw) {
+      setConfirm({
+        id: d.id,
+        start: newStart,
+        durH: d.durH,
+        title: voice.manor.nearWatchTitle,
+        body: `${voice.manor.nearWatchBody} ${voice.manor.nearWatchLine(nw)}`,
       })
       return
     }
@@ -348,6 +399,27 @@ export function WeekGrid({
   const onColumnClick = (col: number, ev: React.MouseEvent) => {
     if (Date.now() < suppressClickUntil.current) return
     if ((ev.target as HTMLElement).closest('[data-event-block]')) return
+    // mobile MOVE flow: the next tapped slot is the destination
+    if (placing) {
+      const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect()
+      let ts = Math.floor(((ev.clientY - rect.top) / PXH) * 2) / 2
+      const durH = hoursOf(placing)
+      ts = Math.max(0, Math.min(24 - Math.min(durH, 24), ts))
+      const fromCol = columns.findIndex((w) => {
+        const s = new Date(placing.start)
+        return s >= w.start && s < w.end
+      })
+      setPlacing(null)
+      finishDrag({
+        id: placing.id,
+        tc: col,
+        ts,
+        durH,
+        valid: slotFree(placing.id, col, ts, durH),
+        fromCol,
+      })
+      return
+    }
     if (popover) {
       setPopover(null)
       return
@@ -363,9 +435,49 @@ export function WeekGrid({
     setQuickAdd({ col, ts, y })
   }
 
+  /** the tab bar's + : quick-add on `col` at the next free half-hour (today)
+   *  or a civilised default hour — the sheet's footer flags an occupied slot */
+  const openQuickAddAt = (col: number) => {
+    const win = columns[col]
+    const isToday = now >= win.start.getTime() && now < win.end.getTime()
+    let base = isToday ? Math.ceil(((now - win.start.getTime()) / HOUR_MS) * 2) / 2 : 9
+    base = Math.max(0, Math.min(23.5, base))
+    let ts = base
+    for (let t = base; t <= 23.5; t += 0.5) {
+      if (slotFree(null, col, t, 0.5)) {
+        ts = t
+        break
+      }
+    }
+    setPopover(null)
+    setQuickAdd({ col, ts, y: ts * PXH })
+  }
+
+  /** the mobile edit sheet's save — false = destination occupied, sheet stays */
+  const saveEdit = (id: string, title: string, start: Date, durH: number): boolean => {
+    const end = new Date(start.getTime() + durH * HOUR_MS)
+    const clash = events.some(
+      (e) =>
+        !e.allDay && e.id !== id && overlaps(new Date(e.start), new Date(e.end), start, end),
+    )
+    if (clash) {
+      butler(voice.manor.occupied)
+      return false
+    }
+    const prev = events.find((e) => e.id === id)
+    if (!prev) return false
+    const timeChanged =
+      new Date(prev.start).getTime() !== start.getTime() || hoursOf(prev) !== durH
+    updateEvent(id, { title, start: start.toISOString(), end: end.toISOString() })
+    if (!sandbox) butler(timeChanged ? voice.manor.movedTo(hhmm(start)) : voice.manor.onTheBooks)
+    return true
+  }
+
   const quickAddPick = (tpl: { kind: EventKind; title: string; hours: number }) => {
     if (!quickAdd) return
-    const ts = Math.min(quickAdd.ts, 24 - tpl.hours)
+    // no fit-the-column clamp: a 19:00 night watch or a 23:30 sleep simply
+    // crosses midnight — natural data; the grid splits it at the seam
+    const ts = quickAdd.ts
     if (!slotFree(null, quickAdd.col, ts, tpl.hours)) {
       butler(voice.manor.occupied)
       setQuickAdd(null)
@@ -438,6 +550,7 @@ export function WeekGrid({
                     clips={clipsByCol[i]}
                     ghostClips={ghostsByCol[i]}
                     changedIds={changedIds}
+                    warnIds={warnIds}
                     now={now}
                     divider={i > 0}
                     selectedId={popover?.event.id}
@@ -488,22 +601,78 @@ export function WeekGrid({
         clipsByCol={clipsByCol}
         ghostsByCol={ghostsByCol}
         changedIds={changedIds}
+        warnIds={warnIds}
         markersByCol={markersByCol}
         strain={strain}
         now={now}
         popover={popover}
         onEventClick={handleEventClick}
         closePopover={() => setPopover(null)}
-        onDeleteEvent={removeEvent}
-        quickAdd={quickAdd}
         onColumnClick={onColumnClick}
-        quickAddPick={quickAddPick}
-        closeQuickAdd={() => setQuickAdd(null)}
+        openQuickAddAt={openQuickAddAt}
+        slotFree={slotFree}
+        onFinishDrag={finishDrag}
+        suppressClicks={() => {
+          suppressClickUntil.current = Date.now() + 250
+        }}
+        placing={placing}
+        onCancelPlace={() => setPlacing(null)}
       />
+
+      {/* mobile bottom sheets — mounted only below md so the Sheet scroll
+          lock never fires for a desktop popover sharing the same state */}
+      {isMobile && (
+        <>
+          <MobileQuickAddSheet
+            open={quickAdd !== null}
+            when={
+              quickAdd
+                ? new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS)
+                : null
+            }
+            free={quickAdd ? slotFree(null, quickAdd.col, quickAdd.ts, 0.5) : true}
+            onPick={quickAddPick}
+            onClose={() => setQuickAdd(null)}
+          />
+          <MobileEventSheet
+            open={popover !== null}
+            event={popover?.event ?? null}
+            hotNames={popover ? (strain?.[popover.col]?.hot.map((h) => h.label) ?? []) : []}
+            near={
+              popover && popover.event.kind === 'training'
+                ? nearWatch(
+                    events,
+                    new Date(popover.event.start),
+                    new Date(popover.event.end),
+                    popover.event.id,
+                  )
+                : null
+            }
+            onClose={() => setPopover(null)}
+            onDelete={() => popover && removeEvent(popover.event.id)}
+            onMove={() => {
+              if (!popover) return
+              setPlacing(popover.event)
+              setPopover(null)
+            }}
+            onEdit={() => {
+              if (!popover) return
+              setEditing(popover.event)
+              setPopover(null)
+            }}
+          />
+          <MobileEventEditSheet
+            open={editing !== null}
+            event={editing}
+            onSave={saveEdit}
+            onClose={() => setEditing(null)}
+          />
+        </>
+      )}
 
       <ConfirmDialog
         open={confirm !== null}
-        title={voice.manor.moveTitle}
+        title={confirm?.title ?? voice.manor.moveTitle}
         message={confirm?.body ?? ''}
         confirmLabel={voice.manor.moveYes}
         onCancel={() => {
@@ -635,24 +804,29 @@ const DayBody = memo(function DayBody({
   clips,
   ghostClips = EMPTY_CLIPS,
   changedIds,
+  warnIds,
   now,
   divider,
   selectedId,
   dragId,
   onEventClick,
   onEventPointerDown,
+  blockTouchAction,
 }: {
   col: number
   win: ColumnWindow
   clips: ClippedEvent[]
   ghostClips?: ClippedEvent[]
   changedIds?: ReadonlySet<string>
+  warnIds?: ReadonlySet<string>
   now: number
   divider: boolean
   selectedId?: string
   dragId?: string
   onEventClick: (col: number, e: CalendarEvent, y: number) => void
   onEventPointerDown?: (e: CalendarEvent, ev: React.PointerEvent) => void
+  /** 'pan-y' on mobile: scroll wins until the long-press lifts the block */
+  blockTouchAction?: 'none' | 'pan-y'
 }) {
   const nowInCol = now >= win.start.getTime() && now < win.end.getTime()
   return (
@@ -676,9 +850,11 @@ const DayBody = memo(function DayBody({
           win={win}
           selected={selectedId === c.event.id}
           changed={changedIds?.has(c.event.id) ?? false}
+          warn={warnIds?.has(c.event.id) ?? false}
           dimmed={dragId === c.event.id}
           onClick={onEventClick}
           onPointerDown={onEventPointerDown}
+          blockTouchAction={blockTouchAction}
         />
       ))}
       {nowInCol && (
@@ -704,18 +880,23 @@ const EventBlock = memo(function EventBlock({
   win,
   selected,
   changed = false,
+  warn = false,
   dimmed,
   onClick,
   onPointerDown,
+  blockTouchAction = 'none',
 }: {
   col: number
   clip: ClippedEvent
   win: ColumnWindow
   selected: boolean
   changed?: boolean
+  /** training booked hard by a watch — the computed ▲ */
+  warn?: boolean
   dimmed: boolean
   onClick: (col: number, e: CalendarEvent, y: number) => void
   onPointerDown?: (e: CalendarEvent, ev: React.PointerEvent) => void
+  blockTouchAction?: 'none' | 'pan-y'
 }) {
   const e = clip.event
   const meta = KIND_META[e.kind]
@@ -742,7 +923,8 @@ const EventBlock = memo(function EventBlock({
         top: topPx + 1,
         height: Math.max(heightPx - 2, 12),
         cursor: onPointerDown ? 'grab' : 'pointer',
-        touchAction: onPointerDown ? 'none' : undefined,
+        touchAction: onPointerDown ? blockTouchAction : undefined,
+        WebkitTouchCallout: 'none',
         opacity: dimmed ? 0.3 : 1,
         borderLeft: isRest ? hairline : `3px solid ${meta.color}`,
         borderRight: hairline,
@@ -763,6 +945,15 @@ const EventBlock = memo(function EventBlock({
         outlineOffset: 1.5,
       }}
     >
+      {warn && (
+        <span
+          aria-hidden
+          className="absolute right-1.5 top-1 z-[1] text-[9px] leading-none"
+          style={{ color: 'var(--color-danger)' }}
+        >
+          ▲
+        </span>
+      )}
       <span className="block px-2 py-[5px]">
         <span
           className="block text-xs font-semibold leading-[1.2]"
@@ -1006,48 +1197,75 @@ function QuickAddPopover({
 
 /* --------------------------------------------------------------- mobile */
 
+const ESCAPE_H = 32
+const LONG_PRESS_MS = 350
+const PRE_LIFT_SLOP = 8
+const EDGE_ZONE = 120
+const EDGE_SPEED = 14
+
 function MobileWeek({
   columns,
   clipsByCol,
   ghostsByCol,
   changedIds,
+  warnIds,
   markersByCol,
   strain,
   now,
   popover,
   onEventClick,
   closePopover,
-  onDeleteEvent,
-  quickAdd,
   onColumnClick,
-  quickAddPick,
-  closeQuickAdd,
+  openQuickAddAt,
+  slotFree,
+  onFinishDrag,
+  suppressClicks,
+  placing,
+  onCancelPlace,
 }: {
   columns: ColumnWindow[]
   clipsByCol: ClippedEvent[][]
   ghostsByCol: ClippedEvent[][]
   changedIds?: ReadonlySet<string>
+  warnIds?: ReadonlySet<string>
   markersByCol: CalendarEvent[][]
   strain?: DayStrain[] | null
   now: number
   popover: Popover | null
   onEventClick: (col: number, e: CalendarEvent, y: number) => void
   closePopover: () => void
-  onDeleteEvent: (id: string) => void
-  quickAdd: QuickAdd | null
   onColumnClick: (col: number, ev: React.MouseEvent) => void
-  quickAddPick: (tpl: { kind: EventKind; title: string; hours: number }) => void
-  closeQuickAdd: () => void
+  openQuickAddAt: (col: number) => void
+  slotFree: (ignoreId: string | null, tc: number, ts: number, durH: number) => boolean
+  onFinishDrag: (d: {
+    id: string
+    tc: number
+    ts: number
+    durH: number
+    valid: boolean
+    fromCol: number
+  }) => void
+  suppressClicks: () => void
+  placing: CalendarEvent | null
+  onCancelPlace: () => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const chipRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const colBodyRefs = useRef<(HTMLDivElement | null)[]>([])
   const todayIdx = columns.findIndex((w) => now >= w.start.getTime() && now < w.end.getTime())
   const [active, setActive] = useState(todayIdx >= 0 ? todayIdx : 0)
+  const activeRef = useRef(active)
+  activeRef.current = active
 
-  const goTo = (i: number) => {
+  const [mDrag, setMDrag] = useState<MobileDrag | null>(null)
+  const mdRef = useRef<MobileDrag | null>(null)
+
+  const goTo = (i: number, smooth = true) => {
     setActive(i)
     closePopover()
     const el = scrollRef.current
-    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' })
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: smooth ? 'smooth' : 'auto' })
   }
 
   // position on mount (today's duty cycle) — deliberately not re-run on
@@ -1058,6 +1276,7 @@ function MobileWeek({
   }, [])
 
   const onScroll = () => {
+    if (mdRef.current) return // programmatic swaps during a drag own the position
     const el = scrollRef.current
     if (!el) return
     const i = Math.round(el.scrollLeft / el.clientWidth)
@@ -1067,23 +1286,226 @@ function MobileWeek({
     }
   }
 
+  // the tab bar's + — one-shot request for quick-add on the visible day
+  const quickAddRequested = useManorUi((s) => s.quickAddRequested)
+  useEffect(() => {
+    if (!quickAddRequested) return
+    openQuickAddAt(activeRef.current)
+    useManorUi.getState().clearQuickAddRequest()
+  }, [quickAddRequested])
+
+  /* ------------------------------------------- the mobile drag (long-press) */
+
+  const onMobileBlockPointerDown = (e: CalendarEvent, ev: React.PointerEvent) => {
+    if (placing) return
+    if (ev.pointerType === 'mouse' && ev.button !== 0) return
+    const s = new Date(e.start)
+    const fromCol = columns.findIndex((w) => s >= w.start && s < w.end)
+    // only the block's home column lifts — a continuation tail in the next
+    // column stays tap-only (MOVE in the sheet covers it)
+    if (fromCol < 0 || fromCol !== activeRef.current) return
+
+    const durH = hoursOf(e)
+    const startOffsetH = (s.getTime() - columns[fromCol].start.getTime()) / HOUR_MS
+    let lastX = ev.clientX
+    let lastY = ev.clientY
+    let lifted = false
+    let grabH = 0
+    let raf = 0
+    let scrollRaf = 0
+    let autoV = 0
+
+    const tm = (t: TouchEvent) => {
+      if (lifted) t.preventDefault() // the lift owns the gesture — no scroll
+    }
+
+    const apply = () => {
+      raf = 0
+      const cur = mdRef.current
+      if (!cur) return
+      let { tc, ts } = cur
+      let escape = false
+
+      // day chips are drop targets: entering one swaps the column beneath the finger
+      let chipHit = -1
+      for (let i = 0; i < 7; i++) {
+        const r = chipRefs.current[i]?.getBoundingClientRect()
+        if (r && lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom) {
+          chipHit = i
+          break
+        }
+      }
+      if (chipHit >= 0) {
+        if (chipHit !== tc) {
+          tc = chipHit
+          setActive(chipHit)
+          const el = scrollRef.current
+          if (el) el.scrollTo({ left: chipHit * el.clientWidth, behavior: 'auto' })
+        }
+      } else {
+        const wrapRect = wrapRef.current?.getBoundingClientRect()
+        if (wrapRect && lastY >= wrapRect.top && lastY <= wrapRect.top + ESCAPE_H) {
+          escape = true
+        }
+        const bodyRect = colBodyRefs.current[tc]?.getBoundingClientRect()
+        if (bodyRect && lastY > (wrapRect?.top ?? -Infinity) + ESCAPE_H) {
+          ts = Math.round(((lastY - bodyRect.top) / PXH - grabH) * 2) / 2
+          ts = Math.max(0, Math.min(24 - Math.min(durH, 24), ts))
+        }
+      }
+
+      // auto-scroll when the finger nears the viewport edges
+      autoV =
+        lastY < EDGE_ZONE
+          ? -EDGE_SPEED * (1 - lastY / EDGE_ZONE)
+          : lastY > window.innerHeight - EDGE_ZONE
+            ? EDGE_SPEED * (1 - (window.innerHeight - lastY) / EDGE_ZONE)
+            : 0
+
+      if (cur.tc === tc && cur.ts === ts && cur.escape === escape) return
+      const next: MobileDrag = {
+        ...cur,
+        tc,
+        ts,
+        escape,
+        valid: slotFree(e.id, tc, ts, durH),
+      }
+      mdRef.current = next
+      setMDrag(next)
+    }
+
+    const scrollLoop = () => {
+      if (autoV !== 0) {
+        window.scrollBy(0, autoV)
+        if (!raf) raf = requestAnimationFrame(apply) // the grid moved under a still finger
+      }
+      scrollRaf = requestAnimationFrame(scrollLoop)
+    }
+
+    const lift = () => {
+      lifted = true
+      navigator.vibrate?.(10)
+      closePopover()
+      const bodyRect = colBodyRefs.current[fromCol]?.getBoundingClientRect()
+      if (!bodyRect) return cleanup()
+      grabH = (lastY - bodyRect.top) / PXH - startOffsetH
+      const first: MobileDrag = {
+        id: e.id,
+        title: e.title,
+        kind: e.kind,
+        tc: fromCol,
+        ts: Math.round(startOffsetH * 2) / 2,
+        durH,
+        valid: true,
+        fromCol,
+        escape: false,
+      }
+      mdRef.current = first
+      setMDrag(first)
+      window.addEventListener('touchmove', tm, { passive: false })
+      scrollRaf = requestAnimationFrame(scrollLoop)
+    }
+
+    const lp = setTimeout(lift, LONG_PRESS_MS)
+
+    const cleanup = () => {
+      clearTimeout(lp)
+      window.removeEventListener('pointermove', mm)
+      window.removeEventListener('pointerup', mu)
+      window.removeEventListener('pointercancel', pc)
+      window.removeEventListener('touchmove', tm)
+      if (raf) cancelAnimationFrame(raf)
+      if (scrollRaf) cancelAnimationFrame(scrollRaf)
+    }
+
+    const mm = (m: PointerEvent) => {
+      lastX = m.clientX
+      lastY = m.clientY
+      if (!lifted) {
+        // scroll is never hijacked before the lift: real movement cancels it
+        if (Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY) > PRE_LIFT_SLOP) cleanup()
+        return
+      }
+      m.preventDefault()
+      if (!raf) raf = requestAnimationFrame(apply)
+    }
+    const mu = () => {
+      cleanup()
+      if (!lifted) return // plain tap → the block's onClick opens the sheet
+      if (raf) apply()
+      suppressClicks()
+      const d = mdRef.current
+      mdRef.current = null
+      setMDrag(null)
+      if (!d) return
+      if (d.escape) {
+        navigator.vibrate?.(5)
+        return
+      }
+      navigator.vibrate?.(8)
+      onFinishDrag({ id: d.id, tc: d.tc, ts: d.ts, durH: d.durH, valid: d.valid, fromCol: d.fromCol })
+    }
+    const pc = () => {
+      cleanup()
+      mdRef.current = null
+      setMDrag(null)
+    }
+
+    window.addEventListener('pointermove', mm)
+    window.addEventListener('pointerup', mu)
+    window.addEventListener('pointercancel', pc)
+  }
+
+  /* --------------------------------------------------------------- render */
+
   return (
     <div className="md:hidden">
+      {placing && (
+        <div
+          className="mb-2.5 flex items-center gap-2.5 rounded-[10px] border border-dashed px-3.5 py-2 text-[12px]"
+          style={{
+            borderColor: 'var(--color-accent)',
+            background: 'color-mix(in srgb, var(--color-accent) 7%, transparent)',
+          }}
+        >
+          <span
+            className="h-1.5 w-1.5 flex-none animate-pulse rounded-full"
+            style={{ background: 'var(--color-accent)' }}
+          />
+          {voice.manor.movePlace}
+          <button
+            type="button"
+            onClick={onCancelPlace}
+            aria-label="Cancel move"
+            className="ml-auto p-1 text-[13px] text-ink-dim transition-colors hover:text-ink"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="flex gap-1.5">
         {columns.map((win, i) => {
           const isToday = localDayKey(win.day) === localDayKey(new Date(now))
           const on = i === active
+          const armed = mDrag !== null && i === mDrag.tc
+          const hasWatch = clipsByCol[i].some((c) => c.event.kind === 'shift')
           return (
             <button
               key={i}
+              ref={(el) => {
+                chipRefs.current[i] = el
+              }}
               type="button"
               onClick={() => goTo(i)}
-              className="chip flex-1 border py-1.5 text-center transition-colors"
+              className="chip relative flex-1 border py-1.5 text-center transition-colors"
               style={{
-                borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
-                background: on
-                  ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)'
-                  : 'transparent',
+                borderColor: armed || on ? 'var(--color-accent)' : 'var(--color-line)',
+                borderStyle: armed ? 'dashed' : 'solid',
+                boxShadow: armed ? '0 0 0 3px var(--glow-accent)' : 'none',
+                background:
+                  armed || on
+                    ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)'
+                    : 'transparent',
                 color: on
                   ? 'var(--color-accent)'
                   : isToday
@@ -1100,78 +1522,141 @@ function MobileWeek({
                   <StrainBar day={strain[i]} height={3} />
                 </span>
               )}
+              {hasWatch && (
+                <span
+                  aria-hidden
+                  className="absolute right-1 top-1 h-1 w-1 rounded-full"
+                  style={{ background: 'var(--color-w-watch)' }}
+                />
+              )}
             </button>
           )
         })}
       </div>
       <div className="mt-3 flex">
         <TickAxis />
-        <div
-          ref={scrollRef}
-          onScroll={onScroll}
-          className="flex flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden rounded-xl border border-line"
-          style={{ background: 'color-mix(in srgb, var(--color-panel) 55%, transparent)' }}
-        >
-          {columns.map((win, i) => (
-            <div key={i} className="w-full flex-none snap-center">
-              <div className="flex h-8 items-center gap-2 px-2">
-                <span className="font-display text-[13px] font-semibold tracking-[0.12em] text-ink">
-                  {WD[win.day.getDay()]} {win.day.getDate()}
-                </span>
-                {markersByCol[i].map((m) => {
-                  const mm = markerMeta(m)
-                  return (
-                    <span key={m.id} className="text-[10px]" style={{ color: mm.color }}>
-                      {mm.glyph ? `${mm.glyph} ` : ''}
-                      {m.title}
-                    </span>
-                  )
-                })}
-              </div>
-              <div className="relative" style={{ height: BODY_H }} onClick={(ev) => onColumnClick(i, ev)}>
-                <Rules />
-                <DayBody
-                  col={i}
-                  win={win}
-                  clips={clipsByCol[i]}
-                  ghostClips={ghostsByCol[i]}
-                  changedIds={changedIds}
-                  now={now}
-                  divider={false}
-                  selectedId={popover?.event.id}
-                  onEventClick={onEventClick}
-                />
-                {popover && popover.col === i && (
-                  <EventPopover
-                    popover={popover}
-                    onClose={closePopover}
-                    onDelete={() => onDeleteEvent(popover.event.id)}
-                    style={{
-                      left: 8,
-                      right: 8,
-                      width: 'auto',
-                      top: Math.max(4, Math.min(popover.y, BODY_H - 232)),
-                    }}
-                  />
-                )}
-                {quickAdd && quickAdd.col === i && (
-                  <QuickAddPopover
-                    quickAdd={quickAdd}
-                    columns={columns}
-                    onPick={quickAddPick}
-                    onClose={closeQuickAdd}
-                    style={{
-                      left: 8,
-                      right: 8,
-                      width: 'auto',
-                      top: Math.max(4, Math.min(quickAdd.y, BODY_H - 236)),
-                    }}
-                  />
-                )}
-              </div>
+        <div ref={wrapRef} className="relative min-w-0 flex-1">
+          {mDrag && (
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 z-[7] flex items-center justify-center rounded-t-xl font-display text-[8.5px] font-semibold tracking-[0.2em]"
+              style={{
+                height: ESCAPE_H,
+                color: 'var(--color-danger)',
+                background: mDrag.escape
+                  ? 'color-mix(in srgb, var(--color-danger) 18%, transparent)'
+                  : 'color-mix(in srgb, var(--color-danger) 8%, transparent)',
+                borderBottom: '1px dashed color-mix(in srgb, var(--color-danger) 45%, transparent)',
+              }}
+            >
+              {voice.manor.releaseCancel}
             </div>
-          ))}
+          )}
+          {mDrag && (
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-[7] flex items-end justify-center rounded-b-xl"
+              style={{ height: 40, background: 'linear-gradient(0deg, var(--glow-accent), transparent)' }}
+            >
+              <span className="pb-1 text-[12px] leading-none" style={{ color: 'var(--color-accent)' }}>
+                ⌄
+              </span>
+            </div>
+          )}
+          <div
+            ref={scrollRef}
+            onScroll={onScroll}
+            className="flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden rounded-xl border border-line"
+            style={{ background: 'color-mix(in srgb, var(--color-panel) 55%, transparent)' }}
+          >
+            {columns.map((win, i) => (
+              <div key={i} className="w-full flex-none snap-center">
+                <div className="flex h-8 items-center gap-2 px-2">
+                  <span className="font-display text-[13px] font-semibold tracking-[0.12em] text-ink">
+                    {WD[win.day.getDay()]} {win.day.getDate()}
+                  </span>
+                  {markersByCol[i].map((m) => {
+                    const mm = markerMeta(m)
+                    return (
+                      <span key={m.id} className="text-[10px]" style={{ color: mm.color }}>
+                        {mm.glyph ? `${mm.glyph} ` : ''}
+                        {m.title}
+                      </span>
+                    )
+                  })}
+                </div>
+                <div
+                  ref={(el) => {
+                    colBodyRefs.current[i] = el
+                  }}
+                  className="relative"
+                  style={{ height: BODY_H }}
+                  onClick={(ev) => onColumnClick(i, ev)}
+                >
+                  <Rules />
+                  <DayBody
+                    col={i}
+                    win={win}
+                    clips={clipsByCol[i]}
+                    ghostClips={ghostsByCol[i]}
+                    changedIds={changedIds}
+                    warnIds={warnIds}
+                    now={now}
+                    divider={false}
+                    selectedId={popover?.event.id}
+                    dragId={mDrag?.id}
+                    onEventClick={onEventClick}
+                    onEventPointerDown={onMobileBlockPointerDown}
+                    blockTouchAction="pan-y"
+                  />
+                  {mDrag && mDrag.tc === i && <MobileDragGhost drag={mDrag} columns={columns} />}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/** the lifted block on mobile — compositor-only transform, badge riding on top */
+function MobileDragGhost({ drag, columns }: { drag: MobileDrag; columns: ColumnWindow[] }) {
+  const meta = KIND_META[drag.kind]
+  const start = new Date(columns[drag.tc].start.getTime() + drag.ts * HOUR_MS)
+  const end = new Date(start.getTime() + drag.durH * HOUR_MS)
+  const badge = `${hhmm(start)} → ${hhmm(end)}`
+  return (
+    <div
+      className="pointer-events-none absolute left-[3px] right-[3px] top-0 z-[6] rounded-[8px] px-2.5 py-1.5"
+      style={{
+        height: Math.min(drag.durH, 24) * PXH - 2,
+        transform: `translate3d(0, ${drag.ts * PXH + 1}px, 0) scale(1.03)`,
+        willChange: 'transform',
+        border: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        background: drag.valid
+          ? `color-mix(in srgb, ${meta.color} 24%, var(--color-panel-2))`
+          : 'color-mix(in srgb, var(--color-danger) 22%, var(--color-panel-2))',
+        boxShadow: drag.valid
+          ? '0 18px 44px rgb(0 0 0 / 0.6), 0 0 24px var(--glow-accent)'
+          : '0 18px 44px rgb(0 0 0 / 0.6)',
+        transition: 'transform 90ms ease-out',
+      }}
+    >
+      <div
+        className="absolute -top-3 right-1.5 rounded-full px-2.5 py-0.5 text-[10.5px] font-bold tracking-[0.04em] [font-variant-numeric:tabular-nums]"
+        style={{
+          background: drag.valid ? 'var(--color-accent)' : 'var(--color-danger)',
+          color: 'var(--color-bg)',
+          boxShadow: '0 0 14px var(--glow-accent)',
+        }}
+      >
+        {badge}
+      </div>
+      <div className="text-xs font-semibold leading-[1.2]">{drag.title}</div>
+      <div
+        className="text-[11px] [font-variant-numeric:tabular-nums]"
+        style={{ color: drag.valid ? 'var(--color-ink-dim)' : 'var(--color-danger)' }}
+      >
+        {drag.valid ? badge : voice.manor.occupiedShort}
       </div>
     </div>
   )

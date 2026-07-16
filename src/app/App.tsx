@@ -10,6 +10,7 @@ import { useTrainingUi } from '../modules/training/uiStore'
 import { CONSOLES } from './consoles'
 import { ManorScreen } from './manor/ManorScreen'
 import { SettingsMenu } from './SettingsMenu'
+import { TabBar } from './TabBar'
 
 export default function App() {
   const skin = useShellStore((s) => s.skin)
@@ -46,7 +47,7 @@ export default function App() {
   return (
     <>
       <AmbientLayer />
-      <div className="mx-auto min-h-dvh w-full max-w-[1280px] px-4 pb-28 lg:px-8 lg:pb-10">
+      <div className="mx-auto min-h-dvh w-full max-w-[1280px] px-4 pb-[calc(88px+env(safe-area-inset-bottom))] md:pb-10 lg:px-8">
         {!storageOk && (
           <div className="mt-3 rounded-xl border border-danger/40 bg-danger/10 px-4 py-2.5 text-sm text-ink">
             {voice.storageWarning}
@@ -66,6 +67,8 @@ export default function App() {
 
         {active ? <active.Screen /> : <ManorScreen />}
       </div>
+
+      <TabBar view={view} onNav={setView} />
     </>
   )
 }
@@ -119,7 +122,7 @@ function AppHeader({
     <button
       type="button"
       onClick={onAdd}
-      className="btn-log btn-cta hidden items-center gap-2 px-5 py-2 text-sm lg:inline-flex"
+      className="btn-log btn-cta hidden items-center gap-2 px-5 py-2 text-sm md:inline-flex"
     >
       <PlusIcon />
       Log Workout
@@ -127,9 +130,9 @@ function AppHeader({
   ) : null
 
   return (
-    <header className="flex flex-wrap items-end gap-x-6 gap-y-3 py-5">
+    <header className="flex flex-wrap items-end gap-x-6 gap-y-3 py-4 md:py-5">
       <div>
-        <div className="font-display text-[21px] font-bold uppercase leading-none tracking-[0.3em] text-ink">
+        <div className="font-display text-[15px] font-bold uppercase leading-none tracking-[0.3em] text-ink md:text-[21px]">
           {voice.wordmark.lead}
           {voice.wordmark.accent && (
             <>
@@ -144,7 +147,8 @@ function AppHeader({
         </div>
       </div>
 
-      <nav className="flex flex-wrap gap-x-5 gap-y-1 sm:ml-2" aria-label="Views">
+      {/* header tabs are desktop chrome — the mobile tab bar owns navigation below md */}
+      <nav className="hidden flex-wrap gap-x-5 gap-y-1 sm:ml-2 md:flex" aria-label="Views">
         {tabs.map((t) => {
           const on = view === t.id
           return (
@@ -165,10 +169,10 @@ function AppHeader({
       </nav>
 
       <div className="ml-auto flex items-center gap-2.5">
-        <span className="hidden text-[9.5px] tracking-[0.18em] text-ink-dim sm:inline">
+        <span className="hidden text-[9.5px] tracking-[0.18em] text-ink-dim md:inline">
           {voice.presetLabel}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="hidden items-center gap-2 md:flex">
           {PRESET_SKIN_IDS.map((id) => (
             <button
               key={id}

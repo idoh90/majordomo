@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNow } from '../../core/useNow'
+import { Sheet } from '../../core/ui/Sheet'
+import { voice } from '../../core/voice'
 import { useCapitalStore } from './store'
-import type { Account, Holding, Snapshot } from './types'
+import { useCapitalUi } from './uiStore'
+import type { Account, Holding, Snapshot, SpendItem } from './types'
+import { Amount } from './components/Amount'
 import { monthKey, monthlySpent } from './lib/budget'
 import { latestDelta, latestSnapshot, liveNetWorth, netWorthOf, netWorthSeries, type NetWorthDelta } from './lib/networth'
 import { Vault } from './components/Vault'
@@ -42,11 +46,20 @@ export function CapitalScreen() {
   const [holdingEditing, setHoldingEditing] = useState<Holding | null>(null)
   const [holdingOpen, setHoldingOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [addChooserOpen, setAddChooserOpen] = useState(false)
 
   // refresh quotes once when the console opens (store no-ops without key/holdings)
   useEffect(() => {
     void refreshPrices()
   }, [refreshPrices])
+
+  // the tab bar's + posts a one-shot request through the mailbox
+  const addSheetRequested = useCapitalUi((s) => s.addSheetRequested)
+  useEffect(() => {
+    if (!addSheetRequested) return
+    setAddChooserOpen(true)
+    useCapitalUi.getState().clearAddSheetRequest()
+  }, [addSheetRequested])
 
   const openAddAccount = () => {
     setAccountEditing(null)
@@ -93,12 +106,12 @@ export function CapitalScreen() {
       <div className="mt-4 mb-4 flex items-center justify-end gap-2">
         <button
           type="button"
-          aria-label={blurAmounts ? 'Show amounts' : 'Hide amounts'}
           aria-pressed={blurAmounts}
           onClick={toggleBlur}
-          className="chip border border-line bg-panel p-2.5 text-ink-dim transition-colors hover:text-ink"
+          className="chip inline-flex items-center gap-1.5 rounded-pill border border-line bg-panel px-3 py-2 text-[9.5px] tracking-[0.14em] text-ink-dim transition-colors hover:text-ink"
         >
           <EyeIcon off={blurAmounts} />
+          {blurAmounts ? voice.capital.reveal : voice.capital.hide}
         </button>
         <button
           type="button"
@@ -108,10 +121,10 @@ export function CapitalScreen() {
         >
           <GearIcon />
         </button>
-        <button type="button" onClick={() => setSpendOpen(true)} className="btn-soft hidden px-4 py-2 text-sm sm:inline-flex">
+        <button type="button" onClick={() => setSpendOpen(true)} className="btn-soft hidden px-4 py-2 text-sm md:inline-flex">
           Update spend
         </button>
-        <button type="button" onClick={() => setSnapOpen(true)} className="btn-cta hidden items-center gap-2 px-4 py-2 text-sm sm:inline-flex">
+        <button type="button" onClick={() => setSnapOpen(true)} className="btn-cta hidden items-center gap-2 px-4 py-2 text-sm md:inline-flex">
           <PlusIcon />
           Update balances
         </button>
@@ -125,48 +138,86 @@ export function CapitalScreen() {
         hasData={hasData}
       />
 
-      <main className="mt-4 flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:items-start">
-        <div className="flex flex-col gap-4">
-          <NetWorthChart
-            series={derived.series}
-            liveValue={hasHoldings ? derived.live.netWorth : undefined}
-            onHistory={() => setHistoryOpen(true)}
-          />
-          <Allocation slices={derived.live.slices} liabilities={derived.live.liabilities} />
+      {/* below md the boards swipe horizontally (snap pages); md stacks; lg = 5:4 grid */}
+      <main className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:flex-col md:gap-4 md:overflow-visible md:pb-0 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:items-start">
+        <div className="contents lg:flex lg:flex-col lg:gap-4">
+          <Board>
+            <NetWorthChart
+              series={derived.series}
+              liveValue={hasHoldings ? derived.live.netWorth : undefined}
+              onHistory={() => setHistoryOpen(true)}
+            />
+          </Board>
+          <Board>
+            <Allocation slices={derived.live.slices} liabilities={derived.live.liabilities} />
+          </Board>
         </div>
-        <div className="flex flex-col gap-4">
-          <SpendCard spent={spent} budget={monthlyBudget} now={new Date(now)} onEdit={() => setSpendOpen(true)} />
-          <AccountsPanel
-            accounts={accounts}
-            latest={derived.latest}
-            holdings={holdings}
-            prices={prices}
-            fx={fx}
-            onEdit={openEditAccount}
-            onAdd={openAddAccount}
-          />
+        <div className="contents lg:flex lg:flex-col lg:gap-4">
+          <Board>
+            <SpendCard spent={spent} budget={monthlyBudget} now={new Date(now)} onEdit={() => setSpendOpen(true)} />
+          </Board>
+          <Board>
+            <AccountsPanel
+              accounts={accounts}
+              latest={derived.latest}
+              holdings={holdings}
+              prices={prices}
+              fx={fx}
+              onEdit={openEditAccount}
+              onAdd={openAddAccount}
+            />
+          </Board>
         </div>
       </main>
 
-      <div className="mt-4 flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:items-start">
-        <PortfolioBoard
-          onAddHolding={openAddHolding}
-          onEditHolding={openEditHolding}
-          onOpenSettings={() => setSettingsOpen(true)}
-        />
-        <TenDayPL />
+      <RecentEntries items={spendItems} />
+
+      <div className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:flex-col md:gap-4 md:overflow-visible md:pb-0 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:items-start">
+        <Board>
+          <PortfolioBoard
+            onAddHolding={openAddHolding}
+            onEditHolding={openEditHolding}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        </Board>
+        <Board>
+          <TenDayPL />
+        </Board>
       </div>
 
-      {/* mobile FAB — primary action is logging a balance snapshot */}
-      <button
-        type="button"
-        aria-label="Update balances"
-        onClick={() => setSnapOpen(true)}
-        className="btn-cta btn-log fixed right-5 z-40 flex h-14 w-14 items-center justify-center transition hover:brightness-110 active:scale-95 sm:hidden"
-        style={{ bottom: 'max(20px, env(safe-area-inset-bottom))' }}
-      >
-        <PlusIcon large />
-      </button>
+      {/* the tab bar's + — two primary verbs, thumb-sized */}
+      <Sheet open={addChooserOpen} onClose={() => setAddChooserOpen(false)}>
+        <div className="flex flex-col gap-2 pb-2 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setAddChooserOpen(false)
+              setSnapOpen(true)
+            }}
+            className="card flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-semibold transition-colors hover:border-accent"
+          >
+            <span
+              className="h-2 w-2 flex-none rounded-full"
+              style={{ background: 'var(--color-w-ledger)' }}
+            />
+            {voice.capital.addBalances}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAddChooserOpen(false)
+              setSpendOpen(true)
+            }}
+            className="card flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-semibold transition-colors hover:border-accent"
+          >
+            <span
+              className="h-2 w-2 flex-none rounded-full"
+              style={{ background: 'var(--color-danger)' }}
+            />
+            {voice.capital.addSpend}
+          </button>
+        </div>
+      </Sheet>
 
       <SnapshotSheet
         open={snapOpen}
@@ -193,6 +244,42 @@ export function CapitalScreen() {
       <HoldingSheet open={holdingOpen} editing={holdingEditing} onClose={() => setHoldingOpen(false)} onAddAccount={openAddAccount} />
       <CapitalSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
+  )
+}
+
+/** a snap page below md, a plain stacked card at md+ */
+function Board({ children }: { children: React.ReactNode }) {
+  return <div className="w-[86%] flex-none snap-center md:w-auto">{children}</div>
+}
+
+/** the last few one-off spends — the mobile design's RECENT ENTRIES */
+function RecentEntries({ items }: { items: SpendItem[] }) {
+  const recent = [...items]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 5)
+  if (recent.length === 0) return null
+  return (
+    <section className="panel mt-4 px-4 pb-4 pt-3 md:hidden">
+      <h2 className="card-title">{voice.capital.recentEntries}</h2>
+      <div className="mt-2 flex flex-col gap-1.5">
+        {recent.map((it) => {
+          const d = new Date(it.date)
+          return (
+            <div key={it.id} className="card flex items-baseline gap-2.5 px-3.5 py-2.5">
+              <span className="text-[12.5px] font-semibold">{it.name}</span>
+              <span className="text-[10.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
+                {d.getDate()}/{d.getMonth() + 1}
+              </span>
+              <Amount
+                value={-it.amount}
+                kind="delta"
+                className="ml-auto text-[12.5px] [font-variant-numeric:tabular-nums]"
+              />
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

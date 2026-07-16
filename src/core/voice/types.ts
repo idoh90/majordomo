@@ -54,8 +54,39 @@ export interface VoicePack {
     moveBody: (v: { title: string; from: string; to: string }) => string
     moveYes: string
     undoLabel: string
+    /** mobile quick-add sheet: title + the footer line when the slot is free */
+    quickAddTitle: string
+    slotClear: string
+    /** banner while placing a move by tap (the mobile MOVE flow) */
+    movePlace: string
+    /** the drag escape strip */
+    releaseCancel: string
+    /** drop toast carrying the landing time */
+    movedTo: (time: string) => string
+    /** ▲ line on a training event booked hard by a watch. `before` = the
+     *  session ends `mins` minutes before the watch begins; otherwise it
+     *  begins `mins` minutes after the watch ends. */
+    nearWatchLine: (v: { mins: number; before: boolean }) => string
+    /** confirm dialog for a move that would train near a watch */
+    nearWatchTitle: string
+    nearWatchBody: string
+    /** mobile event sheet */
+    eventSheet: {
+      move: string
+      edit: string
+      /** edit sheet heading + field labels + CTA */
+      editTitle: string
+      titleLabel: string
+      startLabel: string
+      durationLabel: string
+      save: string
+      /** "Open in THE GROUNDS →" — wing name comes from modules.*.name */
+      openIn: (wing: string) => string
+    }
+    /** mobile month legend labels */
+    monthLegend: { runsPast: string; strain: string }
     /** quick-add templates (title copy is pack content) */
-    templates: { kind: 'training' | 'study' | 'sleep'; title: string; hours: number }[]
+    templates: { kind: 'shift' | 'training' | 'study' | 'sleep'; title: string; hours: number }[]
     strain: {
       /** tooltip on a day's strain bar. `names` = muscles still hot at that
        *  day's worst moment (hottest first, may be empty); `forecast` = the day
@@ -75,11 +106,15 @@ export interface VoicePack {
       apply: string
       discard: string
       applied: string
+      /** drawer note when a rehearsed training block sits near a watch */
+      conflict: (v: { title: string; mins: number; before: boolean }) => string
     }
   }
   watch: {
     onDuty: string
     nextWatch: string
+    /** mobile header pill: time until the next watch begins */
+    nextIn: (v: { h: number; m: number }) => string
     noneAhead: string
     post: string
     weekList: string
@@ -97,6 +132,9 @@ export interface VoicePack {
     scheduledTitle: string
     /** footnote under the list */
     scheduledNote: string
+    /** recovery card: title + per-muscle settle line */
+    recoveryTitle: string
+    settles: (v: { day: string; time: string }) => string
   }
   study: {
     /** rings hero card title */
@@ -238,9 +276,37 @@ export interface VoicePack {
     vaultEmpty: string
     /** FX rate missing for these currencies — their figures render unconverted */
     fxMissing: (currencies: string[]) => string
+    /** blur-toggle pill labels: action to take (hide when shown, reveal when hidden) */
+    hide: string
+    reveal: string
+    /** recent one-off spends card title */
+    recentEntries: string
+    /** the mobile + action sheet rows */
+    addBalances: string
+    addSpend: string
   }
   backup: {
     /** import rejected: wrong app tag */
     notExportFile: string
+    /** the estate backup — every wing's store in one file */
+    estate: {
+      /** gear menu items */
+      exportItem: string
+      importItem: string
+      /** import sheet */
+      importTitle: string
+      /** blurb under the title */
+      importBlurb: string
+      /** the file's stores, listed before it lands */
+      carries: string
+      takenOn: (when: string) => string
+      chooseFile: string
+      /** confirm dialog before overwriting */
+      confirmTitle: string
+      confirmBody: (stores: string) => string
+      confirmYes: string
+      /** after a successful import (the app reloads on the spot) */
+      restored: string
+    }
   }
 }

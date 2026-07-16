@@ -37,7 +37,30 @@ export const majordomoPack: VoicePack = {
     moveBody: ({ title, from, to }) => `${title} would run ${to} instead of ${from}.`,
     moveYes: 'Move it',
     undoLabel: 'UNDO',
+    quickAddTitle: 'QUICK ADD',
+    slotClear: 'The slot is clear, sir.',
+    movePlace: 'Tap where it should go, sir.',
+    releaseCancel: 'RELEASE TO CANCEL',
+    movedTo: (time) => `Moved to ${time}, sir.`,
+    nearWatchLine: ({ mins, before }) =>
+      before
+        ? `Ends ${mins} minutes before the watch, sir.`
+        : `Begins ${mins} minutes after the watch, sir.`,
+    nearWatchTitle: 'A word before you do, sir.',
+    nearWatchBody: 'You would train already worn — the watch sits hard against this hour.',
+    eventSheet: {
+      move: 'MOVE',
+      edit: 'Edit',
+      editTitle: 'A SMALL CORRECTION',
+      titleLabel: 'TITLE',
+      startLabel: 'START',
+      durationLabel: 'DURATION',
+      save: 'SO NOTED',
+      openIn: (wing) => `Open in ${wing} →`,
+    },
+    monthLegend: { runsPast: 'runs past', strain: 'strain' },
     templates: [
+      { kind: 'shift', title: 'The Watch', hours: 13 },
       { kind: 'training', title: 'Strength — lower', hours: 1.5 },
       { kind: 'training', title: 'Strength — upper', hours: 1.5 },
       { kind: 'training', title: 'Run — hard', hours: 1 },
@@ -69,11 +92,17 @@ export const majordomoPack: VoicePack = {
       apply: 'APPLY',
       discard: 'Discard',
       applied: 'So arranged, sir.',
+      conflict: ({ title, mins, before }) =>
+        before
+          ? `${title} would end ${mins} minutes before the watch, sir.`
+          : `${title} would begin ${mins} minutes after the watch, sir.`,
     },
   },
   grounds: {
     scheduledTitle: 'On the books',
     scheduledNote: 'Booked on the Manor, sir — move or remove them there.',
+    recoveryTitle: 'RECOVERY',
+    settles: ({ day, time }) => `settles ${day} ${time}`,
   },
   study: {
     readingWeek: 'THE READING THIS WEEK',
@@ -217,6 +246,7 @@ export const majordomoPack: VoicePack = {
   watch: {
     onDuty: 'ON DUTY · THIS WEEK',
     nextWatch: 'NEXT WATCH',
+    nextIn: ({ h, m }) => (h > 0 ? `NEXT IN ${h} H ${m} M` : `NEXT IN ${m} M`),
     noneAhead: 'No watch posted, sir.',
     post: 'POST A WATCH',
     weekList: "THIS WEEK'S WATCHES",
@@ -234,8 +264,28 @@ export const majordomoPack: VoicePack = {
       "No balances yet. Add your accounts, then log a snapshot to start charting the estate's worth.",
     fxMissing: (currencies) =>
       `No ₪ rate for ${currencies.join(', ')} yet, sir — these figures are unconverted. Refresh prices.`,
+    hide: 'HIDE, SIR',
+    reveal: 'REVEAL, SIR',
+    recentEntries: 'RECENT ENTRIES',
+    addBalances: 'Update balances',
+    addSpend: 'Log a spend',
   },
   backup: {
     notExportFile: 'Not a Majordomo export file.',
+    estate: {
+      exportItem: 'Export the estate…',
+      importItem: 'Import an estate…',
+      importTitle: 'IMPORT AN ESTATE',
+      importBlurb:
+        'The whole household in one file, sir — every wing. Nothing on this device survives it.',
+      carries: 'THE FILE CARRIES',
+      takenOn: (when) => `taken ${when}`,
+      chooseFile: 'CHOOSE A FILE',
+      confirmTitle: 'Replace the estate, sir?',
+      confirmBody: (stores) =>
+        `${stores} on this device will be written over. The estate in the file takes their place.`,
+      confirmYes: 'Import it',
+      restored: 'The estate is restored, sir.',
+    },
   },
 }

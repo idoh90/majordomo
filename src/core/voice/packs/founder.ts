@@ -27,6 +27,7 @@ export const founderPack: VoicePack = {
       "No balances yet. Add your accounts, then log a snapshot to start charting the cave's worth.",
   },
   backup: {
+    ...majordomoPack.backup,
     notExportFile: 'Not a Batman Project export file.',
   },
 }
