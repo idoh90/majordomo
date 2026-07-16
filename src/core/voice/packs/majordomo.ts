@@ -278,6 +278,19 @@ export const majordomoPack: VoicePack = {
     recentEntries: 'RECENT ENTRIES',
     addBalances: 'Update balances',
     addSpend: 'Log a spend',
+    paydayMarker: 'Payday',
+    settings: {
+      title: 'The Ledger',
+      paydayLabel: 'Payday',
+      paydayBlurb:
+        'The day the pay lands, sir — a marker takes that day on the Manor, and I shall mind the snapshot.',
+      paydayOff: 'No marker',
+      privacyLabel: 'Privacy',
+      privacyBlurb: 'Blur the figures until hovered — for reading the Ledger in company.',
+      autoRefreshLabel: 'Prices on open',
+      autoRefreshBlurb:
+        'Fetch fresh quotes whenever the Ledger opens. The free tier allows 8 calls a minute, 800 a day.',
+    },
   },
   backup: {
     notExportFile: 'Not a Majordomo export file.',

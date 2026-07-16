@@ -3,6 +3,7 @@ import { useNow } from '../../core/useNow'
 import { Sheet } from '../../core/ui/Sheet'
 import { voice } from '../../core/voice'
 import { useCapitalStore } from './store'
+import { reconcilePaydayMarkers } from './lib/payday'
 import { useCapitalUi } from './uiStore'
 import type { Account, Holding, Snapshot, SpendItem } from './types'
 import { Amount } from './components/Amount'
@@ -35,6 +36,8 @@ export function CapitalScreen() {
   const blurAmounts = useCapitalStore((s) => s.blurAmounts)
   const toggleBlur = useCapitalStore((s) => s.toggleBlur)
   const refreshPrices = useCapitalStore((s) => s.refreshPrices)
+  const autoRefreshPrices = useCapitalStore((s) => s.autoRefreshPrices)
+  const paydayDay = useCapitalStore((s) => s.paydayDay)
   const now = useNow()
 
   const [snapOpen, setSnapOpen] = useState(false)
@@ -48,10 +51,16 @@ export function CapitalScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [addChooserOpen, setAddChooserOpen] = useState(false)
 
-  // refresh quotes once when the console opens (store no-ops without key/holdings)
+  // refresh quotes once when the console opens (store no-ops without
+  // key/holdings; user-gated — the manual button always works)
   useEffect(() => {
-    void refreshPrices()
-  }, [refreshPrices])
+    if (autoRefreshPrices) void refreshPrices()
+  }, [refreshPrices, autoRefreshPrices])
+
+  // payday marker heal pass on wing mount (Study's dual-mount precedent)
+  useEffect(() => {
+    reconcilePaydayMarkers(paydayDay, Date.now())
+  }, [paydayDay])
 
   // the tab bar's + posts a one-shot request through the mailbox
   const addSheetRequested = useCapitalUi((s) => s.addSheetRequested)

@@ -293,6 +293,19 @@ export interface VoicePack {
     /** the mobile + action sheet rows */
     addBalances: string
     addSpend: string
+    /** title of the allDay payday marker on the Manor */
+    paydayMarker: string
+    /** the Ledger settings sheet (grown from the API-key sheet) */
+    settings: {
+      title: string
+      paydayLabel: string
+      paydayBlurb: string
+      paydayOff: string
+      privacyLabel: string
+      privacyBlurb: string
+      autoRefreshLabel: string
+      autoRefreshBlurb: string
+    }
   }
   backup: {
     /** import rejected: wrong app tag */

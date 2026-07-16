@@ -24,6 +24,10 @@ interface CapitalState {
   recurring: RecurringExpense[]
   /** hide amounts behind a blur until hover (shoulder-surfing guard) */
   blurAmounts: boolean
+  /** day-of-month the pay lands (payday markers on the Manor); 0 = off */
+  paydayDay: number
+  /** refresh quotes automatically when the Ledger opens (free tier: 8/min · 800/day) */
+  autoRefreshPrices: boolean
 
   /* Twelve Data — user's own free read-only key, stored locally, never in git */
   apiKey: string
@@ -53,6 +57,8 @@ interface CapitalState {
   /** replace this month's one-off items, keeping every other month intact */
   setMonthItems: (month: string, items: SpendItem[]) => void
   toggleBlur: () => void
+  setPaydayDay: (day: number) => void
+  setAutoRefreshPrices: (on: boolean) => void
   setApiKey: (key: string) => void
   /** fetch quotes + FX for all holdings; no-op without a key or holdings */
   refreshPrices: () => Promise<void>
@@ -71,6 +77,8 @@ export const useCapitalStore = create<CapitalState>()(
       spendItems: [],
       recurring: [],
       blurAmounts: false,
+      paydayDay: 0,
+      autoRefreshPrices: true,
       apiKey: '',
       prices: {},
       history: {},
@@ -123,6 +131,8 @@ export const useCapitalStore = create<CapitalState>()(
           ],
         })),
       toggleBlur: () => set((s) => ({ blurAmounts: !s.blurAmounts })),
+      setPaydayDay: (day) => set({ paydayDay: Math.max(0, Math.min(31, Math.round(day))) }),
+      setAutoRefreshPrices: (on) => set({ autoRefreshPrices: on }),
       setApiKey: (key) => set({ apiKey: key.trim() }),
 
       refreshPrices: async () => {
@@ -174,7 +184,8 @@ export const useCapitalStore = create<CapitalState>()(
     }),
     {
       name: 'majordomo-capital',
-      version: 1,
+      // v2: paydayDay (0 = off) + autoRefreshPrices — additive settings
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         accounts: s.accounts,
@@ -185,12 +196,22 @@ export const useCapitalStore = create<CapitalState>()(
         spendItems: s.spendItems,
         recurring: s.recurring,
         blurAmounts: s.blurAmounts,
+        paydayDay: s.paydayDay,
+        autoRefreshPrices: s.autoRefreshPrices,
         apiKey: s.apiKey,
         prices: s.prices,
         history: s.history,
         fx: s.fx,
         pricesUpdatedAt: s.pricesUpdatedAt,
       }),
+      migrate: (persisted) => {
+        const p = (persisted ?? {}) as Partial<CapitalState>
+        return {
+          ...p,
+          paydayDay: typeof p.paydayDay === 'number' ? p.paydayDay : 0,
+          autoRefreshPrices: p.autoRefreshPrices !== false,
+        }
+      },
     },
   ),
 )

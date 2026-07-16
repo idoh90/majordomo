@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import type { ConsoleModule } from '../../core/module'
 import { voice } from '../../core/voice'
 import { useNow } from '../../core/useNow'
 import { useCapitalStore } from './store'
+import { reconcilePaydayMarkers } from './lib/payday'
 import { monthKey, monthlySpent } from './lib/budget'
 import { formatPercent } from './lib/money'
 import { holdingRow, portfolioTotals } from './lib/holdings'
@@ -46,7 +47,15 @@ function Briefing() {
   const spendItems = useCapitalStore((s) => s.spendItems)
   const recurring = useCapitalStore((s) => s.recurring)
   const monthlyBudget = useCapitalStore((s) => s.monthlyBudget)
+  const paydayDay = useCapitalStore((s) => s.paydayDay)
   const now = useNow()
+
+  // marker heal pass — the Briefing mounts on the Manor, so payday chips stay
+  // true even if the Ledger is never opened (the Study's dual-mount precedent);
+  // must sit ABOVE the early return so an empty Ledger still reconciles
+  useEffect(() => {
+    reconcilePaydayMarkers(paydayDay, Date.now())
+  }, [paydayDay])
 
   const spent = monthlySpent(monthKey(new Date(now)), spends, recurring, spendItems)
   const latest = latestSnapshot(snapshots)
