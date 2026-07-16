@@ -116,6 +116,32 @@ export function isPriced(accountId: string, holdings: Holding[]): boolean {
   return holdings.some((h) => h.accountId === accountId)
 }
 
+/**
+ * Live ₪ value of a priced account, or null the moment ANY of its holdings
+ * lacks a cached quote or a ₪ rate. The loose `accountLiveValue` is fine for
+ * a screen that can label itself ("unconverted", "fx missing") — but a value
+ * being STAMPED INTO HISTORY must never quietly be cost basis or a rate-1
+ * currency mixup. Null means: don't stamp, keep the last truthful number.
+ */
+export function accountLiveValueILSStrict(
+  accountId: string,
+  holdings: Holding[],
+  prices: Prices,
+  fx: Fx,
+): number | null {
+  const hs = holdingsFor(accountId, holdings)
+  if (hs.length === 0) return null
+  let total = 0
+  for (const h of hs) {
+    const q = quoteFor(h, prices)
+    if (!q) return null
+    const cur = priceCurrency(h, q).toUpperCase()
+    if (cur !== 'ILS' && fx[cur] == null) return null
+    total += h.shares * q.price * rateFor(cur, fx)
+  }
+  return total
+}
+
 export interface PortfolioTotals {
   marketValue: number
   costValue: number

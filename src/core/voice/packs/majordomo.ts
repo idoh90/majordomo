@@ -266,6 +266,10 @@ export const majordomoPack: VoicePack = {
       `No ₪ rate for ${currencies.join(', ')} yet, sir — these figures are unconverted. Refresh prices.`,
     hide: 'HIDE, SIR',
     reveal: 'REVEAL, SIR',
+    stampLive: 'live',
+    stampHeld: 'held',
+    stampHeldTitle:
+      'No fresh quote or ₪ rate, sir — keeping the last saved value rather than writing a wrong one.',
     recentEntries: 'RECENT ENTRIES',
     addBalances: 'Update balances',
     addSpend: 'Log a spend',

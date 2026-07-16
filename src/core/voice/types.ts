@@ -279,6 +279,11 @@ export interface VoicePack {
     /** blur-toggle pill labels: action to take (hide when shown, reveal when hidden) */
     hide: string
     reveal: string
+    /** snapshot sheet: a priced account stamped from live quotes… */
+    stampLive: string
+    /** …or held at its last saved value because quotes/₪ rate are missing */
+    stampHeld: string
+    stampHeldTitle: string
     /** recent one-off spends card title */
     recentEntries: string
     /** the mobile + action sheet rows */

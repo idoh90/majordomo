@@ -5,8 +5,9 @@ import { makeId } from '../../../core/ids'
 import { useCapitalStore } from '../store'
 import type { Snapshot } from '../types'
 import { latestSnapshot, netWorthOf } from '../lib/networth'
-import { accountLiveValue, isPriced } from '../lib/holdings'
+import { accountLiveValueILSStrict, isPriced } from '../lib/holdings'
 import { ASSET_CLASSES } from '../lib/money'
+import { voice } from '../../../core/voice'
 import { Amount } from './Amount'
 
 interface SnapshotSheetProps {
@@ -43,20 +44,30 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
 
   const parsed = useMemo(() => {
     const out: Record<string, number> = {}
+    const held: Record<string, boolean> = {}
+    const prev = latestSnapshot(snapshots)
     for (const a of accounts) {
       // live-stamp priced accounts only for NEW snapshots — editing an old
-      // point must never overwrite history with today's market value
+      // point must never overwrite history with today's market value.
+      // STRICT: a missing quote or ₪ rate must not stamp cost basis or a
+      // rate-1 currency mixup into history (updating only the cash used to
+      // silently rewrite the portfolio stamp with garbage) — hold the last
+      // saved value instead and say so.
       if (!editing && isPriced(a.id, holdings)) {
-        out[a.id] = accountLiveValue(a.id, holdings, prices, fx, 0)
+        const live = accountLiveValueILSStrict(a.id, holdings, prices, fx)
+        held[a.id] = live == null
+        out[a.id] = live ?? prev?.balances[a.id] ?? 0
       } else {
         const n = parseFloat(balances[a.id] ?? '')
         out[a.id] = Number.isFinite(n) ? n : 0
       }
     }
-    return out
-  }, [balances, accounts, holdings, prices, fx, editing])
+    return { out, held }
+  }, [balances, accounts, holdings, prices, fx, editing, snapshots])
 
-  const previewNetWorth = netWorthOf({ id: '', takenAt: '', balances: parsed }, accounts)
+  const stamped = parsed.out
+
+  const previewNetWorth = netWorthOf({ id: '', takenAt: '', balances: stamped }, accounts)
 
   const save = () => {
     // one snapshot per local day: saving again today revises today's point
@@ -65,8 +76,8 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
     const sameDay =
       !editing && latest && localDayKey(latest.takenAt) === localDayKey(new Date())
     const snap: Snapshot = editing
-      ? { id: editing.id, takenAt: editing.takenAt, balances: parsed }
-      : { id: sameDay ? latest.id : makeId(), takenAt: new Date().toISOString(), balances: parsed }
+      ? { id: editing.id, takenAt: editing.takenAt, balances: stamped }
+      : { id: sameDay ? latest.id : makeId(), takenAt: new Date().toISOString(), balances: stamped }
     saveSnapshot(snap)
     onClose()
   }
@@ -94,16 +105,29 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
           <div className="flex flex-col gap-2">
             {accounts.map((a) => {
               const liveStamped = !editing && isPriced(a.id, holdings)
+              const isHeld = liveStamped && parsed.held[a.id]
               return (
                 <div key={a.id} className="flex items-center gap-3">
                   <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: ASSET_CLASSES[a.assetClass].color }} />
                   <span className="min-w-0 flex-1 truncate text-sm text-ink">
                     {a.name}
-                    {liveStamped && <span className="ml-1.5 text-[11px] text-accent">live</span>}
+                    {liveStamped &&
+                      (isHeld ? (
+                        <span
+                          className="ml-1.5 cursor-help text-[11px] text-ink-faint"
+                          title={voice.capital.stampHeldTitle}
+                        >
+                          {voice.capital.stampHeld}
+                        </span>
+                      ) : (
+                        <span className="ml-1.5 text-[11px] text-accent">
+                          {voice.capital.stampLive}
+                        </span>
+                      ))}
                   </span>
                   {liveStamped ? (
                     <span className="w-32 py-2 pr-2.5 text-right font-display text-base font-bold text-ink-dim">
-                      <Amount value={parsed[a.id]} kind="compact" />
+                      <Amount value={stamped[a.id]} kind="compact" />
                     </span>
                   ) : (
                     <div className="relative">
