@@ -154,6 +154,31 @@ export interface FxFetch {
   errors: string[]
 }
 
+/**
+ * Keyless FX fallback — ECB daily reference rates via frankfurter.dev (free,
+ * CORS-open, no key). Used when there's no Twelve Data key, or its
+ * /exchange_rate call left gaps. Daily granularity is plenty for converting
+ * holdings to ₪.
+ */
+export async function fetchFxFallback(currencies: string[]): Promise<FxFetch> {
+  const fx: Record<string, number> = {}
+  const errors: string[] = []
+  for (const cur of currencies) {
+    const c = cur.toUpperCase()
+    if (c === 'ILS' || fx[c] != null) continue
+    try {
+      const res = await fetch(`https://api.frankfurter.dev/v1/latest?base=${c}&symbols=ILS`)
+      const json = (await res.json()) as { rates?: Record<string, number> }
+      const rate = json.rates?.ILS
+      if (typeof rate === 'number' && Number.isFinite(rate)) fx[c] = rate
+      else errors.push(`${c}/ILS: no rate`)
+    } catch {
+      errors.push(`${c}/ILS: network error`)
+    }
+  }
+  return { fx, errors }
+}
+
 export async function fetchFxToILS(currencies: string[], apiKey: string): Promise<FxFetch> {
   const fx: Record<string, number> = { ILS: 1 }
   const errors: string[] = []

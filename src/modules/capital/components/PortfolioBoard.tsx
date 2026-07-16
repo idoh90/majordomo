@@ -109,7 +109,11 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
                     <td className={`py-2 text-right tabular-nums ${sign(r.dayChange)}`}>
                       {r.quote ? (
                         <>
-                          <Amount value={r.dayChange} kind="delta" />
+                          {r.unconvertedCurrency ? (
+                            nativeDelta(r.dayChange, r.unconvertedCurrency)
+                          ) : (
+                            <Amount value={r.dayChange} kind="delta" />
+                          )}
                           {r.dayChangePct != null && (
                             <span className="block text-[10px] text-ink-faint">{formatPercent(r.dayChangePct)}</span>
                           )}
@@ -119,10 +123,19 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
                       )}
                     </td>
                     <td className="py-2 text-right tabular-nums text-ink">
-                      <Amount value={r.marketValue} kind="compact" />
+                      {/* no ₪ rate → keep the number honest: label it in its own currency */}
+                      {r.unconvertedCurrency ? (
+                        nativePrice(r.marketValue, r.unconvertedCurrency)
+                      ) : (
+                        <Amount value={r.marketValue} kind="compact" />
+                      )}
                     </td>
                     <td className={`py-2 text-right tabular-nums ${sign(r.unrealized)}`}>
-                      <Amount value={r.unrealized} kind="delta" />
+                      {r.unconvertedCurrency ? (
+                        nativeDelta(r.unrealized, r.unconvertedCurrency)
+                      ) : (
+                        <Amount value={r.unrealized} kind="delta" />
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -181,6 +194,11 @@ function nativePrice(price: number, currency: string): string {
   } catch {
     return price.toFixed(2)
   }
+}
+
+function nativeDelta(n: number, currency: string): string {
+  const sign = n > 0 ? '+' : n < 0 ? '−' : ''
+  return `${sign}${nativePrice(Math.abs(n), currency)}`
 }
 
 function agoLabel(iso: string): string {

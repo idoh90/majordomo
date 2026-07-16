@@ -63,6 +63,9 @@ export interface HoldingRow {
   dayChange: number // ₪
   dayChangePct: number | null
   priced: boolean // true when a live quote drove marketValue
+  /** set when the value's currency has NO ₪ rate — the numbers above are in
+   *  THIS currency, not ₪, and the UI must label them as such */
+  unconvertedCurrency: string | null
 }
 
 export function holdingRow(h: Holding, prices: Prices, fx: Fx): HoldingRow {
@@ -72,6 +75,7 @@ export function holdingRow(h: Holding, prices: Prices, fx: Fx): HoldingRow {
   const marketValue = mvLive ?? cost
   const unrealized = marketValue - cost
   const day = dayChangeILS(h, prices, fx) ?? 0
+  const valueCurrency = (q ? priceCurrency(h, q) : h.currency).toUpperCase()
   return {
     holding: h,
     quote: q,
@@ -82,6 +86,7 @@ export function holdingRow(h: Holding, prices: Prices, fx: Fx): HoldingRow {
     dayChange: day,
     dayChangePct: q ? q.price / q.prevClose - 1 : null,
     priced: mvLive != null,
+    unconvertedCurrency: valueCurrency !== 'ILS' && fx[valueCurrency] == null ? valueCurrency : null,
   }
 }
 

@@ -3,7 +3,8 @@ import { Sheet } from '../../../core/ui/Sheet'
 import { ConfirmDialog } from '../../../core/ui/ConfirmDialog'
 import { useCapitalStore } from '../store'
 import type { Holding } from '../types'
-import { ASSET_CLASSES } from '../lib/money'
+import { ASSET_CLASSES, formatILS } from '../lib/money'
+import { latestSnapshot } from '../lib/networth'
 
 interface HoldingSheetProps {
   open: boolean
@@ -16,6 +17,8 @@ const CURRENCIES = ['USD', 'EUR', 'GBP', 'ILS']
 
 export function HoldingSheet({ open, editing, onClose, onAddAccount }: HoldingSheetProps) {
   const accounts = useCapitalStore((s) => s.accounts)
+  const holdings = useCapitalStore((s) => s.holdings)
+  const snapshots = useCapitalStore((s) => s.snapshots)
   const addHolding = useCapitalStore((s) => s.addHolding)
   const updateHolding = useCapitalStore((s) => s.updateHolding)
   const deleteHolding = useCapitalStore((s) => s.deleteHolding)
@@ -151,7 +154,7 @@ export function HoldingSheet({ open, editing, onClose, onAddAccount }: HoldingSh
         <ConfirmDialog
           open={confirming}
           title="Delete holding?"
-          message={`Removes ${editing.symbol.toUpperCase()} from the portfolio.`}
+          message={deleteMessage(editing, holdings, snapshots, accounts)}
           confirmLabel="Delete"
           onCancel={() => setConfirming(false)}
           onConfirm={() => {
@@ -163,6 +166,27 @@ export function HoldingSheet({ open, editing, onClose, onAddAccount }: HoldingSh
       )}
     </Sheet>
   )
+}
+
+/**
+ * Deleting an account's LAST holding un-prices it: the account's value falls
+ * back to its latest snapshot balance — which was live-stamped while the
+ * holding existed, so the net-worth total barely moves. Say so up front,
+ * or the delete looks like it "didn't refresh".
+ */
+function deleteMessage(
+  editing: Holding,
+  holdings: Holding[],
+  snapshots: Parameters<typeof latestSnapshot>[0],
+  accounts: { id: string; name: string }[],
+): string {
+  const base = `Removes ${editing.symbol.toUpperCase()} from the portfolio.`
+  const others = holdings.some((h) => h.accountId === editing.accountId && h.id !== editing.id)
+  if (others) return base
+  const fallback = latestSnapshot(snapshots)?.balances[editing.accountId] ?? 0
+  if (fallback === 0) return base
+  const name = accounts.find((a) => a.id === editing.accountId)?.name ?? 'The account'
+  return `${base} ${name} then reads its saved balance (${formatILS(fallback)}) again — run "Update balances" and set it if that's stale.`
 }
 
 function Field({

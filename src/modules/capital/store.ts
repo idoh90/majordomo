@@ -5,7 +5,7 @@ import { adoptLegacyKey } from '../../core/storage'
 import { localDayKey } from '../../core/dates'
 import type { Account, Holding, Quote, RecurringExpense, Snapshot, SpendItem } from './types'
 import { monthKey } from './lib/budget'
-import { fetchFxToILS, fetchQuotes, fetchTimeSeries, type Candle } from './lib/prices'
+import { fetchFxFallback, fetchFxToILS, fetchQuotes, fetchTimeSeries, type Candle } from './lib/prices'
 
 adoptLegacyKey('majordomo-capital', 'batman-capital')
 
@@ -127,10 +127,14 @@ export const useCapitalStore = create<CapitalState>()(
 
       refreshPrices: async () => {
         const { apiKey, holdings, pricesLoading } = get()
-        if (pricesLoading || !apiKey || holdings.length === 0) return
+        // no key still refreshes FX (keyless fallback) so ₪ conversion works;
+        // quotes/history need the Twelve Data key
+        if (pricesLoading || holdings.length === 0) return
         set({ pricesLoading: true, pricesError: null })
         try {
-          const { quotes, errors } = await fetchQuotes(holdings, apiKey)
+          const { quotes, errors } = apiKey
+            ? await fetchQuotes(holdings, apiKey)
+            : { quotes: {}, errors: [] }
           // FX for every currency in play: holdings' declared currencies (cost
           // basis converts even before a quote lands) + fresh AND cached quote
           // currencies (the exchange may quote in a different one)
@@ -141,13 +145,24 @@ export const useCapitalStore = create<CapitalState>()(
               ...Object.values(get().prices).map((q) => q.currency),
             ]),
           ]
-          const { fx, errors: fxErrors } = await fetchFxToILS(currencies, apiKey)
-          const { history, errors: histErrors } = await fetchTimeSeries(holdings, apiKey)
+          const fxPrimary = apiKey
+            ? await fetchFxToILS(currencies, apiKey)
+            : { fx: { ILS: 1 }, errors: [] }
+          // fill any gaps from the keyless source; report only what BOTH missed
+          const have = { ...get().fx, ...fxPrimary.fx }
+          const gaps = currencies.filter((c) => c.toUpperCase() !== 'ILS' && have[c.toUpperCase()] == null)
+          const fxFallback = gaps.length ? await fetchFxFallback(gaps) : { fx: {}, errors: [] }
+          const fxErrors = gaps
+            .filter((c) => fxFallback.fx[c.toUpperCase()] == null)
+            .map((c) => `${c.toUpperCase()}/ILS: no rate`)
+          const { history, errors: histErrors } = apiKey
+            ? await fetchTimeSeries(holdings, apiKey)
+            : { history: {}, errors: [] }
           const problems = [...errors, ...fxErrors, ...histErrors]
           set((s) => ({
             prices: { ...s.prices, ...quotes },
             history: { ...s.history, ...history },
-            fx: { ...s.fx, ...fx },
+            fx: { ...s.fx, ...fxPrimary.fx, ...fxFallback.fx },
             pricesUpdatedAt: new Date().toISOString(),
             pricesError: problems.length ? problems.join(' · ') : null,
             pricesLoading: false,
