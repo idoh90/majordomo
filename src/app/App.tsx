@@ -148,7 +148,7 @@ function AppHeader({
       </div>
 
       {/* header tabs are desktop chrome — the mobile tab bar owns navigation below md */}
-      <nav className="hidden flex-wrap gap-x-5 gap-y-1 sm:ml-2 md:flex" aria-label="Views">
+      <nav className="hidden flex-wrap gap-x-5 gap-y-1 md:ml-2 md:flex" aria-label="Views">
         {tabs.map((t) => {
           const on = view === t.id
           return (
