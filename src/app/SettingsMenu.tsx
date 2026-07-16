@@ -1,6 +1,14 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import type { Workout } from '../modules/training/types'
 import { downloadJson, parseImport, serializeExport } from '../modules/training/lib/backup'
+import {
+  STORE_LABEL,
+  applyEstate,
+  parseEstate,
+  serializeEstate,
+  type EstateFile,
+  type EstatePreview,
+} from '../core/backup'
 import { localDayKey } from '../core/dates'
 import { SKINS, SKIN_IDS } from '../core/ui/skins'
 import { voice } from '../core/voice'
@@ -27,11 +35,18 @@ export function SettingsMenu() {
       import.meta.env.DEV && new URLSearchParams(window.location.search).get('sheet') === 'skin',
   )
   const [importOpen, setImportOpen] = useState(false)
+  const [estateOpen, setEstateOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const exportFile = () => {
     downloadJson(`majordomo-training-${localDayKey(new Date())}.json`, serializeExport(workouts))
+    setMenuOpen(false)
+  }
+
+  /** the whole household — every wing's store, for moving between devices */
+  const exportEstate = () => {
+    downloadJson(`majordomo-estate-${localDayKey(new Date())}.json`, serializeEstate())
     setMenuOpen(false)
   }
 
@@ -124,15 +139,27 @@ export function SettingsMenu() {
               </div>
             </div>
             <div className="border-t border-line" />
-            <MenuItem onClick={exportFile}>Export backup file</MenuItem>
-            <MenuItem onClick={copyJson}>{copied ? 'Copied ✓' : 'Copy backup JSON'}</MenuItem>
+            {/* the estate: every wing, for moving between devices/origins */}
+            <MenuItem onClick={exportEstate}>{voice.backup.estate.exportItem}</MenuItem>
+            <MenuItem
+              onClick={() => {
+                setMenuOpen(false)
+                setEstateOpen(true)
+              }}
+            >
+              {voice.backup.estate.importItem}
+            </MenuItem>
+            <div className="border-t border-line" />
+            {/* the training-only pair — older files, and the workouts alone */}
+            <MenuItem onClick={exportFile}>Export workouts only</MenuItem>
+            <MenuItem onClick={copyJson}>{copied ? 'Copied ✓' : 'Copy workouts JSON'}</MenuItem>
             <MenuItem
               onClick={() => {
                 setMenuOpen(false)
                 setImportOpen(true)
               }}
             >
-              Import backup…
+              Import workouts…
             </MenuItem>
             <div className="border-t border-line" />
             <MenuItem
@@ -153,6 +180,8 @@ export function SettingsMenu() {
       <SkinSheet open={skinOpen} onClose={() => setSkinOpen(false)} />
 
       <ImportSheet open={importOpen} onClose={() => setImportOpen(false)} onImport={replaceAll} />
+
+      <EstateImportSheet open={estateOpen} onClose={() => setEstateOpen(false)} />
 
       <ConfirmDialog
         open={confirmClear}
@@ -365,6 +394,113 @@ function ImportSheet({
         Replace &amp; Import
       </button>
     </Sheet>
+  )
+}
+
+/**
+ * The estate import — the whole household from one file. The blobs land
+ * verbatim and the app reloads: the stores rehydrated long ago, so only a
+ * fresh boot can be trusted to read the new estate.
+ */
+function EstateImportSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState<{ file: EstateFile; preview: EstatePreview } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const parsed = parseEstate(String(reader.result ?? ''))
+      if (!parsed.ok) {
+        setError(parsed.error)
+        setPending(null)
+        return
+      }
+      setError(null)
+      setPending({ file: parsed.file, preview: parsed.preview })
+    }
+    reader.onerror = () => setError('Could not read that file.')
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  const close = () => {
+    setError(null)
+    setPending(null)
+    onClose()
+  }
+
+  const stores = pending?.preview.keys.map((k) => STORE_LABEL[k] ?? k) ?? []
+
+  return (
+    <>
+      <Sheet open={open} onClose={close}>
+        <h2 className="mb-1 font-display text-xl font-bold tracking-wide">
+          {voice.backup.estate.importTitle}
+        </h2>
+        <p className="mb-4 text-sm text-ink-dim">{voice.backup.estate.importBlurb}</p>
+
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="btn-soft w-full py-3 text-sm"
+        >
+          {voice.backup.estate.chooseFile}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={handleFile}
+        />
+
+        {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+
+        {pending && (
+          <div className="mt-4">
+            <div className="text-[10px] tracking-[0.2em] text-ink-faint">
+              {voice.backup.estate.carries}
+            </div>
+            <div className="mt-2 flex flex-col gap-1.5">
+              {pending.preview.keys.map((k) => (
+                <div key={k} className="card flex items-center gap-2.5 px-3.5 py-2 text-[13px]">
+                  <span
+                    className="h-1.5 w-1.5 flex-none rounded-full"
+                    style={{ background: 'var(--color-accent)' }}
+                  />
+                  {STORE_LABEL[k] ?? k}
+                </div>
+              ))}
+            </div>
+            {pending.preview.exportedAt && (
+              <div className="mt-2 text-[11px] italic text-ink-dim">
+                {voice.backup.estate.takenOn(
+                  new Date(pending.preview.exportedAt).toLocaleString(),
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Sheet>
+
+      <ConfirmDialog
+        open={pending !== null && open}
+        title={voice.backup.estate.confirmTitle}
+        message={voice.backup.estate.confirmBody(stores.join(', '))}
+        confirmLabel={voice.backup.estate.confirmYes}
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          if (!pending) return
+          applyEstate(pending.file)
+          // the stores read localStorage once, at module load — only a reload
+          // reflects the new estate
+          window.location.reload()
+        }}
+      />
+    </>
   )
 }
 
