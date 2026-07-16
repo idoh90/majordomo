@@ -1,7 +1,11 @@
-import { useEffect, useReducer } from 'react'
+import { useEffect, useMemo, useReducer } from 'react'
 import type { MuscleId, PplType, RepStyle, Workout } from '../../types'
 import { PPL_MAP, RUN_MAP } from '../../data/muscles'
 import { makeId, useWorkoutStore } from '../../store'
+import { linkedEventIds, matchTrainingEvent } from '../../lib/fulfillment'
+import { useEventsStore } from '../../../../core/events/store'
+import { relativeDayLabel } from '../../../../core/dates'
+import { voice } from '../../../../core/voice'
 import { Sheet } from '../../../../core/ui/Sheet'
 import { EffortStep } from './EffortStep'
 import { MethodStep } from './MethodStep'
@@ -152,11 +156,28 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
   const addWorkout = useWorkoutStore((s) => s.addWorkout)
   const updateWorkout = useWorkoutStore((s) => s.updateWorkout)
   const workouts = useWorkoutStore((s) => s.workouts)
+  // COMMITTED events only — a what-if rehearsal must never be linked against
+  const events = useEventsStore((s) => s.events)
   const [draft, dispatch] = useReducer(reducer, undefined, freshDraft)
 
   useEffect(() => {
     if (open) dispatch({ type: 'reset', draft: editing ? draftFromWorkout(editing) : freshDraft() })
   }, [open, editing])
+
+  /** the scheduled block this session would fulfil (log-fulfills-block).
+   *  Editing without touching the time keeps the existing link untouched. */
+  const matchedEvent = useMemo(() => {
+    if (editing && draft.performedAt === editing.performedAt) {
+      return editing.eventId ? (events.find((e) => e.id === editing.eventId) ?? null) : null
+    }
+    const linked = linkedEventIds(workouts)
+    if (editing?.eventId) linked.delete(editing.eventId) // its own block stays claimable
+    return matchTrainingEvent(events, draft.performedAt, linked)
+  }, [events, workouts, draft.performedAt, editing])
+
+  const fulfilsLine = matchedEvent
+    ? voice.grounds.fulfils({ day: relativeDayLabel(matchedEvent.start, new Date()) })
+    : null
 
   const save = () => {
     const primary: MuscleId[] = []
@@ -172,8 +193,19 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
       const n = Number(s)
       return s.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined
     }
+    const performedAt = draft.whenTouched ? draft.performedAt : new Date().toISOString()
+    // re-resolve at save-instant: an untouched new workout stamps NOW, and a
+    // rematch that finds nothing must clear a stale link (eventId: undefined)
+    const eventId =
+      editing && performedAt === editing.performedAt
+        ? editing.eventId
+        : (() => {
+            const linked = linkedEventIds(workouts)
+            if (editing?.eventId) linked.delete(editing.eventId)
+            return matchTrainingEvent(events, performedAt, linked)?.id
+          })()
     const base = {
-      performedAt: draft.whenTouched ? draft.performedAt : new Date().toISOString(),
+      performedAt,
       method: draft.method ?? 'custom',
       ppl: draft.method === 'ppl' ? (draft.ppl ?? undefined) : undefined,
       run:
@@ -185,6 +217,7 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
       effort: draft.effort,
       strainFeel: draft.strainFeel,
       repStyle: draft.repStyle,
+      eventId,
     }
     if (editing) updateWorkout(editing.id, base)
     else addWorkout({ ...base, id: makeId(), createdAt: new Date().toISOString() })
@@ -263,6 +296,7 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
             onPerformedAt={(value) => dispatch({ type: 'performedAt', value })}
             workouts={workouts}
             onSave={save}
+            fulfilsLine={fulfilsLine}
             whenInitiallyOpen={devWhenOpen}
           />
         )}

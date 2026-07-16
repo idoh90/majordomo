@@ -135,6 +135,10 @@ export interface VoicePack {
     /** recovery card: title + per-muscle settle line */
     recoveryTitle: string
     settles: (v: { day: string; time: string }) => string
+    /** passive line over the save button when the session will fulfil a booked block */
+    fulfils: (v: { day: string }) => string
+    /** dim tag on a booked block that already has a workout linked */
+    fulfilledTag: string
   }
   study: {
     /** rings hero card title */

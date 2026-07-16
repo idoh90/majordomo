@@ -57,7 +57,9 @@ export const useWorkoutStore = create<WorkoutState>()(
     }),
     {
       name: 'majordomo-training',
-      version: 4,
+      // v5: workouts may carry an optional eventId (the Manor block a session
+      // fulfils) — additive, so older blobs/exports just come through unlinked
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         workouts: s.workouts,
@@ -70,7 +72,11 @@ export const useWorkoutStore = create<WorkoutState>()(
           Pick<WorkoutState, 'workouts' | 'weeklyGoal' | 'profile' | 'skin'>
         >
         return {
-          workouts: p.workouts ?? [],
+          workouts: (p.workouts ?? []).map((w) =>
+            typeof w.eventId === 'string' || w.eventId === undefined
+              ? w
+              : { ...w, eventId: undefined },
+          ),
           weeklyGoal: p.weeklyGoal ?? DEFAULT_WEEKLY_GOAL,
           // merge so older exports missing new tunables still get sane defaults
           profile: { ...DEFAULT_PROFILE, ...(p.profile ?? {}) },

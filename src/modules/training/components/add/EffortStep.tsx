@@ -24,6 +24,8 @@ interface EffortStepProps {
   onPerformedAt: (iso: string) => void
   workouts: Workout[]
   onSave: () => void
+  /** passive log-fulfills-block note ("This fulfils Tuesday's block, sir.") */
+  fulfilsLine?: string | null
   /** dev screenshot aid — start with the calendar expanded */
   whenInitiallyOpen?: boolean
 }
@@ -42,6 +44,7 @@ export function EffortStep({
   onPerformedAt,
   workouts,
   onSave,
+  fulfilsLine,
   whenInitiallyOpen,
 }: EffortStepProps) {
   const [whenOpen, setWhenOpen] = useState(whenInitiallyOpen ?? false)
@@ -157,10 +160,20 @@ export function EffortStep({
         )}
       </div>
 
+      {fulfilsLine && (
+        <p className="mt-4 flex items-center gap-2 text-xs text-ink-dim">
+          <span
+            aria-hidden
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ background: 'var(--color-w-grounds)' }}
+          />
+          {fulfilsLine}
+        </p>
+      )}
       <button
         type="button"
         onClick={onSave}
-        className="btn-cta mt-6 w-full py-3.5 text-lg transition active:scale-[0.99]"
+        className={`btn-cta w-full py-3.5 text-lg transition active:scale-[0.99] ${fulfilsLine ? 'mt-2.5' : 'mt-6'}`}
       >
         {editing ? 'Save Changes' : isRun ? 'Save Run' : 'Save Workout'}
       </button>

@@ -46,6 +46,7 @@ function isWorkout(x: unknown): x is Workout {
       w.repStyle === 'light' ||
       w.repStyle === 'mixed' ||
       w.repStyle === 'heavy') &&
+    (w.eventId === undefined || typeof w.eventId === 'string') &&
     Array.isArray(w.primary) &&
     w.primary.every(isMuscleId) &&
     Array.isArray(w.secondary) &&

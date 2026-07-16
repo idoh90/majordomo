@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { useEventsStore } from '../../../../core/events/store'
 import { addDays, localDayKey, timeLabel } from '../../../../core/dates'
 import { voice } from '../../../../core/voice'
+import { useWorkoutStore } from '../../store'
+import { linkedEventIds } from '../../lib/fulfillment'
 
 const SHOW = 5
 
@@ -9,6 +11,7 @@ const SHOW = 5
  *  Manor owns moving/removing them. Renders nothing when none are ahead. */
 export function ScheduledCard({ now }: { now: number }) {
   const events = useEventsStore((s) => s.events)
+  const workouts = useWorkoutStore((s) => s.workouts)
 
   // events are stored start-ascending; keep in-progress + future sessions
   const upcoming = useMemo(
@@ -18,6 +21,8 @@ export function ScheduledCard({ now }: { now: number }) {
       ),
     [events, now],
   )
+  // blocks already claimed by a logged workout (log-fulfills-block)
+  const logged = useMemo(() => linkedEventIds(workouts), [workouts])
 
   if (upcoming.length === 0) return null
 
@@ -53,7 +58,11 @@ export function ScheduledCard({ now }: { now: number }) {
                 style={{ background: 'var(--color-w-grounds)' }}
               />
               <span className="min-w-0 flex-1 truncate text-ink">{e.title}</span>
-              {inProgress ? (
+              {logged.has(e.id) ? (
+                <span className="shrink-0 text-[10px] font-semibold tracking-[0.14em] text-ink-faint">
+                  {voice.grounds.fulfilledTag}
+                </span>
+              ) : inProgress ? (
                 <span className="shrink-0 text-[11px] font-semibold tracking-[0.12em] text-accent">
                   NOW
                 </span>

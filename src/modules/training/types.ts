@@ -54,6 +54,10 @@ export interface Workout {
   strainFeel: number
   /** affects load and recovery speed; absent on older data = 'mixed' */
   repStyle?: RepStyle
+  /** id of the Manor training block this session fulfils (auto-matched at
+      save). Purely a link: strain never reads it, and a dangling id (block
+      later deleted) is treated as unlinked everywhere. */
+  eventId?: string
 }
 
 /**
