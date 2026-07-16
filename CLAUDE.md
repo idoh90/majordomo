@@ -34,6 +34,29 @@ the lines it invalidates.
 - `npm run lint` — ESLint, **import-boundary rules only** (no style rules)
 - No test runner; verification is done in the browser.
 
+## Ship: it is live
+
+**https://majordomo-cyan.vercel.app** — private repo `idoh90/majordomo` → Vercel
+project `ido-s-projects8/majordomo` (**note: two different accounts** — GitHub is
+idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushing
+`main` auto-deploys to production; `vercel deploy --prod` still ships from disk.
+
+- **Offline is the point.** No backend, no accounts — the estate lives in
+  localStorage, so the shell being fetchable is the only thing between the app
+  and a flight. `vite-plugin-pwa` precaches everything (`autoUpdate`); quotes/FX
+  are `NetworkFirst` with a cached fallback. **Test offline by killing the server
+  and reloading** — not by trusting the config.
+- **`vercel.json` rationale** (the schema rejects `comment` keys, so it lives here):
+  hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
+  cached** or the app can't learn it's stale; `noindex` + frame/sniff headers
+  because this is a personal estate, not a public product.
+- **`.vercelignore` only governs CLI uploads** — a Git build clones the whole repo.
+  Harmless (only `dist/` is served), but never rely on it to hide anything.
+- **Origins don't share storage.** `localhost:5173` and the deployed app are
+  different estates. Moving between them is gear → **Export/Import an estate**
+  (`core/backup.ts`) — the M0 backup ritual. That file carries the Twelve Data
+  **API key**; treat an export as a secret.
+
 ## Stack
 
 Vite 7 + React 19 + TypeScript, Tailwind CSS v4 (tokens in `src/core/ui/index.css`
