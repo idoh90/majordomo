@@ -47,7 +47,20 @@ export default function App() {
   return (
     <>
       <AmbientLayer />
-      <div className="mx-auto min-h-dvh w-full max-w-[1280px] px-4 pb-[calc(88px+env(safe-area-inset-bottom))] md:pb-10 lg:px-8">
+      {/* Installed to a home screen, black-translucent + viewport-fit=cover run
+          the page under the iOS status bar. Reserve that inset (zero in a
+          browser tab) and give scrolled content a glass strip to pass under —
+          otherwise the wordmark sits beneath the clock. */}
+      <div
+        aria-hidden
+        className="fixed inset-x-0 top-0 z-40 h-[env(safe-area-inset-top)]"
+        style={{
+          background: 'color-mix(in srgb, var(--color-bg) 82%, transparent)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+        }}
+      />
+      <div className="mx-auto min-h-dvh w-full max-w-[1280px] px-4 pb-[calc(88px+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:pb-10 lg:px-8">
         {!storageOk && (
           <div className="mt-3 rounded-xl border border-danger/40 bg-danger/10 px-4 py-2.5 text-sm text-ink">
             {voice.storageWarning}
