@@ -93,6 +93,31 @@ export interface VoicePack {
        *  hasn't started yet, so the soreness is predicted, not logged. */
       tooltip: (v: { names: string[]; forecast: boolean }) => string
     }
+    /** the butler's briefing: greetings + contextual heads-up lines. Prose,
+     *  not notifications — no dismissal, they expire with their condition.
+     *  Voice bible: dry, at most one sentence-final "sir", never begs. */
+    headsUp: {
+      /** the 1st of the month */
+      monthGreeting: (month: string) => string
+      /** the week-start day (weekday name per the weekStart setting) */
+      weekGreeting: (day: string) => string
+      /** a training block passed with nothing logged against it */
+      unfiledWorkout: (v: { day: string }) => string
+      /** an exam inside a week with no study booked for its subject */
+      examUnbooked: (v: { subject: string; days: number }) => string
+      /** Thu/Fri and next week carries no watches yet */
+      nextWeekWatches: string
+      /** week-start day and the week is nearly empty */
+      weekPlan: string
+      /** payday passed, no snapshot this month yet */
+      snapshotNudge: string
+      /** a night watch starts this evening */
+      nightTonight: string
+      /** past study sessions still awaiting their report */
+      awaitingReport: (n: number) => string
+      /** weekly training goal short with the week nearly over */
+      goalBehind: (v: { done: number; goal: number }) => string
+    }
     whatIf: {
       button: string
       banner: string

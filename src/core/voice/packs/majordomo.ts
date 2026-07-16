@@ -81,6 +81,28 @@ export const majordomoPack: VoicePack = {
         return forecast ? `${list} — hot by then, sir.` : `${list} — still hot, sir.`
       },
     },
+    headsUp: {
+      monthGreeting: (month) => `Happy ${month}, sir.`,
+      weekGreeting: (day) => `Happy ${day}.`,
+      unfiledWorkout: ({ day }) => {
+        const d = day === 'Today' || day === 'Yesterday' ? day.toLowerCase() : day
+        return `${d === 'today' || d === 'yesterday' ? `${d[0].toUpperCase()}${d.slice(1)}'s` : `${d}'s`} training block passed unrecorded — file the details and the strain engine will count it, sir.`
+      },
+      examUnbooked: ({ subject, days }) =>
+        `The ${subject} exam is ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`} with nothing on the books, sir.`,
+      nextWeekWatches:
+        'Next week carries no watches yet — worth putting them on the books while the week is still soft.',
+      weekPlan: 'The week is a blank page, sir. The watches and training slots, when you have a moment.',
+      snapshotNudge:
+        'The pay should have landed — a fresh snapshot of the balances would keep the ledger honest, sir.',
+      nightTonight: 'A night watch tonight — the afternoon belongs to sleep, sir.',
+      awaitingReport: (n) =>
+        n === 1
+          ? 'A study session awaits its report, sir.'
+          : `${n} study sessions await their report, sir.`,
+      goalBehind: ({ done, goal }) =>
+        `${done} session${done === 1 ? '' : 's'} of ${goal} this week, sir, with the week nearly out.`,
+    },
     whatIf: {
       button: '⧉ WHAT-IF',
       banner: 'The ledger is sandboxed, sir. Nothing binds until you apply.',
