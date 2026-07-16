@@ -49,13 +49,16 @@ that never ships.
    `prefers-reduced-motion` always respected. (Ambient loops were built in M1
    and later removed — idle animation cost on old machines; no background
    motion ships.)
-4. **The duty-cycle week grid** (direction 1a) — each column spans
-   `[seam, seam+24h)`, seam = 16:00 constant for now (auto "quietest hour" is
-   backlog). A 19:00→08:00 night watch renders as ONE block; midnight is a dashed
-   accent line inside the column. Events crossing the *seam* split across columns
-   with dotted "continues" edges; the month view uses "→ until 08:00"
-   continuation chips. Honors the `weekStart` setting. Mobile = one duty-cycle
-   column per screen, day chips, swipe.
+4. **The week grid** — each column spans `[seam, seam+24h)` with
+   `SEAM_HOUR = 0` (`core/events/lib.ts`): ordinary calendar days, which read
+   fastest. A 19:00→08:00 night watch splits across its two columns with
+   dotted "continues" edges — the data is never day-bucketed, only its
+   rendering. The month view uses "→ until 08:00" continuation chips for any
+   timed cross-midnight event. Honors the `weekStart` setting. Mobile = one
+   column per screen, day chips, snap scrolling. *(The original direction-1a
+   duty-cycle seam — 16:00, so a night watch renders as ONE block — shipped,
+   was lived with at 12:00, and was reverted to 0 in `f138a3c`; it remains one
+   constant away, and the auto "quietest hour" seam stays backlog.)*
 5. **Event schema** (`src/core/events/`) —
    `CalendarEvent { id, source, sourceRef?, kind, title, start, end, allDay?, notes?, updatedAt }`
    with ISO-instant `start`/`end` (exclusive end; cross-midnight is natural data,
@@ -106,12 +109,12 @@ that never ships.
 
 | # | Milestone | Contents | Gate |
 |---|---|---|---|
-| ✅ M0 | Foundation | git baseline · this doc · CLAUDE.md Direction section · **USER: backup ritual (still pending)** | docs committed |
+| ✅ M0 | Foundation | git baseline · this doc · CLAUDE.md Direction section · backup ritual (in-app since `6acb553`) | docs committed |
 | ✅ M1 | Theme foundation | fonts · new tokens + 3 preset bundles · SKINS entries + founder split · DEFAULT_SKIN midnight · shell v2 normalize · AmbientLayer *(later removed — idle cost)* · voice scaffold + wave-1 strings | old screens legible under midnight; screenshots ×3 presets |
-| 🟡 M2 | New shell + identity | tab header ✓ · view state ✓ · old shell furniture deleted ✓ · identity sweep ✓ · check-brand gate ✓ · **key renames: waiting on the backup ritual** | check-brand clean; real data intact |
-| ✅ M3 | Events + Manor read-only | core/events store+lib · seamed WeekGrid (desktop+mobile) · month view · empty state · popover · briefing strip · ?demo fixtures | night watch = one block ✓ |
+| ✅ M2 | New shell + identity | tab header · view state · old shell furniture deleted · identity sweep · check-brand gate · key renames (`f83b742`, backup ritual `6acb553`) | check-brand clean; real data intact |
+| ✅ M3 | Events + Manor read-only | core/events store+lib · seamed WeekGrid (desktop+mobile) · month view · empty state · popover · briefing strip · ?demo fixtures | night watch renders whole ✓ *(one block under the original seam; splits with dotted continues edges since SEAM_HOUR = 0)* |
 | ✅ M4 | The Watch | POST A WATCH strip · ON DUTY ring · NEXT WATCH · week list · sleep pencilled after nights · eslint zone · nav mailbox | posting a watch lands it on the Manor ✓ |
-| ✅ M5 | Interactions | quick-add popover · drag engine (desktop; mobile drag backlog) · confirm/toast/undo | drag/quick-add exercised in browser ✓ |
+| ✅ M5 | Interactions | quick-add popover · drag engine (desktop + mobile: 350ms long-press, day-chip drop targets, edge auto-scroll) · confirm/toast/undo | drag/quick-add exercised in browser ✓ |
 | ✅ M6 | What-if | draft fork in events store · ghosts · diff panel · APPLY/Discard bar | discard leaves base blob byte-identical ✓ |
 | M7 | The Grounds | full restyle, ALL old features kept · additive design cards · strain↔Manor bridge · log-fulfills-block | every pre-pivot training feature reachable |
 | M8 | The Ledger | token-restyle QA · payday markers · tab polish | all capital sheets legible ×3 presets |

@@ -314,4 +314,12 @@ export interface VoicePack {
       restored: string
     }
   }
+  settings: {
+    /** gear menu item: strike the workout log (and ONLY the workout log) */
+    clearWorkouts: string
+    clearWorkoutsTitle: string
+    /** confirm body — must say the other wings keep their records */
+    clearWorkoutsBody: (n: number) => string
+    clearWorkoutsYes: string
+  }
 }

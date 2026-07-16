@@ -292,4 +292,11 @@ export const majordomoPack: VoicePack = {
       restored: 'The estate is restored, sir.',
     },
   },
+  settings: {
+    clearWorkouts: 'Clear the workout log…',
+    clearWorkoutsTitle: 'Clear the workout log, sir?',
+    clearWorkoutsBody: (n) =>
+      `All ${n} workout${n === 1 ? '' : 's'} on this device are struck. The other wings keep their records.`,
+    clearWorkoutsYes: 'Clear the log',
+  },
 }

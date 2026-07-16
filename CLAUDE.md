@@ -106,12 +106,14 @@ export type ConsoleModule = {
 ```
 
 Components are prop-less: a console reads its own stores inside its wrappers
-(see `modules/training/index.tsx`). The shell renders every console's `Briefing`
-on **all** views (menu and open console), the menu grid from `app/consoles.ts`
-(offline tiles greyed/disabled), and the active console's `Screen` behind a back
-button. The header's Log Workout button renders **only while Training is open**
-and reaches the add sheet via a one-shot mailbox (`modules/training/uiStore.ts`
-`requestAddSheet`) — never lift console state into the shell for this.
+(see `modules/training/index.tsx`). Every wing's `Briefing` renders on the
+**Manor only** (`ManorScreen.tsx`, below the grid) — not on the wing screens;
+navigation is the tab header (desktop) / `TabBar` (mobile) over `CONSOLES` in
+`app/consoles.ts`. The header's Log Workout button renders **only while the
+Grounds is open** and reaches the add sheet via a one-shot mailbox
+(`modules/training/uiStore.ts` `requestAddSheet`) — never lift console state
+into the shell for this. (`ConsoleModule.Tile/Icon/status/tagline` currently
+have no consumers — kept as scaffolding for wing-management later.)
 
 ### Import boundaries (enforced by `eslint.config.js`, `npm run lint`)
 
@@ -141,8 +143,9 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 - **`majordomo-events` v1** (`core/events/store.ts`) — the shared calendar: every wing
   writes `CalendarEvent`s through the store's actions (that action surface is the
   future Supabase seam), the Manor reads them. ISO-instant start/end, exclusive end,
-  never day-bucketed; the duty-cycle grid (`core/events/lib.ts`, **seam 12:00**) renders
-  cross-midnight events whole and splits seam-crossers with dotted cut edges.
+  never day-bucketed; the week grid (`core/events/lib.ts`, **SEAM_HOUR = 0** —
+  ordinary calendar days) splits cross-midnight events across their two columns
+  with dotted "continues" edges (a duty-cycle seam stays one constant away).
 - **`majordomo-study` v1** (`modules/study/store.ts`) — the Study's records: subjects,
   syllabus topics, homework, exams, plus per-session fulfillment metadata keyed by
   event id (sessions themselves are `majordomo-events` entries). Homework/exam actions

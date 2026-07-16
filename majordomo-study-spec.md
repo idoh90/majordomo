@@ -49,8 +49,10 @@ nothing is double-entered.
    `end ≤ now` at save, the session is born `done`; otherwise `planned`. No
    separate retro-log flow to learn.
 6. **Homework due days and exam days = materialized allDay `marker` events**
-   (`source: 'study'`, `sourceRef` per the grammar) — the Manor stays generic,
-   riding M8's payday-marker precedent and the future Supabase seam. Store
+   (`source: 'study'`, `sourceRef` per the grammar) — the Manor stays generic.
+   *(Correction: the Study shipped first, so this IS the marker precedent —
+   M8's payday markers ride the Study's `syncMarker`/`reconcileMarkers`
+   pattern, not the other way round.)* Store
    actions touching `due`/`on`/`done`/delete write markers through; a
    `reconcileMarkers()` heal pass runs on wing mount (sandbox-guarded).
    Homework done or deleted → marker removed. An exam's marker persists after

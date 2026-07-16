@@ -146,7 +146,7 @@ export function SettingsMenu() {
                 setConfirmClear(true)
               }}
             >
-              Clear all data
+              {voice.settings.clearWorkouts}
             </MenuItem>
           </div>
         </>
@@ -162,9 +162,9 @@ export function SettingsMenu() {
 
       <ConfirmDialog
         open={confirmClear}
-        title="Clear all data?"
-        message={`This deletes all ${workouts.length} workout${workouts.length === 1 ? '' : 's'} stored on this device. Export a backup first if you want to keep them.`}
-        confirmLabel="Clear all"
+        title={voice.settings.clearWorkoutsTitle}
+        message={voice.settings.clearWorkoutsBody(workouts.length)}
+        confirmLabel={voice.settings.clearWorkoutsYes}
         onCancel={() => setConfirmClear(false)}
         onConfirm={() => {
           setConfirmClear(false)
