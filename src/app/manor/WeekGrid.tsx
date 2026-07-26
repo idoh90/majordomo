@@ -173,8 +173,13 @@ export function WeekGrid({
   const [placing, setPlacing] = useState<CalendarEvent | null>(null)
   /** mobile edit sheet */
   const [editing, setEditing] = useState<CalendarEvent | null>(null)
+  /** desktop: the empty half-hour under the cursor — affordance only */
+  const [hoverSlot, setHoverSlot] = useState<{ col: number; ts: number } | null>(null)
 
   const boxRef = useRef<HTMLDivElement>(null)
+  /** the mobile branch's visible day, reported upward so the shared quick-add
+   *  mailbox can target it without lifting its scroll state into the shell */
+  const mobileColRef = useRef(0)
   const dragRef = useRef<DragState | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suppressClickUntil = useRef(0)
@@ -482,6 +487,19 @@ export function WeekGrid({
     setQuickAdd({ col, ts, y: ts * PXH })
   }
 
+  /* The + is a one-shot mailbox: the tab bar on mobile, QUICK ADD in the nav
+     row on desktop. Consumed HERE rather than inside MobileWeek — which is
+     where it used to live, so a desktop press reached nothing. Mobile keeps
+     targeting the day on screen; desktop targets today when the viewed week
+     contains it, else the first column. */
+  const quickAddRequested = useManorUi((s) => s.quickAddRequested)
+  useEffect(() => {
+    if (!quickAddRequested) return
+    const todayIdx = columns.findIndex((w) => now >= w.start.getTime() && now < w.end.getTime())
+    openQuickAddAt(isMobile ? mobileColRef.current : todayIdx >= 0 ? todayIdx : 0)
+    useManorUi.getState().clearQuickAddRequest()
+  }, [quickAddRequested])
+
   /** the mobile edit sheet's save — false = destination occupied, sheet stays */
   const saveEdit = (id: string, title: string, start: Date, durH: number): boolean => {
     const end = new Date(start.getTime() + durH * HOUR_MS)
@@ -572,7 +590,39 @@ export function WeekGrid({
             )}
             <div className="flex">
               {columns.map((win, i) => (
-                <div key={i} className="min-w-0 flex-1" onClick={(ev) => onColumnClick(i, ev)}>
+                <div
+                  key={i}
+                  className="relative min-w-0 flex-1"
+                  onClick={(ev) => onColumnClick(i, ev)}
+                  onMouseMove={(ev) => {
+                    // affordance only — click-to-quick-add already works. Stay
+                    // quiet over a block, mid-drag, or under an open popover.
+                    if (drag || popover || quickAdd || placing) return setHoverSlot(null)
+                    if ((ev.target as HTMLElement).closest('[data-event-block]'))
+                      return setHoverSlot(null)
+                    const r = ev.currentTarget.getBoundingClientRect()
+                    const ts = clampStart(Math.floor(((ev.clientY - r.top) / PXH) * 2) / 2)
+                    setHoverSlot((h) => (h && h.col === i && h.ts === ts ? h : { col: i, ts }))
+                  }}
+                  onMouseLeave={() => setHoverSlot(null)}
+                >
+                  {hoverSlot?.col === i && (
+                    <div
+                      className="pointer-events-none absolute inset-x-[3px] z-[1] flex items-center gap-1 rounded-[6px] px-1.5"
+                      style={{
+                        top: hoverSlot.ts * PXH + 1,
+                        height: 0.5 * PXH - 2,
+                        border: '1px dashed color-mix(in srgb, var(--color-accent) 45%, transparent)',
+                        background: 'color-mix(in srgb, var(--color-accent) 7%, transparent)',
+                        color: 'var(--color-accent)',
+                      }}
+                    >
+                      <span className="text-[11px] font-semibold leading-none">+</span>
+                      <span className="text-[9.5px] leading-none [font-variant-numeric:tabular-nums]">
+                        {hhmm(new Date(win.start.getTime() + hoverSlot.ts * HOUR_MS))}
+                      </span>
+                    </div>
+                  )}
                   <DayBody
                     col={i}
                     win={win}
@@ -638,7 +688,7 @@ export function WeekGrid({
         onEventClick={handleEventClick}
         closePopover={() => setPopover(null)}
         onColumnClick={onColumnClick}
-        openQuickAddAt={openQuickAddAt}
+        activeColRef={mobileColRef}
         slotFree={slotFree}
         onFinishDrag={finishDrag}
         suppressClicks={() => {
@@ -1260,7 +1310,7 @@ function MobileWeek({
   onEventClick,
   closePopover,
   onColumnClick,
-  openQuickAddAt,
+  activeColRef,
   slotFree,
   onFinishDrag,
   suppressClicks,
@@ -1279,7 +1329,8 @@ function MobileWeek({
   onEventClick: (col: number, e: CalendarEvent, y: number) => void
   closePopover: () => void
   onColumnClick: (col: number, ev: React.MouseEvent) => void
-  openQuickAddAt: (col: number) => void
+  /** written, not read: reports the visible day to WeekGrid's quick-add mailbox */
+  activeColRef: React.MutableRefObject<number>
   slotFree: (ignoreId: string | null, tc: number, ts: number, durH: number) => boolean
   onFinishDrag: (d: {
     id: string
@@ -1301,6 +1352,8 @@ function MobileWeek({
   const [active, setActive] = useState(todayIdx >= 0 ? todayIdx : 0)
   const activeRef = useRef(active)
   activeRef.current = active
+  // report the visible day upward: WeekGrid owns the quick-add mailbox now
+  activeColRef.current = active
 
   const [mDrag, setMDrag] = useState<MobileDrag | null>(null)
   const mdRef = useRef<MobileDrag | null>(null)
@@ -1329,14 +1382,6 @@ function MobileWeek({
       closePopover()
     }
   }
-
-  // the tab bar's + — one-shot request for quick-add on the visible day
-  const quickAddRequested = useManorUi((s) => s.quickAddRequested)
-  useEffect(() => {
-    if (!quickAddRequested) return
-    openQuickAddAt(activeRef.current)
-    useManorUi.getState().clearQuickAddRequest()
-  }, [quickAddRequested])
 
   /* ------------------------------------------- the mobile drag (long-press) */
 

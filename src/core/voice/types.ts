@@ -23,8 +23,10 @@ export interface VoicePack {
   manor: {
     /** the home tab label */
     name: string
-    /** empty-week state, the butler's line */
+    /** caption above an empty week's grid — the structure stays, the voice shrinks */
     empty: string
+    /** desktop nav-row control mirroring the mobile tab bar's + */
+    quickAddLabel: string
     /** popover note on an event whose end lands past midnight */
     crossesMidnight: string
     /** footnote under the month view */

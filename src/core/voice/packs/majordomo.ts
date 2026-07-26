@@ -9,7 +9,8 @@ export const majordomoPack: VoicePack = {
   presetLabel: 'PRESET',
   manor: {
     name: 'THE MANOR',
-    empty: 'Nothing on the books, sir. A rare quiet evening.',
+    empty: 'Nothing on the books this week, sir.',
+    quickAddLabel: 'QUICK ADD',
     crossesMidnight: 'Crosses midnight — one block, as it should be.',
     monthNote: 'A night watch is written on the day it begins, sir; the small hours carry a reminder.',
     briefing: (count) => {

@@ -35,14 +35,12 @@ export function ManorScreen() {
   )
   const [anchor, setAnchor] = useState(() => new Date())
 
-  // The tab bar's + (quick-add) is consumed inside the week grid, so make
-  // sure a grid exists to consume it: month view flips to this week, and an
-  // empty week pins the grid in place of the empty-state card.
+  // The + (quick-add) is consumed inside the week grid, so make sure a grid
+  // exists to consume it: month view flips to this week. An empty week no
+  // longer needs pinning — the grid is now unconditional.
   const quickAddRequested = useManorUi((s) => s.quickAddRequested)
-  const [gridPinned, setGridPinned] = useState(false)
   useEffect(() => {
     if (!quickAddRequested) return
-    setGridPinned(true)
     setMode((m) => {
       if (m === 'month') setAnchor(new Date())
       return 'week'
@@ -144,19 +142,32 @@ export function ManorScreen() {
           value={mode}
           onChange={setMode}
         />
-        {mode === 'week' && !sandbox && weekEvents.length > 0 && (
-          <button
-            type="button"
-            onClick={() => useEventsStore.getState().enterSandbox()}
-            className="ml-auto h-8 rounded-lg border border-dashed px-4 font-display text-[12.5px] font-semibold tracking-[0.2em] transition-colors"
-            style={{
-              borderColor: 'var(--color-accent)',
-              color: 'var(--color-accent)',
-              background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
-            }}
-          >
-            {voice.manor.whatIf.button}
-          </button>
+        {mode === 'week' && !sandbox && (
+          <div className="ml-auto flex items-center gap-2.5">
+            {/* desktop's twin of the mobile tab bar's + — the mailbox it presses
+                is consumed in WeekGrid, so both branches now serve it */}
+            <button
+              type="button"
+              onClick={() => useManorUi.getState().requestQuickAdd()}
+              className="hidden h-8 items-center rounded-lg border border-line px-3.5 font-display text-[12.5px] font-semibold tracking-[0.18em] text-ink-dim transition-colors hover:text-ink md:inline-flex"
+            >
+              + {voice.manor.quickAddLabel}
+            </button>
+            {/* an empty week can be rehearsed too: "next week from scratch" is a
+                real use case, and the Difference panel starts at 0.0 → 0.0 */}
+            <button
+              type="button"
+              onClick={() => useEventsStore.getState().enterSandbox()}
+              className="h-8 rounded-lg border border-dashed px-4 font-display text-[12.5px] font-semibold tracking-[0.2em] transition-colors"
+              style={{
+                borderColor: 'var(--color-accent)',
+                color: 'var(--color-accent)',
+                background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
+              }}
+            >
+              {voice.manor.whatIf.button}
+            </button>
+          </div>
         )}
       </div>
 
@@ -190,11 +201,15 @@ export function ManorScreen() {
             setMode('week')
           }}
         />
-      ) : weekEvents.length === 0 && !sandbox && !gridPinned ? (
-        <EmptyWeek />
       ) : (
         <div className="mt-4 flex items-start gap-4">
           <div className="min-w-0 flex-1">
+            {/* An empty week keeps its structure: the grid IS the room, and
+                the only way to build a week on desktop. The butler's line is
+                demoted to a caption rather than replacing the calendar. */}
+            {weekEvents.length === 0 && !sandbox && (
+              <p className="mb-2 text-[12.5px] text-ink-dim">{voice.manor.empty}</p>
+            )}
             <WeekGrid
               columns={columns}
               events={weekEvents}
@@ -438,20 +453,6 @@ function MobileDiffDrawer({
           </button>
         </div>
       </div>
-    </div>
-  )
-}
-
-function EmptyWeek() {
-  return (
-    <div
-      className="mt-4 rounded-[14px] border border-dashed border-line px-6 py-20 text-center"
-      style={{ background: 'color-mix(in srgb, var(--color-panel) 50%, transparent)' }}
-    >
-      <div className="font-display text-[13px] font-semibold uppercase tracking-[0.32em] text-ink-dim">
-        {voice.manor.name}
-      </div>
-      <p className="mt-3 text-[16.5px] text-ink">{voice.manor.empty}</p>
     </div>
   )
 }
