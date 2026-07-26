@@ -1,4 +1,5 @@
 import { monthLabel } from '../lib/budget'
+import { voice } from '../../../core/voice'
 import { Amount } from './Amount'
 
 interface SpendCardProps {
@@ -6,10 +7,12 @@ interface SpendCardProps {
   budget: number
   now: Date
   onEdit: () => void
+  /** opens the same sheet — its month pager IS the spending history */
+  onHistory?: () => void
 }
 
 /** This month's spend vs budget — factual only (no projection). */
-export function SpendCard({ spent, budget, now, onEdit }: SpendCardProps) {
+export function SpendCard({ spent, budget, now, onEdit, onHistory }: SpendCardProps) {
   const hasBudget = budget > 0
   const pct = hasBudget ? Math.min(1, spent / budget) : 0
   const over = hasBudget && spent > budget
@@ -19,11 +22,22 @@ export function SpendCard({ spent, budget, now, onEdit }: SpendCardProps) {
 
   return (
     <div className="panel p-4">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="card-title">Spending · {monthLabel(now)}</h3>
-        <button type="button" onClick={onEdit} className="text-sm text-accent transition-opacity hover:opacity-80">
-          Update
-        </button>
+        <div className="flex items-center gap-2.5">
+          {onHistory && (
+            <button
+              type="button"
+              onClick={onHistory}
+              className="text-sm text-ink-dim transition-colors hover:text-ink"
+            >
+              {voice.capital.spend.history}
+            </button>
+          )}
+          <button type="button" onClick={onEdit} className="text-sm text-accent transition-opacity hover:opacity-80">
+            Update
+          </button>
+        </div>
       </div>
 
       {hasBudget ? (

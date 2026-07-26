@@ -305,6 +305,9 @@ export interface VoicePack {
     vaultEmpty: string
     /** FX rate missing for these currencies — their figures render unconverted */
     fxMissing: (currencies: string[]) => string
+    /** the Vault's caveat: priced accounts fell back to their last saved balance
+     *  because these currencies lack a quote or a ₪ rate */
+    liveDegraded: (currencies: string[]) => string
     /** blur-toggle pill labels: action to take (hide when shown, reveal when hidden) */
     hide: string
     reveal: string
@@ -315,6 +318,17 @@ export interface VoicePack {
     stampHeldTitle: string
     /** recent one-off spends card title */
     recentEntries: string
+    /** the spending sheet, month by month */
+    spend: {
+      /** the spend card's affordance onto the sheet's month pager */
+      history: string
+      /** month pager arrows */
+      prevMonth: string
+      nextMonth: string
+      /** one-off items section title / the viewed month's total */
+      oneOffs: (month: string) => string
+      total: (month: string) => string
+    }
     /** the mobile + action sheet rows */
     addBalances: string
     addSpend: string

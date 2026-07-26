@@ -175,6 +175,14 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   Vault / allocation / accounts read live; the chart reads snapshots (+ an appended
   live "now" point when holdings exist). `lib/networth.ts` `liveNetWorth()` blends;
   `netWorthSeries()` stays snapshot-only.
+  **Live is STRICT, like the snapshot stamp**: `accountLiveValue` only counts a live
+  sum when EVERY holding of the account has a quote AND a ₪ rate — otherwise the
+  account reads its latest snapshot balance, because a rate-1 cost-basis fallback let
+  unconverted USD masquerade as ₪ in the Vault/accounts/allocation. `liveNetWorth`
+  returns `degraded: string[]` (the blocking currencies) and the Vault owns up in one
+  line; the accounts list flips `· live` to `· held`. The **portfolio board is the
+  exception** — it keeps per-row market values and labels them in their own currency
+  (`unconvertedCurrency`), which is honest because the row says which currency it is.
 - **Prices** (`lib/prices.ts`, `lib/holdings.ts`) — Twelve Data `/quote` (batched by
   exchange) + `/exchange_rate` for FX. Prices are in each holding's **native currency**;
   net worth converts to ₪ via `fx` (currency→ILS). `refreshPrices()` (a store action)
@@ -191,6 +199,14 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
 - **The budget** (`lib/budget.ts`) — a running **month-to-date spend** the user
   overwrites whenever they check their card app, vs a monthly target. `budgetPace()`
   linearly projects month-end spend and flags under/on/over.
+- **Spending history** — the data is month-keyed (`spends` 'YYYY-MM' + dated
+  `spendItems`), so the SpendSheet is a **month pager** (‹ July ›, opening on the
+  current month, forward stopping at the present or the last month holding data).
+  Card total + one-offs belong to the VIEWED month and save to ITS keys; **recurring
+  is global** (not per-month data), as is the budget. The sheet keeps one draft per
+  visited month and commits only the months actually edited — paging to look costs
+  nothing. `monthlySpent()` semantics are untouched; the SpendCard's *History* button
+  is just another door onto the same sheet.
 - **Money math** — `lib/money.ts` (`formatILS` uses **en-US locale so ₪ is an LTR
   prefix** — he-IL scrambles word order inside the English UI), `ASSET_CLASSES`
   (labels + fixed categorical allocation colors). `<Amount>` blurs values (hover to

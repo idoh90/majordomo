@@ -9,10 +9,13 @@ interface VaultProps {
   liabilities: number
   delta: NetWorthDelta
   hasData: boolean
+  /** currencies awaiting a quote/₪ rate — those accounts read from their last
+   *  saved balance, and the Vault says so rather than showing a live-looking total */
+  degraded?: string[]
 }
 
 /** The hero: total net worth, dramatic, with the move since last snapshot. */
-export function Vault({ netWorth, assets, liabilities, delta, hasData }: VaultProps) {
+export function Vault({ netWorth, assets, liabilities, delta, hasData, degraded = [] }: VaultProps) {
   const up = delta.absolute >= 0
   const tone = up ? 'text-accent' : 'text-danger'
 
@@ -48,6 +51,12 @@ export function Vault({ netWorth, assets, liabilities, delta, hasData }: VaultPr
             <Figure label="Assets" value={assets} />
             <Figure label="Liabilities" value={liabilities} negative={liabilities > 0} />
           </div>
+
+          {degraded.length > 0 && (
+            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+              {voice.capital.liveDegraded(degraded)}
+            </p>
+          )}
         </>
       ) : (
         <p className="mt-3 max-w-sm text-sm text-ink-dim">{voice.capital.vaultEmpty}</p>

@@ -291,6 +291,8 @@ export const majordomoPack: VoicePack = {
       "No balances yet. Add your accounts, then log a snapshot to start charting the estate's worth.",
     fxMissing: (currencies) =>
       `No ₪ rate for ${currencies.join(', ')} yet, sir — these figures are unconverted. Refresh prices.`,
+    liveDegraded: (currencies) =>
+      `Awaiting ${currencies.join(', ')} figures, sir — those accounts show their last saved balances.`,
     hide: 'HIDE, SIR',
     reveal: 'REVEAL, SIR',
     stampLive: 'live',
@@ -298,6 +300,13 @@ export const majordomoPack: VoicePack = {
     stampHeldTitle:
       'No fresh quote or ₪ rate, sir — keeping the last saved value rather than writing a wrong one.',
     recentEntries: 'RECENT ENTRIES',
+    spend: {
+      history: 'History',
+      prevMonth: 'Previous month',
+      nextMonth: 'Next month',
+      oneOffs: (month) => `One-offs · ${month}`,
+      total: (month) => `Total · ${month}`,
+    },
     addBalances: 'Update balances',
     addSpend: 'Log a spend',
     paydayMarker: 'Payday',

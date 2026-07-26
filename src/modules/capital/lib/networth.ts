@@ -1,6 +1,6 @@
 import type { Account, AssetClass, Holding, Snapshot } from '../types'
 import { ASSET_CLASSES } from './money'
-import { accountLiveValue, type Fx, type Prices } from './holdings'
+import { accountDegradedCurrencies, accountLiveValue, type Fx, type Prices } from './holdings'
 
 /** Net worth of one snapshot = Σ assets − Σ debts. */
 export function netWorthOf(snapshot: Snapshot, accounts: Account[]): number {
@@ -101,6 +101,9 @@ export interface LiveNetWorth {
   assets: number
   liabilities: number
   slices: AllocationSlice[]
+  /** currencies whose missing quote/₪ rate held priced accounts at their last
+   *  saved balance — empty when every priced account valued live */
+  degraded: string[]
 }
 
 export function liveNetWorth(
@@ -113,8 +116,10 @@ export function liveNetWorth(
   let assets = 0
   let liabilities = 0
   const totals = new Map<AssetClass, number>()
+  const degraded = new Set<string>()
   for (const a of accounts) {
     const v = liveAccountValue(a, holdings, prices, fx, latest)
+    for (const c of accountDegradedCurrencies(a.id, holdings, prices, fx)) degraded.add(c)
     if (ASSET_CLASSES[a.assetClass].liability) {
       liabilities += v
     } else {
@@ -122,5 +127,11 @@ export function liveNetWorth(
       if (v !== 0) totals.set(a.assetClass, (totals.get(a.assetClass) ?? 0) + v)
     }
   }
-  return { netWorth: assets - liabilities, assets, liabilities, slices: allocationFromTotals(totals) }
+  return {
+    netWorth: assets - liabilities,
+    assets,
+    liabilities,
+    slices: allocationFromTotals(totals),
+    degraded: [...degraded].sort(),
+  }
 }

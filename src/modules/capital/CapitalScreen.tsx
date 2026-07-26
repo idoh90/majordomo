@@ -145,6 +145,7 @@ export function CapitalScreen() {
         liabilities={derived.live.liabilities}
         delta={derived.delta}
         hasData={hasData}
+        degraded={derived.live.degraded}
       />
 
       {/* below md the boards swipe horizontally (snap pages); md stacks; lg = 5:4 grid */}
@@ -163,7 +164,13 @@ export function CapitalScreen() {
         </div>
         <div className="contents lg:flex lg:flex-col lg:gap-4">
           <Board>
-            <SpendCard spent={spent} budget={monthlyBudget} now={new Date(now)} onEdit={() => setSpendOpen(true)} />
+            <SpendCard
+              spent={spent}
+              budget={monthlyBudget}
+              now={new Date(now)}
+              onEdit={() => setSpendOpen(true)}
+              onHistory={() => setSpendOpen(true)}
+            />
           </Board>
           <Board>
             <AccountsPanel

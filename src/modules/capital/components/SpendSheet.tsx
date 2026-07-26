@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Sheet } from '../../../core/ui/Sheet'
 import { makeId } from '../../../core/ids'
+import { voice } from '../../../core/voice'
 import { useCapitalStore } from '../store'
 import type { RecurringExpense, SpendItem } from '../types'
-import { itemsForMonth, monthKey, monthLabel } from '../lib/budget'
+import { dateInMonth, itemsForMonth, monthKey, monthKeyLabel, shiftMonth } from '../lib/budget'
 import { formatILS } from '../lib/money'
 
 interface SpendSheetProps {
@@ -24,9 +25,15 @@ interface ItemDraft {
   amount: string
   date: string
 }
+/** the per-month part of the sheet: card snapshot + that month's one-offs */
+interface MonthDraft {
+  quick: string
+  items: ItemDraft[]
+}
 
-/** Manage this month's spending: a monthly budget, plus either a quick typed
- *  total (when nothing's itemized) or itemized recurring + one-off items. */
+/** Manage spending month by month: a monthly budget, a quick typed card total
+ *  and one-off items for the VIEWED month (‹ July ›, opening on the current
+ *  one), plus recurring expenses — which are global, not per-month data. */
 export function SpendSheet({ open, now, onClose }: SpendSheetProps) {
   const monthlyBudget = useCapitalStore((s) => s.monthlyBudget)
   const spends = useCapitalStore((s) => s.spends)
@@ -38,55 +45,121 @@ export function SpendSheet({ open, now, onClose }: SpendSheetProps) {
   const setMonthItems = useCapitalStore((s) => s.setMonthItems)
 
   const nowDate = new Date(now)
-  const mk = monthKey(nowDate)
+  const thisMonth = monthKey(nowDate)
 
+  const [month, setMonth] = useState(thisMonth)
   const [budget, setBudget] = useState('')
-  const [quick, setQuick] = useState('')
   const [rec, setRec] = useState<RecDraft[]>([])
-  const [items, setItems] = useState<ItemDraft[]>([])
+  // drafts per month key, so paging away and back keeps unsaved edits; `dirty`
+  // is what Save commits, so merely LOOKING at a month writes nothing
+  const [drafts, setDrafts] = useState<Record<string, MonthDraft>>({})
+  const [dirty, setDirty] = useState<string[]>([])
 
+  // fresh open = fresh drafts from the store, back on the current month. Keyed
+  // on `open` alone on purpose: re-seeding on every store write would wipe the
+  // draft the user is typing (including in the months they aren't looking at).
   useEffect(() => {
     if (!open) return
+    setMonth(thisMonth)
     setBudget(monthlyBudget ? String(monthlyBudget) : '')
-    setQuick(spends[mk] != null ? String(spends[mk]) : '')
     setRec(storeRecurring.map((r) => ({ id: r.id, name: r.name, amount: String(r.amount), active: r.active })))
-    setItems(
-      itemsForMonth(storeItems, mk).map((i) => ({ id: i.id, name: i.name, amount: String(i.amount), date: i.date })),
+    setDrafts({})
+    setDirty([])
+  }, [open])
+
+  // seed the viewed month the first time it's shown (never after — that would
+  // overwrite the user's draft on every store write)
+  useEffect(() => {
+    if (!open) return
+    setDrafts((d) =>
+      d[month]
+        ? d
+        : {
+            ...d,
+            [month]: {
+              quick: spends[month] != null ? String(spends[month]) : '',
+              items: itemsForMonth(storeItems, month).map((i) => ({
+                id: i.id,
+                name: i.name,
+                amount: String(i.amount),
+                date: i.date,
+              })),
+            },
+          },
     )
-  }, [open, monthlyBudget, spends, mk, storeRecurring, storeItems])
+  }, [open, month, spends, storeItems])
+
+  const draft = drafts[month] ?? { quick: '', items: [] }
+  const patch = (fn: (d: MonthDraft) => MonthDraft) => {
+    setDrafts((d) => ({ ...d, [month]: fn(d[month] ?? { quick: '', items: [] }) }))
+    setDirty((list) => (list.includes(month) ? list : [...list, month]))
+  }
+  const setQuick = (quick: string) => patch((d) => ({ ...d, quick }))
+  const setItems = (fn: (items: ItemDraft[]) => ItemDraft[]) => patch((d) => ({ ...d, items: fn(d.items) }))
 
   const num = (s: string) => Math.max(0, parseFloat(s) || 0)
   const recTotal = rec.filter((r) => r.active).reduce((s, r) => s + num(r.amount), 0)
-  const itemsTotal = items.reduce((s, i) => s + num(i.amount), 0)
-  // additive: card snapshot + recurring + one-offs
-  const spent = num(quick) + recTotal + itemsTotal
+  const itemsTotal = draft.items.reduce((s, i) => s + num(i.amount), 0)
+  // additive, and identical to monthlySpent(): card snapshot + recurring + one-offs
+  const spent = num(draft.quick) + recTotal + itemsTotal
   const budgetNum = num(budget)
   const over = budgetNum > 0 && spent > budgetNum
+
+  const label = monthKeyLabel(month, nowDate)
+  // forward stops at the present — or at the last month that holds data, so a
+  // future-dated item can never end up unreachable
+  const lastMonth = useMemo(() => {
+    const keys = [thisMonth, ...Object.keys(spends), ...storeItems.map((i) => monthKey(new Date(i.date)))]
+    return keys.sort().pop() ?? thisMonth // 'YYYY-MM' sorts chronologically
+  }, [thisMonth, spends, storeItems])
 
   const save = () => {
     setMonthlyBudget(budgetNum)
     const cleanRec: RecurringExpense[] = rec
       .filter((r) => num(r.amount) > 0)
       .map((r) => ({ id: r.id, name: r.name.trim() || 'Expense', amount: num(r.amount), active: r.active }))
-    const cleanItems: SpendItem[] = items
-      .filter((i) => num(i.amount) > 0)
-      .map((i) => ({ id: i.id, name: i.name.trim() || 'Item', amount: num(i.amount), date: i.date }))
     setRecurring(cleanRec)
-    setMonthItems(mk, cleanItems)
-    setSpend(mk, num(quick))
+    // every month the user actually edited, not just the one on screen
+    for (const mk of dirty) {
+      const d = drafts[mk]
+      if (!d) continue
+      const cleanItems: SpendItem[] = d.items
+        .filter((i) => num(i.amount) > 0)
+        .map((i) => ({ id: i.id, name: i.name.trim() || 'Item', amount: num(i.amount), date: i.date }))
+      setMonthItems(mk, cleanItems)
+      setSpend(mk, num(d.quick))
+    }
     onClose()
   }
 
   return (
     <Sheet open={open} onClose={onClose}>
-      <h2 className="mb-1 font-display text-xl font-bold tracking-wide">Spending · {monthLabel(nowDate)}</h2>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <h2 className="font-display text-xl font-bold tracking-wide">Spending</h2>
+        <div className="flex items-center gap-1">
+          <PagerArrow
+            dir="prev"
+            label={voice.capital.spend.prevMonth}
+            onClick={() => setMonth(shiftMonth(month, -1))}
+          />
+          <span className="min-w-[7.5rem] text-center font-display text-sm font-bold uppercase tracking-[0.12em] text-ink">
+            {label}
+          </span>
+          <PagerArrow
+            dir="next"
+            label={voice.capital.spend.nextMonth}
+            disabled={month >= lastMonth}
+            onClick={() => setMonth(shiftMonth(month, 1))}
+          />
+        </div>
+      </div>
       <p className="mb-4 text-sm text-ink-dim">
         Card spend + recurring + one-offs add up to the month's total.
       </p>
 
       <FieldRow>
         <Field label="Monthly budget" value={budget} onChange={setBudget} />
-        <Field label="Card spending so far" value={quick} onChange={setQuick} />
+        <Field label="Card spending" value={draft.quick} onChange={setQuick} />
       </FieldRow>
       <p className="mt-1 text-[11px] text-ink-faint">
         Card spending: overwrite whenever you check your card app — a running snapshot, not a log.
@@ -112,11 +185,13 @@ export function SpendSheet({ open, now, onClose }: SpendSheetProps) {
       </Section>
 
       <Section
-        title={`This month · ${monthLabel(nowDate)}`}
+        title={voice.capital.spend.oneOffs(label)}
         hint="One-off spends — groceries, fuel, dining…"
-        onAdd={() => setItems((i) => [...i, { id: makeId(), name: '', amount: '', date: nowDate.toISOString() }])}
+        onAdd={() =>
+          setItems((i) => [...i, { id: makeId(), name: '', amount: '', date: dateInMonth(month, nowDate) }])
+        }
       >
-        {items.map((i) => (
+        {draft.items.map((i) => (
           <LineRow
             key={i.id}
             name={i.name}
@@ -129,7 +204,7 @@ export function SpendSheet({ open, now, onClose }: SpendSheetProps) {
       </Section>
 
       <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
-        <span className="text-sm text-ink-dim">Total this month</span>
+        <span className="text-sm text-ink-dim">{voice.capital.spend.total(label)}</span>
         <span className="stat-num text-2xl text-ink">{formatILS(spent)}</span>
       </div>
       {budgetNum > 0 && (
@@ -144,6 +219,30 @@ export function SpendSheet({ open, now, onClose }: SpendSheetProps) {
         Save
       </button>
     </Sheet>
+  )
+}
+
+function PagerArrow({
+  dir,
+  label,
+  disabled,
+  onClick,
+}: {
+  dir: 'prev' | 'next'
+  label: string
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="chip rounded-pill border border-line bg-panel px-2.5 py-1 text-base leading-none text-ink-dim transition-colors hover:text-ink disabled:opacity-30 disabled:hover:text-ink-dim"
+    >
+      <span aria-hidden>{dir === 'prev' ? '‹' : '›'}</span>
+    </button>
   )
 }
 
