@@ -20,6 +20,11 @@ export interface VoicePack {
   storageWarning: string
   /** tiny label beside the header's preset dots */
   presetLabel: string
+  /** shared UI primitives (core/ui) — copy a wing must not have to supply */
+  ui: {
+    /** a Sheet asked to close while its draft differs from the store */
+    discard: { title: string; body: string; confirm: string }
+  }
   manor: {
     /** the home tab label */
     name: string
@@ -328,6 +333,15 @@ export interface VoicePack {
       /** one-off items section title / the viewed month's total */
       oneOffs: (month: string) => string
       total: (month: string) => string
+      /** one-off section hint — says how a refund goes in */
+      oneOffsHint: string
+      /** per-row date control */
+      dateLabel: string
+      /** a row carries a name but no amount: inline marker + the blocked-Save note */
+      amountMissing: string
+      fixRows: (n: number) => string
+      /** budget + card snapshot are forward-only totals, so a minus is refused there */
+      noMinus: string
     }
     /** the mobile + action sheet rows */
     addBalances: string

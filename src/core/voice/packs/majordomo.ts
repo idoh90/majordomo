@@ -7,6 +7,13 @@ export const majordomoPack: VoicePack = {
   skinPickerBlurb: 'Three presets, one house. Switches instantly — nothing else changes.',
   storageWarning: "Browser storage is blocked (private mode?) — nothing will survive a reload.",
   presetLabel: 'PRESET',
+  ui: {
+    discard: {
+      title: 'Leave this unsaved, sir?',
+      body: 'What you have typed here is not yet on the books. Closing loses it.',
+      confirm: 'Discard it',
+    },
+  },
   manor: {
     name: 'THE MANOR',
     empty: 'Nothing on the books, sir. A rare quiet evening.',
@@ -306,6 +313,14 @@ export const majordomoPack: VoicePack = {
       nextMonth: 'Next month',
       oneOffs: (month) => `One-offs · ${month}`,
       total: (month) => `Total · ${month}`,
+      oneOffsHint: 'One-off spends — groceries, fuel, dining… a refund goes in as a minus.',
+      dateLabel: 'Date',
+      amountMissing: 'amount?',
+      fixRows: (n) =>
+        n === 1
+          ? 'One row has a name but no amount, sir — give it one, or strike the row.'
+          : `${n} rows have a name but no amount, sir — give them one, or strike them.`,
+      noMinus: 'A minus belongs on a one-off row, sir — the budget and the card total only run forwards.',
     },
     addBalances: 'Update balances',
     addSpend: 'Log a spend',

@@ -14,7 +14,9 @@ interface SpendCardProps {
 /** This month's spend vs budget — factual only (no projection). */
 export function SpendCard({ spent, budget, now, onEdit, onHistory }: SpendCardProps) {
   const hasBudget = budget > 0
-  const pct = hasBudget ? Math.min(1, spent / budget) : 0
+  // clamped at BOTH ends: refunds can put a month's spend below zero, and an
+  // unclamped negative width is invalid CSS — the bar would render full
+  const pct = hasBudget ? Math.min(1, Math.max(0, spent / budget)) : 0
   const over = hasBudget && spent > budget
   const barColor = over ? 'var(--color-danger)' : 'var(--color-accent)'
   const dayOfMonth = now.getDate()

@@ -92,6 +92,16 @@ Everything under `core/` beyond the contract got there by the **extract-on-conta
 rule: `Sheet`/`ConfirmDialog`/`SegmentedControl`, `makeId`, `storageAvailable`, and
 `useNow` all lived in training until Wayne Fund became the second consumer.
 
+**`Sheet`'s close contract**: the backdrop dismisses on **click, never
+`pointerdown`** — a press that starts on the scrim and ends on the surface (a slip,
+a drag out of an input) must not throw the sheet away, and `cursor-pointer` on the
+scrim is load-bearing (iOS only delivers click on a non-interactive element that
+looks clickable). A sheet holding unsaved work passes `dirty` and Sheet puts a
+`ConfirmDialog` (copy: `voice.ui.discard`) between the backdrop/Esc and `onClose`;
+Esc closes that confirm first, keeping the draft. `dirty` must mean *differs from
+the store*, not *was touched* — SpendSheet is the reference implementation. Save
+paths call `onClose` directly and never see the guard.
+
 ### The ConsoleModule contract (`src/core/module.ts`)
 
 ```ts
@@ -204,9 +214,21 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   current month, forward stopping at the present or the last month holding data).
   Card total + one-offs belong to the VIEWED month and save to ITS keys; **recurring
   is global** (not per-month data), as is the budget. The sheet keeps one draft per
-  visited month and commits only the months actually edited — paging to look costs
-  nothing. `monthlySpent()` semantics are untouched; the SpendCard's *History* button
-  is just another door onto the same sheet.
+  visited month and commits only the months whose values actually **differ from the
+  store** — paging to look costs nothing, and an edit undone writes nothing.
+  `monthlySpent()` semantics are untouched; the SpendCard's *History* button
+  is just another door onto the same sheet. Each one-off row carries a **date**
+  (`<input type=date>` clamped to the viewed month, keeping its time-of-day so
+  same-day order holds) — the pager owns the month, the row owns the day.
+- **A typed row is never silently dropped.** Amounts are **signed**: a minus on a
+  one-off row is a refund and subtracts through the month total, the card, the tile
+  and the briefing (`SpendCard` clamps its bar at both ends — an unclamped negative
+  width renders FULL). A row with a name but no usable amount **blocks Save** with a
+  marker on the row (paging to the offending month first, since a marker you can't
+  see is no help); only a wholly untouched blank row is dropped. The budget and card
+  snapshot are forward-only totals, so a minus there is **refused, not clamped** —
+  clamping to 0 is the same silent rewrite. Nothing in this sheet displays one number
+  and stores another.
 - **Money math** — `lib/money.ts` (`formatILS` uses **en-US locale so ₪ is an LTR
   prefix** — he-IL scrambles word order inside the English UI), `ASSET_CLASSES`
   (labels + fixed categorical allocation colors). `<Amount>` blurs values (hover to
