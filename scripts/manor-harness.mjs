@@ -556,6 +556,150 @@ async function desktopChecks(browser) {
   await ctx2.close()
 }
 
+/* ------------------------------------------- the estate agrees with itself */
+
+/**
+ * M-03 regression. The exam heads-up and the Study wing's briefing answer the
+ * same question — "is anything on the books before this exam, sir?" — and used
+ * to compute it two different ways, so with past sessions done and nothing
+ * booked ahead the estate said "nothing on the books" and "two hours on the
+ * books" on one screen. Checked in all three states the fix has to survive.
+ */
+async function briefingChecks(browser) {
+  const { page } = await fresh(browser, { width: 1440, height: 1200 })
+
+  /** [headsUpClaimsNothing, briefingHours] as the page currently reads */
+  const readClaims = () =>
+    page.evaluate(() => {
+      const text = document.body.innerText
+      const nothing = /exam is in .* with nothing on the books/i.test(text)
+      const m = text.match(/exam (?:is )?(?:in [^,]*|today|tomorrow), sir — (\S+) hours? on the books/i)
+      return { nothing, hours: m?.[1] ?? null }
+    })
+
+  // state 1+2: the demo has a PAST Linear Algebra session and none ahead
+  const past = await readClaims()
+  past.nothing && (past.hours === 'no' || past.hours === null)
+    ? ok('B1 past sessions only: both lines say nothing is booked', `heads-up + "${past.hours}"`)
+    : bad(
+        'B1 past sessions only: both lines say nothing is booked',
+        `heads-up says nothing=${past.nothing}, briefing says "${past.hours}"`,
+      )
+
+  // state 3: book two hours ahead of the exam — both lines must flip together
+  const booked = await page.evaluate(() => {
+    const s = window.__events.getState()
+    const exam = s.events.find((e) => e.allDay && /exam/i.test(e.title))
+    const start = new Date()
+    start.setDate(start.getDate() + 1)
+    start.setHours(10, 0, 0, 0)
+    s.addEvent({
+      source: 'study',
+      kind: 'study',
+      title: 'Linear Algebra',
+      sourceRef: 'subj:demo-subj-math',
+      start: start.toISOString(),
+      end: new Date(start.getTime() + 2 * 3600000).toISOString(),
+    })
+    return !!exam
+  })
+  await page.waitForTimeout(600)
+  const ahead = await readClaims()
+  !ahead.nothing && ahead.hours === 'two'
+    ? ok('B2 sessions booked ahead: both lines agree', `briefing "${ahead.hours} hours", heads-up gone`)
+    : bad(
+        'B2 sessions booked ahead: both lines agree',
+        `exam marker=${booked}, heads-up says nothing=${ahead.nothing}, briefing says "${ahead.hours}"`,
+      )
+
+  /* --- B3: the now-relative block is labelled as such --------------------- */
+  const tagged = await page.evaluate(() => /\bTODAY\b/.test(document.body.innerText))
+  tagged
+    ? ok('B3 heads-ups are tagged now-relative')
+    : bad('B3 heads-ups are tagged now-relative', 'no TODAY tag on the heads-up block')
+
+  /* --- B4: paging off the current week says so ---------------------------- */
+  const before = await page.evaluate(() => /\bVIEWING\b/.test(document.body.innerText))
+  await page.getByLabel('Next').click()
+  await page.waitForTimeout(500)
+  const after = await page.evaluate(() => /\bVIEWING\b/.test(document.body.innerText))
+  !before && after
+    ? ok('B4 an off-week strip marks itself', 'VIEWING appears only off the current week')
+    : bad('B4 an off-week strip marks itself', `current week=${before}, next week=${after}`)
+  await page.getByLabel('Previous').click()
+  await page.waitForTimeout(400)
+
+  /* --- B5: the legend is visible on DESKTOP, in both views ---------------- */
+  const weekLegend = await page.evaluate(() => {
+    const t = document.body.innerText
+    return /THE WATCH/i.test(t) && /strain/i.test(t)
+  })
+  weekLegend
+    ? ok('B5 week view shows a legend on desktop')
+    : bad('B5 week view shows a legend on desktop', 'no key above the grid')
+  await page.getByText('Month', { exact: true }).first().click()
+  await page.waitForTimeout(500)
+  const monthLegend = await page.evaluate(() => {
+    const t = document.body.innerText
+    return /runs past/i.test(t) && /strain/i.test(t)
+  })
+  monthLegend
+    ? ok('B5 month view shows its legend on desktop')
+    : bad('B5 month view shows its legend on desktop', 'still behind md:hidden')
+  await page.getByText('Week', { exact: true }).first().click()
+  await page.waitForTimeout(400)
+
+  /* --- B6: What-If is honest about its controls --------------------------- */
+  await page.getByText('WHAT-IF', { exact: false }).first().click()
+  await page.waitForTimeout(600)
+  const wi = await page.evaluate(() => {
+    const t = document.body.innerText
+    const apply = [...document.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'APPLY',
+    )
+    return {
+      saysLedger: /ledger is sandboxed/i.test(t),
+      rehearsal: /rehearsal/i.test(t),
+      applyDisabled: apply ? apply.disabled : null,
+      noChanges: /no changes yet/i.test(t),
+    }
+  })
+  wi.applyDisabled === true && wi.noChanges
+    ? ok('B6 APPLY is disabled at zero changes')
+    : bad('B6 APPLY is disabled at zero changes', `disabled=${wi.applyDisabled} counter=${wi.noChanges}`)
+  !wi.saysLedger && wi.rehearsal
+    ? ok('B6 the banner no longer says "ledger"')
+    : bad('B6 the banner no longer says "ledger"', `ledger=${wi.saysLedger} rehearsal=${wi.rehearsal}`)
+
+  /* --- B7: the desktop Difference panel reports a near-watch conflict ----- */
+  // M-06: mobile computed and showed this; desktop showed hours only, so the
+  // ▲ was on the block but never where the decision gets made.
+  await page.evaluate(() => {
+    const s = window.__events.getState()
+    const watch = s.events.find((e) => e.kind === 'shift' && !e.allDay)
+    if (!watch) return
+    const end = new Date(watch.start) // train hard up against a watch's start
+    const start = new Date(end.getTime() - 30 * 60000)
+    s.addEvent({
+      source: 'manual',
+      kind: 'training',
+      title: 'Squeezed session',
+      start: new Date(start.getTime() - 30 * 60000).toISOString(),
+      end: start.toISOString(),
+    })
+  })
+  await page.waitForTimeout(700)
+  const panelSaid = await page.evaluate(() => {
+    const panel = [...document.querySelectorAll('div')].find((d) =>
+      /THE DIFFERENCE/.test(d.textContent ?? ''),
+    )
+    return /minutes (before|after) the watch/i.test(panel?.textContent ?? '')
+  })
+  panelSaid
+    ? ok('B7 the desktop Difference panel names the conflict')
+    : bad('B7 the desktop Difference panel names the conflict', 'panel still shows hours only')
+}
+
 /* --------------------------------------------------- mobile rail geometry */
 
 async function mobileChecks(browser) {
@@ -700,6 +844,7 @@ if (process.argv.includes('--probe')) {
   // one broken check must not hide the other twenty — always print the table
   for (const [name, fn] of [
     ['desktop', desktopChecks],
+    ['briefing', briefingChecks],
     ['mobile', mobileChecks],
   ]) {
     try {

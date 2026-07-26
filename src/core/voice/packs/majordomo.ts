@@ -26,6 +26,7 @@ export const majordomoPack: VoicePack = {
       if (studyH > 0) parts.push(`${studyH.toFixed(0)} h study`)
       return parts.join(' · ')
     },
+    briefingScope: { now: 'TODAY', viewing: 'VIEWING' },
     anchoredEarlier: 'That one begins last week, sir. Move it from there.',
     custom: {
       row: 'Something else…',
@@ -114,7 +115,9 @@ export const majordomoPack: VoicePack = {
     },
     whatIf: {
       button: '⧉ WHAT-IF',
-      banner: 'The ledger is sandboxed, sir. Nothing binds until you apply.',
+      // "the ledger" collided with THE LEDGER wing one tab over — the first
+      // read was that your net worth was being rehearsed
+      banner: 'The week is a rehearsal, sir. Nothing binds until you apply.',
       panelTitle: 'THE DIFFERENCE',
       panelSub: 'hours this week, before → after',
       noteClean: 'Drag freely, sir. I shall keep the originals in pencil.',

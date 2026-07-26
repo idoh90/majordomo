@@ -5,7 +5,7 @@ import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
 import { voice } from '../../core/voice'
-import { daysUntil, examProgress, nextExam, reconcileMarkers, studyStats } from './lib'
+import { bookedHoursBeforeExam, daysUntil, nextExam, reconcileMarkers, studyStats } from './lib'
 import { useStudyStore } from './store'
 import { StudyScreen } from './StudyScreen'
 
@@ -74,7 +74,10 @@ function Briefing() {
     ? voice.study.briefingExam({
         subject: subjects.find((s) => s.id === next.subjectId)?.name ?? '—',
         days: daysUntil(next.on, now),
-        hours: examProgress(next, events, sessions),
+        // "on the books" means BOOKED, so count what is scheduled between now
+        // and the exam — not examProgress, which is hours already done and is
+        // what made this line contradict the Manor's exam heads-up
+        hours: bookedHoursBeforeExam(next, events, now),
       })
     : dueCount > 0
       ? voice.study.briefingHomework(dueCount)

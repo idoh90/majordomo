@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { voice } from '../../core/voice'
 import { useIsMobile } from '../useIsMobile'
 import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
+import { ManorLegend } from './Legend'
 import { CustomEventForm } from './fields'
 import { EventEditSheet, MobileEventSheet, MobileQuickAddSheet } from './MobileSheets'
 import { nearWatch } from './nearWatch'
@@ -590,6 +591,11 @@ export function WeekGrid({
     <>
       {/* ------------------------------------------------ desktop: 7 columns */}
       <div className="hidden md:block">
+        {/* the key to the strain bars below and the seam's dotted edges —
+            without it they are unexplained colour, and red reads as an error */}
+        <div className="mb-2 pl-12">
+          <ManorLegend variant="week" />
+        </div>
         <div className="flex pl-12">
           {columns.map((win, i) => (
             <DayHeader

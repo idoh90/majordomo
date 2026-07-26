@@ -1,4 +1,5 @@
 import type { CalendarEvent } from '../../core/events/types'
+import { voice } from '../../core/voice'
 
 /**
  * "You would train already worn, sir." — a training block that sits hard by
@@ -44,4 +45,21 @@ export function nearWatch(
     }
   }
   return best
+}
+
+/**
+ * The first training-hard-by-a-watch collision in a what-if draft, as the
+ * butler would put it — or null when the rehearsal is clean.
+ *
+ * Shared by both Difference surfaces. The mobile drawer computed and showed
+ * this while the desktop panel showed hours only, so on desktop the ▲ appeared
+ * on the block but never in the panel where the decision is actually made.
+ */
+export function draftConflictLine(draft: CalendarEvent[]): string | null {
+  for (const e of draft) {
+    if (e.kind !== 'training' || e.allDay) continue
+    const nw = nearWatch(draft, new Date(e.start), new Date(e.end), e.id)
+    if (nw) return voice.manor.whatIf.conflict({ title: e.title, ...nw })
+  }
+  return null
 }

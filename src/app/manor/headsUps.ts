@@ -13,7 +13,7 @@ import { isRun, type Workout } from '../../modules/training/types'
 import { unfulfilledTrainingEvents } from '../../modules/training/lib/fulfillment'
 import type { Snapshot } from '../../modules/capital/types'
 import type { Exam, SessionMeta, Subject } from '../../modules/study/types'
-import { awaitingReport, nextExam, subjRef } from '../../modules/study/lib'
+import { awaitingReport, bookedHoursBeforeExam, nextExam } from '../../modules/study/lib'
 
 /**
  * The butler's briefing: a greeting plus contextual heads-up lines, computed
@@ -85,14 +85,9 @@ export function computeBriefing(i: HeadsUpInputs): { greeting: string | null; he
     const examDay = new Date(y, m - 1, d)
     const days = Math.round((examDay.getTime() - startOfLocalDay(nowD).getTime()) / DAY_MS)
     if (days <= 7) {
-      const ref = subjRef(exam.subjectId)
-      const booked = i.events.some(
-        (e) =>
-          e.kind === 'study' &&
-          e.sourceRef === ref &&
-          new Date(e.start).getTime() >= i.now &&
-          new Date(e.start).getTime() < examDay.getTime() + DAY_MS,
-      )
+      // same helper, same window as the Study wing's own briefing line — the
+      // two used to compute this separately and contradict each other on screen
+      const booked = bookedHoursBeforeExam(exam, i.events, i.now) > 0
       if (!booked) {
         const subject = i.subjects.find((s) => s.id === exam.subjectId)?.name ?? exam.title
         push('exam-unbooked', voice.manor.headsUp.examUnbooked({ subject, days }))

@@ -35,6 +35,19 @@ export interface VoicePack {
     briefing: (count: number) => string
     /** briefing-strip stat readout */
     briefingStat: (v: { watchH: number; trainingCount: number; studyH: number }) => string
+    /**
+     * The strip is mixed-scope BY DESIGN: greeting, week line and stats follow
+     * the VIEWED week, while the heads-up prose is now-relative (paging the
+     * calendar must not change what the butler knows). These two tags say
+     * which is which, so a now-relative line stops reading as a claim about
+     * the grid on screen.
+     */
+    briefingScope: {
+      /** tags the now-relative heads-up block */
+      now: string
+      /** marks the strip when the viewed week is not the current one */
+      viewing: string
+    }
     /** drag refused: the block began before the viewed week, so it has no
      *  column here to be moved from */
     anchoredEarlier: string

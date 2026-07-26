@@ -2,6 +2,7 @@ import type { CalendarEvent } from '../../core/events/types'
 import { addDays, localDayKey, startOfWeek, type WeekStart } from '../../core/dates'
 import { voice } from '../../core/voice'
 import { KIND_META, hhmm, markerMeta } from './kinds'
+import { ManorLegend } from './Legend'
 import { StrainBar } from './StrainBar'
 import type { DayStrain } from './strain'
 
@@ -221,28 +222,10 @@ export function MonthView({
           )
         })}
       </div>
-      {/* mobile legend — the dots decoded */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] lowercase text-ink-dim md:hidden">
-        {(['shift', 'training', 'study', 'marker'] as const).map((k) => (
-          <span key={k} className="inline-flex items-center gap-1.5">
-            <span
-              className="h-[5px] w-[5px] rounded-full"
-              style={{ background: KIND_META[k].color }}
-            />
-            {KIND_META[k].label}
-          </span>
-        ))}
-        <span className="inline-flex items-center gap-1.5">
-          <span style={{ color: 'var(--color-w-watch)' }}>→</span>
-          {voice.manor.monthLegend.runsPast}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span
-            className="h-2.5 w-2.5 rounded-[3px]"
-            style={{ background: 'color-mix(in srgb, var(--color-danger) 12%, var(--color-panel))' }}
-          />
-          {voice.manor.monthLegend.strain}
-        </span>
+      {/* the dots decoded — was md:hidden, i.e. absent from the one viewport
+          where the unexplained colour drew the most complaint */}
+      <div className="mt-3">
+        <ManorLegend variant="month" />
       </div>
       <div className="mt-2.5 text-[11.5px] italic text-ink-dim">{voice.manor.monthNote}</div>
     </div>

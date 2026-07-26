@@ -12,7 +12,7 @@ import { CONSOLES } from '../consoles'
 import { BriefingStrip } from './BriefingStrip'
 import { KIND_META } from './kinds'
 import { MonthView, monthCells, monthLabel } from './MonthView'
-import { nearWatch } from './nearWatch'
+import { draftConflictLine } from './nearWatch'
 import { dayStrains } from './strain'
 import { useManorUi } from './uiStore'
 import { WeekGrid } from './WeekGrid'
@@ -186,7 +186,14 @@ export function ManorScreen() {
           {voice.manor.whatIf.banner}
         </div>
       ) : (
-        <BriefingStrip weekEvents={weekEvents} />
+        <BriefingStrip
+          weekEvents={weekEvents}
+          offWeekLabel={
+            now >= columns[0].start.getTime() && now < columns[6].end.getTime()
+              ? null
+              : weekLabel
+          }
+        />
       )}
 
       {mode === 'month' ? (
@@ -252,13 +259,16 @@ export function ManorScreen() {
           <span className="text-xs text-ink-dim [font-variant-numeric:tabular-nums]">
             {voice.manor.whatIf.changes(sandbox.changed.length)}
           </span>
+          {/* the counter already said "no changes yet" while this rendered
+              live — the state existed, it just wasn't wired to the button */}
           <button
             type="button"
+            disabled={sandbox.changed.length === 0}
             onClick={() => {
               useEventsStore.getState().applySandbox()
               butler(voice.manor.whatIf.applied)
             }}
-            className="btn-cta px-5 py-2 text-[12.5px]"
+            className="btn-cta px-5 py-2 text-[12.5px] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {voice.manor.whatIf.apply}
           </button>
@@ -342,6 +352,7 @@ function DiffPanel({
   draft: CalendarEvent[]
   changeCount: number
 }) {
+  const conflict = useMemo(() => draftConflictLine(draft), [draft])
   return (
     <div
       className="sticky top-4 hidden w-[238px] flex-none rounded-xl border border-dashed p-4 md:block"
@@ -357,6 +368,19 @@ function DiffPanel({
       <div className="mt-3">
         <DiffRows committed={committed} draft={draft} />
       </div>
+      {/* the same conflict the mobile drawer has always shown: the ▲ was on
+          the block but never in the panel where the decision gets made */}
+      {conflict && (
+        <div
+          className="mt-3 flex gap-1.5 text-[11.5px] leading-relaxed"
+          style={{ color: 'var(--color-danger)' }}
+        >
+          <span aria-hidden className="flex-none">
+            ▲
+          </span>
+          <span>{conflict}</span>
+        </div>
+      )}
       <div className="mt-3 text-xs italic text-ink-dim">
         {changeCount === 0 ? voice.manor.whatIf.noteClean : voice.manor.whatIf.noteDirty}
       </div>
@@ -380,14 +404,7 @@ function MobileDiffDrawer({
   onDiscard: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
-  const conflict = useMemo(() => {
-    for (const e of draft) {
-      if (e.kind !== 'training' || e.allDay) continue
-      const nw = nearWatch(draft, new Date(e.start), new Date(e.end), e.id)
-      if (nw) return voice.manor.whatIf.conflict({ title: e.title, ...nw })
-    }
-    return null
-  }, [draft])
+  const conflict = useMemo(() => draftConflictLine(draft), [draft])
   return (
     <div
       className="fixed inset-x-0 z-30 md:hidden"
@@ -439,8 +456,9 @@ function MobileDiffDrawer({
         <div className="flex gap-2">
           <button
             type="button"
+            disabled={changeCount === 0}
             onClick={onApply}
-            className="btn-cta h-11 flex-[1.4] font-display text-[13px] font-semibold tracking-[0.16em]"
+            className="btn-cta h-11 flex-[1.4] font-display text-[13px] font-semibold tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {voice.manor.whatIf.apply}
           </button>

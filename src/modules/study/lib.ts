@@ -127,6 +127,39 @@ export function examProgress(
     .reduce((t, e) => t + fulfilledHours(e, metaOf(sessions, e)), 0)
 }
 
+/**
+ * Hours BOOKED for an exam's subject in the run-up to it — the single answer
+ * to "is anything on the books before this exam, sir?".
+ *
+ * The window is explicit and shared: **[now, end of the exam's local day)**.
+ * Scheduled span, not fulfilled hours — these sessions have not happened yet,
+ * so there is nothing to fulfil.
+ *
+ * This exists because two code paths used to answer that question differently
+ * and contradicted each other on one screen: the Manor's heads-up asked "does
+ * any FUTURE session exist?" while the Study briefing reported examProgress —
+ * fulfilled hours since countFrom, i.e. work already DONE — but phrased it as
+ * "on the books". With past sessions done and nothing booked ahead, the estate
+ * said "nothing on the books" and "two hours on the books" at the same time.
+ *
+ * Both callers now use this. `examProgress` is a different and still-correct
+ * question ("how much have I actually done") and remains the Study screen's.
+ */
+export function bookedHoursBeforeExam(
+  exam: Exam,
+  events: CalendarEvent[],
+  now: number,
+): number {
+  const endOfExamDay = dayKeyToDate(exam.on).getTime() + 86_400_000
+  return sessionsOf(events)
+    .filter((e) => {
+      if (subjectOfEvent(e) !== exam.subjectId) return false
+      const start = new Date(e.start).getTime()
+      return start >= now && start < endOfExamDay
+    })
+    .reduce((t, e) => t + hoursOf(e), 0)
+}
+
 /** the nearest exam on/after today, else null */
 export function nextExam(exams: Exam[], now: number): Exam | null {
   const today = localDayKey(new Date(now))
