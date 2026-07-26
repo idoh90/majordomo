@@ -1,6 +1,7 @@
 import type { Workout } from '../../types'
 import { muscleLabel } from '../../data/muscles'
 import { topMuscles } from '../../lib/insights'
+import { voice } from '../../../../core/voice'
 
 interface TopMusclesChartProps {
   workouts: Workout[]
@@ -14,10 +15,10 @@ export function TopMusclesChart({ workouts, now }: TopMusclesChartProps) {
 
   return (
     <div className="panel p-4">
-      <h3 className="card-title">Most Trained · 30d</h3>
+      <h3 className="card-title">{voice.grounds.topMusclesTitle}</h3>
       {rows.length === 0 ? (
         <p className="mt-4 pb-2 text-center text-xs text-ink-faint">
-          No training volume yet
+          {voice.grounds.topMusclesEmpty}
         </p>
       ) : (
         <div className="mt-3 flex flex-col gap-2">
@@ -41,6 +42,10 @@ export function TopMusclesChart({ workouts, now }: TopMusclesChartProps) {
               </span>
             </div>
           ))}
+          {/* say what the chart leaves out rather than letting it read as "all" */}
+          <p className="mt-1 text-[10px] leading-relaxed text-ink-faint">
+            {voice.grounds.topMusclesNote}
+          </p>
         </div>
       )}
     </div>

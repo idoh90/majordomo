@@ -7,6 +7,13 @@ export const majordomoPack: VoicePack = {
   skinPickerBlurb: 'Three presets, one house. Switches instantly — nothing else changes.',
   storageWarning: "Browser storage is blocked (private mode?) — nothing will survive a reload.",
   presetLabel: 'PRESET',
+  ui: {
+    discard: {
+      title: 'Leave this unsaved, sir?',
+      body: 'What you have typed here is not yet on the books. Closing loses it.',
+      confirm: 'Discard it',
+    },
+  },
   manor: {
     name: 'THE MANOR',
     empty: 'Nothing on the books this week, sir.',
@@ -137,15 +144,51 @@ export const majordomoPack: VoicePack = {
     scheduledNote: 'Booked on the Manor, sir — move or remove them there.',
     recoveryTitle: 'RECOVERY',
     settles: ({ day, time }) => `settles ${day} ${time}`,
-    fulfils: ({ day }) => {
+    fulfils: ({ day, time }) => {
       const d = day === 'Today' || day === 'Yesterday' ? day.toLowerCase() : day
-      return `This fulfils ${d}'s block, sir.`
+      return `This fulfils ${d}'s ${time} block, sir.`
     },
+    fulfilsNothing: 'This fulfils no booked block, sir.',
+    fulfilsChange: 'change',
+    fulfilsNoBlock: "None — don't link",
     fulfilledTag: 'LOGGED',
-    emptyLogTitle: 'No workouts yet',
-    emptyLogMobile: 'Tap the + to log your first one.',
-    emptyLogDesktop: 'Use Log Workout, above, to record your first one.',
-    mapHint: 'Select a muscle for details',
+    runPace: ({ pace }) => `That is ${pace} per kilometre, sir.`,
+    runPaceWalking: 'Walking pace, sir.',
+    runOptional: 'Both optional, sir — effort is what drives the strain.',
+    weekTitle: 'This week',
+    goalMet: "The week's goal is met, sir.",
+    goalRemaining: (n) => `${n} more to meet the week's goal.`,
+    slackingTitle: 'Below your usual',
+    slackingDetail: ({ group, thisWeek, baseline }) =>
+      `${group}: ${Math.round(thisWeek)} against a usual ${Math.round(baseline)} a week`,
+    goalDialogTitle: 'Weekly goal',
+    goalDialogBody: 'How many sessions should the week hold, sir? Change it whenever you like.',
+    goalPerWeek: 'per week',
+    goalNone: 'no goal',
+    fuelTitle: 'Fuel · Today',
+    fuelTrainingDay: 'Training day',
+    fuelRestDay: 'Rest day',
+    fuelTips: [
+      'A piece of fruit today covers the vitamin C and potassium the meat does not, sir.',
+      'Training days want a starch — potato, rice, oats — to reach the carbs, sir.',
+      'Yogurt or milk covers the calcium the meat is missing, sir.',
+      'Liver once a week fills the folate and vitamin A gaps, sir. No vegetables required.',
+      'Oats or a supplement closes the fibre gap gently, sir.',
+      'A periodic lipid panel — LDL, ApoB — is worth having on a red-meat diet, sir.',
+    ],
+    historyEmptyTitle: 'Nothing logged yet',
+    historyEmptyMobile: 'Hit the glowing + to log the first one, sir.',
+    historyEmptyDesktop: 'Hit LOG WORKOUT above to log the first one, sir.',
+    // device-neutral: one info line renders under a mouse as often as a thumb,
+    // and unlike the history empty state there is no second element to swap
+    mapIdleStrain: 'Select a muscle for details',
+    mapIdleVolume: 'Weekly volume vs your targets',
+    deloadTitle: 'Deload check',
+    deload: ({ count, muscles }) =>
+      `${count} muscles are overreaching this week (${muscles}). A lighter session or an extra rest day would settle them, sir.`,
+    topMusclesTitle: 'Most Trained · 30d',
+    topMusclesNote: 'Lifting only — runs feed recovery, not this chart.',
+    topMusclesEmpty: 'No lifting volume yet',
   },
   study: {
     readingWeek: 'THE READING THIS WEEK',
@@ -312,6 +355,8 @@ export const majordomoPack: VoicePack = {
       "No balances yet. Add your accounts, then log a snapshot to start charting the estate's worth.",
     fxMissing: (currencies) =>
       `No ₪ rate for ${currencies.join(', ')} yet, sir — these figures are unconverted. Refresh prices.`,
+    liveDegraded: (currencies) =>
+      `Awaiting ${currencies.join(', ')} figures, sir — those accounts show their last saved balances.`,
     hide: 'HIDE, SIR',
     reveal: 'REVEAL, SIR',
     stampLive: 'live',
@@ -319,6 +364,25 @@ export const majordomoPack: VoicePack = {
     stampHeldTitle:
       'No fresh quote or ₪ rate, sir — keeping the last saved value rather than writing a wrong one.',
     recentEntries: 'RECENT ENTRIES',
+    trend: {
+      rangeEmpty: (months) => `Not enough points in the last ${months} months, sir — two make a line.`,
+      showAll: 'Show all',
+    },
+    spend: {
+      history: 'History',
+      prevMonth: 'Previous month',
+      nextMonth: 'Next month',
+      oneOffs: (month) => `One-offs · ${month}`,
+      total: (month) => `Total · ${month}`,
+      oneOffsHint: 'One-off spends — groceries, fuel, dining… a refund goes in as a minus.',
+      dateLabel: 'Date',
+      amountMissing: 'amount?',
+      fixRows: (n) =>
+        n === 1
+          ? 'One row has a name but no amount, sir — give it one, or strike the row.'
+          : `${n} rows have a name but no amount, sir — give them one, or strike them.`,
+      noMinus: 'A minus belongs on a one-off row, sir — the budget and the card total only run forwards.',
+    },
     addBalances: 'Update balances',
     addSpend: 'Log a spend',
     paydayMarker: 'Payday',

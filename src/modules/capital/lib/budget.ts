@@ -13,6 +13,31 @@ export function monthLabel(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'long' })
 }
 
+/** 'YYYY-MM' → its first day, local time (the inverse of monthKey). */
+export function monthStart(month: string): Date {
+  const [y, m] = month.split('-').map(Number)
+  return new Date(y, (m || 1) - 1, 1)
+}
+
+/** Walk the month pager: shiftMonth('2026-01', -1) === '2025-12'. */
+export function shiftMonth(month: string, delta: number): string {
+  const d = monthStart(month)
+  d.setMonth(d.getMonth() + delta)
+  return monthKey(d)
+}
+
+/** Label a month key — bare month name inside `now`'s year, 'December 2025' before it. */
+export function monthKeyLabel(month: string, now: Date): string {
+  const d = monthStart(month)
+  return d.getFullYear() === now.getFullYear() ? monthLabel(d) : `${monthLabel(d)} ${d.getFullYear()}`
+}
+
+/** A date to stamp a new one-off with while viewing `month`: now when that IS
+ *  the current month, else the 1st — so the item lands in the month on screen. */
+export function dateInMonth(month: string, now: Date): string {
+  return (monthKey(now) === month ? now : monthStart(month)).toISOString()
+}
+
 export function itemsForMonth(items: SpendItem[], month: string): SpendItem[] {
   return items.filter((i) => monthKey(new Date(i.date)) === month)
 }

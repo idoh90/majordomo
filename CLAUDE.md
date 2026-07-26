@@ -123,6 +123,16 @@ Everything under `core/` beyond the contract got there by the **extract-on-conta
 rule: `Sheet`/`ConfirmDialog`/`SegmentedControl`, `makeId`, `storageAvailable`, and
 `useNow` all lived in training until Wayne Fund became the second consumer.
 
+**`Sheet`'s close contract**: the backdrop dismisses on **click, never
+`pointerdown`** — a press that starts on the scrim and ends on the surface (a slip,
+a drag out of an input) must not throw the sheet away, and `cursor-pointer` on the
+scrim is load-bearing (iOS only delivers click on a non-interactive element that
+looks clickable). A sheet holding unsaved work passes `dirty` and Sheet puts a
+`ConfirmDialog` (copy: `voice.ui.discard`) between the backdrop/Esc and `onClose`;
+Esc closes that confirm first, keeping the draft. `dirty` must mean *differs from
+the store*, not *was touched* — SpendSheet is the reference implementation. Save
+paths call `onClose` directly and never see the guard.
+
 ### The ConsoleModule contract (`src/core/module.ts`)
 
 ```ts
@@ -206,6 +216,14 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   Vault / allocation / accounts read live; the chart reads snapshots (+ an appended
   live "now" point when holdings exist). `lib/networth.ts` `liveNetWorth()` blends;
   `netWorthSeries()` stays snapshot-only.
+  **Live is STRICT, like the snapshot stamp**: `accountLiveValue` only counts a live
+  sum when EVERY holding of the account has a quote AND a ₪ rate — otherwise the
+  account reads its latest snapshot balance, because a rate-1 cost-basis fallback let
+  unconverted USD masquerade as ₪ in the Vault/accounts/allocation. `liveNetWorth`
+  returns `degraded: string[]` (the blocking currencies) and the Vault owns up in one
+  line; the accounts list flips `· live` to `· held`. The **portfolio board is the
+  exception** — it keeps per-row market values and labels them in their own currency
+  (`unconvertedCurrency`), which is honest because the row says which currency it is.
 - **Prices** (`lib/prices.ts`, `lib/holdings.ts`) — Twelve Data `/quote` (batched by
   exchange) + `/exchange_rate` for FX. Prices are in each holding's **native currency**;
   net worth converts to ₪ via `fx` (currency→ILS). `refreshPrices()` (a store action)
@@ -219,9 +237,41 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   card, accounts list, **portfolio board** with per-holding price / day-move / P/L).
   Charts are hand-rolled inline SVG using `text-accent` + `currentColor`, recoloring
   per skin for free (verified on Ironworks-Paper).
+  The **▲/▼ row needs a basis** — `displayDelta()` in `lib/networth.ts` returns null
+  (and the Vault/briefing then omit the row rather than print '▲ ₪0 vs last') when a
+  lone snapshot has no prior point, or when a degraded live side is being compared
+  with the very snapshot it fell back to. Both surfaces call that one function.
+- **Trend chart conventions** (`NetWorthChart`) — axis dates are `Mar '26`, never
+  `Mar 26` (a bare 2-digit year reads as a day). A range pill shows **only what its
+  window holds**: fewer than two points renders the range's own empty state plus a
+  *Show all*, never points from outside the window. The endpoint marker is an
+  HTML span positioned in percent, NOT an SVG `<circle>` — the chart's
+  `preserveAspectRatio="none"` would squash a circle into an ellipse, and at x=W half
+  of it falls outside the viewBox (its overhang lands inside the panel's padding).
+  Anything else pinned to a data coordinate needs the same treatment.
 - **The budget** (`lib/budget.ts`) — a running **month-to-date spend** the user
   overwrites whenever they check their card app, vs a monthly target. `budgetPace()`
   linearly projects month-end spend and flags under/on/over.
+- **Spending history** — the data is month-keyed (`spends` 'YYYY-MM' + dated
+  `spendItems`), so the SpendSheet is a **month pager** (‹ July ›, opening on the
+  current month, forward stopping at the present or the last month holding data).
+  Card total + one-offs belong to the VIEWED month and save to ITS keys; **recurring
+  is global** (not per-month data), as is the budget. The sheet keeps one draft per
+  visited month and commits only the months whose values actually **differ from the
+  store** — paging to look costs nothing, and an edit undone writes nothing.
+  `monthlySpent()` semantics are untouched; the SpendCard's *History* button
+  is just another door onto the same sheet. Each one-off row carries a **date**
+  (`<input type=date>` clamped to the viewed month, keeping its time-of-day so
+  same-day order holds) — the pager owns the month, the row owns the day.
+- **A typed row is never silently dropped.** Amounts are **signed**: a minus on a
+  one-off row is a refund and subtracts through the month total, the card, the tile
+  and the briefing (`SpendCard` clamps its bar at both ends — an unclamped negative
+  width renders FULL). A row with a name but no usable amount **blocks Save** with a
+  marker on the row (paging to the offending month first, since a marker you can't
+  see is no help); only a wholly untouched blank row is dropped. The budget and card
+  snapshot are forward-only totals, so a minus there is **refused, not clamped** —
+  clamping to 0 is the same silent rewrite. Nothing in this sheet displays one number
+  and stores another.
 - **Money math** — `lib/money.ts` (`formatILS` uses **en-US locale so ₪ is an LTR
   prefix** — he-IL scrambles word order inside the English UI), `ASSET_CLASSES`
   (labels + fixed categorical allocation colors). `<Amount>` blurs values (hover to

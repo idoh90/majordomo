@@ -1,6 +1,6 @@
 import type { Account, AssetClass, Holding, Snapshot } from '../types'
 import { ASSET_CLASSES } from './money'
-import { accountLiveValue, type Fx, type Prices } from './holdings'
+import { accountDegradedCurrencies, accountLiveValue, type Fx, type Prices } from './holdings'
 
 /** Net worth of one snapshot = Σ assets − Σ debts. */
 export function netWorthOf(snapshot: Snapshot, accounts: Account[]): number {
@@ -101,6 +101,9 @@ export interface LiveNetWorth {
   assets: number
   liabilities: number
   slices: AllocationSlice[]
+  /** currencies whose missing quote/₪ rate held priced accounts at their last
+   *  saved balance — empty when every priced account valued live */
+  degraded: string[]
 }
 
 export function liveNetWorth(
@@ -113,8 +116,10 @@ export function liveNetWorth(
   let assets = 0
   let liabilities = 0
   const totals = new Map<AssetClass, number>()
+  const degraded = new Set<string>()
   for (const a of accounts) {
     const v = liveAccountValue(a, holdings, prices, fx, latest)
+    for (const c of accountDegradedCurrencies(a.id, holdings, prices, fx)) degraded.add(c)
     if (ASSET_CLASSES[a.assetClass].liability) {
       liabilities += v
     } else {
@@ -122,5 +127,37 @@ export function liveNetWorth(
       if (v !== 0) totals.set(a.assetClass, (totals.get(a.assetClass) ?? 0) + v)
     }
   }
-  return { netWorth: assets - liabilities, assets, liabilities, slices: allocationFromTotals(totals) }
+  return {
+    netWorth: assets - liabilities,
+    assets,
+    liabilities,
+    slices: allocationFromTotals(totals),
+    degraded: [...degraded].sort(),
+  }
+}
+
+/**
+ * The delta the Vault and the briefing print, or **null when there is nothing to
+ * compare against** — the row is then omitted rather than printed as a
+ * meaningless '▲ ₪0 vs last'. Two ways to have no basis:
+ *   · no holdings and a single snapshot — there is no prior point;
+ *   · holdings whose live side fell back to the latest snapshot (missing quote
+ *     or ₪ rate), so the comparison is that snapshot against itself.
+ * With holdings the delta is live-vs-last-snapshot (the market move since the
+ * save); without, it's the Phase-1 last-vs-previous-snapshot move.
+ */
+export function displayDelta(opts: {
+  live: LiveNetWorth
+  series: NetWorthPoint[]
+  latest: Snapshot | null
+  snapshotNetWorth: number
+  hasHoldings: boolean
+}): NetWorthDelta | null {
+  const { live, series, latest, snapshotNetWorth, hasHoldings } = opts
+  if (hasHoldings && latest) {
+    const absolute = live.netWorth - snapshotNetWorth
+    if (absolute === 0 && live.degraded.length > 0) return null
+    return { absolute, fraction: snapshotNetWorth !== 0 ? absolute / Math.abs(snapshotNetWorth) : null }
+  }
+  return series.length >= 2 ? latestDelta(series) : null
 }

@@ -14,8 +14,14 @@ const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
 /**
  * Dark in-app month calendar (Monday-start). Days with logged workouts show
- * up to three amber dots; future days are disabled. A time row below the
- * grid fine-tunes the moment.
+ * up to three amber dots. A time row below the grid fine-tunes the moment.
+ *
+ * ONE RULE FOR DAYS AND TIMES: a workout cannot have happened in the future.
+ * Future days are disabled, today's time input is capped at the current
+ * minute, and anything that would still land ahead of now — a 23:59 pick at
+ * 13:00, or yesterday-at-23:59 carried onto today by a day tap — clamps to
+ * now. Otherwise a workout logged for tonight would count toward this week
+ * and claim a block that has not happened yet.
  */
 export function CalendarPicker({ value, onChange, workouts }: CalendarPickerProps) {
   const selected = new Date(value)
@@ -51,10 +57,14 @@ export function CalendarPicker({ value, onChange, workouts }: CalendarPickerProp
     setViewMonth(d.getMonth())
   }
 
+  /** never ahead of the present — resolved at interaction time, not render */
+  const emit = (d: Date) => {
+    const nowMs = Date.now()
+    onChange(new Date(Math.min(d.getTime(), nowMs)).toISOString())
+  }
+
   const pickDay = (day: number) => {
-    onChange(
-      new Date(viewYear, viewMonth, day, selected.getHours(), selected.getMinutes()).toISOString(),
-    )
+    emit(new Date(viewYear, viewMonth, day, selected.getHours(), selected.getMinutes()))
   }
 
   const setTime = (hhmm: string) => {
@@ -62,7 +72,7 @@ export function CalendarPicker({ value, onChange, workouts }: CalendarPickerProp
     const [h, m] = hhmm.split(':').map(Number)
     const d = new Date(selected)
     d.setHours(h, m, 0, 0)
-    onChange(d.toISOString())
+    emit(d)
   }
 
   const pad2 = (n: number) => String(n).padStart(2, '0')
@@ -149,6 +159,8 @@ export function CalendarPicker({ value, onChange, workouts }: CalendarPickerProp
         <input
           type="time"
           value={`${pad2(selected.getHours())}:${pad2(selected.getMinutes())}`}
+          // the day grid's rule, applied to the clock: no later than now
+          max={selectedKey === todayKey ? `${pad2(today.getHours())}:${pad2(today.getMinutes())}` : undefined}
           onChange={(e) => setTime(e.target.value)}
           className="rounded-lg border border-line bg-panel px-2.5 py-1.5 text-sm text-ink outline-none [color-scheme:dark] focus:border-accent/60"
         />

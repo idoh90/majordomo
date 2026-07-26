@@ -20,6 +20,11 @@ export interface VoicePack {
   storageWarning: string
   /** tiny label beside the header's preset dots */
   presetLabel: string
+  /** shared UI primitives (core/ui) — copy a wing must not have to supply */
+  ui: {
+    /** a Sheet asked to close while its draft differs from the store */
+    discard: { title: string; body: string; confirm: string }
+  }
   manor: {
     /** the home tab label */
     name: string
@@ -204,18 +209,48 @@ export interface VoicePack {
     /** recovery card: title + per-muscle settle line */
     recoveryTitle: string
     settles: (v: { day: string; time: string }) => string
-    /** passive line over the save button when the session will fulfil a booked block */
-    fulfils: (v: { day: string }) => string
+    /** line over the save button naming the booked block the session will fulfil */
+    fulfils: (v: { day: string; time: string }) => string
+    /** the same slot once the user has aimed the session at no block at all */
+    fulfilsNothing: string
+    /** tap affordance on that line when several blocks are in range */
+    fulfilsChange: string
+    /** the opt-out row of the block picker */
+    fulfilsNoBlock: string
     /** dim tag on a booked block that already has a workout linked */
     fulfilledTag: string
-    /** empty log: heading, then the control to press — named per platform,
-     *  since the desktop has a header button and no glowing + anywhere */
-    emptyLogTitle: string
-    emptyLogMobile: string
-    emptyLogDesktop: string
-    /** body-map hint before a muscle is chosen — device-neutral, because it
-     *  renders under a mouse as often as a thumb */
-    mapHint: string
+    /** run step: the pace read-out, its walking-pace floor, and the hint */
+    runPace: (v: { pace: string }) => string
+    runPaceWalking: string
+    runOptional: string
+    /** weekly-goal card + its dialog */
+    weekTitle: string
+    goalMet: string
+    goalRemaining: (n: number) => string
+    slackingTitle: string
+    slackingDetail: (v: { group: string; thisWeek: number; baseline: number }) => string
+    goalDialogTitle: string
+    goalDialogBody: string
+    goalPerWeek: string
+    goalNone: string
+    /** fuel card: title, day chips, and the rotating diet notes */
+    fuelTitle: string
+    fuelTrainingDay: string
+    fuelRestDay: string
+    fuelTips: string[]
+    /** history with nothing in it — the prompt differs by where the button is */
+    historyEmptyTitle: string
+    historyEmptyMobile: string
+    historyEmptyDesktop: string
+    /** body map: the idle info line per mode, and the over-volume hint */
+    mapIdleStrain: string
+    mapIdleVolume: string
+    deloadTitle: string
+    deload: (v: { count: number; muscles: string }) => string
+    /** most-trained chart — lifting only, so it says so */
+    topMusclesTitle: string
+    topMusclesNote: string
+    topMusclesEmpty: string
   }
   study: {
     /** rings hero card title */
@@ -357,6 +392,9 @@ export interface VoicePack {
     vaultEmpty: string
     /** FX rate missing for these currencies — their figures render unconverted */
     fxMissing: (currencies: string[]) => string
+    /** the Vault's caveat: priced accounts fell back to their last saved balance
+     *  because these currencies lack a quote or a ₪ rate */
+    liveDegraded: (currencies: string[]) => string
     /** blur-toggle pill labels: action to take (hide when shown, reveal when hidden) */
     hide: string
     reveal: string
@@ -367,6 +405,32 @@ export interface VoicePack {
     stampHeldTitle: string
     /** recent one-off spends card title */
     recentEntries: string
+    /** the net-worth trend chart */
+    trend: {
+      /** the selected range holds fewer than two points — say so, don't widen it */
+      rangeEmpty: (months: number) => string
+      showAll: string
+    }
+    /** the spending sheet, month by month */
+    spend: {
+      /** the spend card's affordance onto the sheet's month pager */
+      history: string
+      /** month pager arrows */
+      prevMonth: string
+      nextMonth: string
+      /** one-off items section title / the viewed month's total */
+      oneOffs: (month: string) => string
+      total: (month: string) => string
+      /** one-off section hint — says how a refund goes in */
+      oneOffsHint: string
+      /** per-row date control */
+      dateLabel: string
+      /** a row carries a name but no amount: inline marker + the blocked-Save note */
+      amountMissing: string
+      fixRows: (n: number) => string
+      /** budget + card snapshot are forward-only totals, so a minus is refused there */
+      noMinus: string
+    }
     /** the mobile + action sheet rows */
     addBalances: string
     addSpend: string

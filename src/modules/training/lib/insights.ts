@@ -1,6 +1,13 @@
 import { isRun, type MuscleGroup, type MuscleId, type Workout } from '../types'
 import { ALL_MUSCLE_IDS, MUSCLES, PICKER_GROUPS } from '../data/muscles'
-import { addDays, localDayKey, startOfWeek, weekKey, type WeekStart } from '../../../core/dates'
+import {
+  addDays,
+  localDayKey,
+  startOfLocalDay,
+  startOfWeek,
+  weekKey,
+  type WeekStart,
+} from '../../../core/dates'
 import { muscleLoad } from './strain'
 
 export interface WeekBucket {
@@ -37,7 +44,8 @@ export function weeklyCounts(
   return buckets
 }
 
-/** Total undecayed training volume per muscle over the last `days` days. */
+/** Total undecayed LIFTING volume per muscle over the last `days` days — runs
+ *  excluded, so the chart reads as what was trained, not what was covered. */
 export function topMuscles(
   workouts: Workout[],
   now: Date,
@@ -47,6 +55,10 @@ export function topMuscles(
   const cutoffMs = addDays(now, -days).getTime()
   const totals = new Map<MuscleId, number>()
   for (const w of workouts) {
+    // runs are conditioning, not training volume — the same line the weekly
+    // count and the RP landmarks already draw. One long run otherwise puts
+    // calves and quads on top of a chart that means "what you trained".
+    if (isRun(w)) continue
     const t = new Date(w.performedAt).getTime()
     if (t < cutoffMs) continue
     for (const m of ALL_MUSCLE_IDS) {
@@ -104,16 +116,35 @@ export interface SlackingGroup {
   baseline: number
 }
 
+const DAY_MS = 86_400_000
+/** a week must be this far along before under-training means anything */
+const SLACKING_MIN_DAY = 3
+/** loads are summed floats, so a group EXACTLY on pace lands a few ulps under
+ *  the bar — it must not be called slacking over dust */
+const SLACKING_EPSILON = 1e-9
+
 /**
  * Muscle groups you normally train but have under-trained this calendar week.
  * Baseline = average weekly volume over the 4 completed weeks before this one;
- * a group is "slacking" if this week is below 50% of that baseline. Ranked by
+ * a group is "slacking" if this week sits below 50% of that baseline PRORATED
+ * BY WEEK PROGRESS — half the usual volume is only owed once the week is out.
+ * Against a flat 50% every trained group flunked on day one (0 < half of
+ * anything), which turned a mid-week nudge into a Monday-morning wall; the
+ * butler does not guilt. Nothing is emitted before day 3 at all. Ranked by
  * the largest shortfall relative to baseline.
  */
 export function slackingGroups(workouts: Workout[], now: Date, weekStart?: WeekStart): SlackingGroup[] {
   const thisWk = weekKey(now, weekStart)
   const currentStart = startOfWeek(now, weekStart)
   const priorStart = addDays(currentStart, -28)
+
+  // day 1 = the week-start day itself, so a full week reads 7/7 = the flat 50%.
+  // Rounded, not floored: a DST week puts 23h or 25h between two local
+  // midnights and would otherwise lose (or gain) a day.
+  const dayOfWeek =
+    1 + Math.round((startOfLocalDay(now).getTime() - currentStart.getTime()) / DAY_MS)
+  if (dayOfWeek < SLACKING_MIN_DAY) return []
+  const progress = Math.min(1, dayOfWeek / 7)
 
   const thisWeekVol = groupVolume(workouts, (w) => weekKey(new Date(w.performedAt), weekStart) === thisWk)
   const priorVol = groupVolume(workouts, (w) => {
@@ -126,7 +157,8 @@ export function slackingGroups(workouts: Workout[], now: Date, weekStart?: WeekS
     const baseline = (priorVol.get(group) ?? 0) / 4
     if (baseline < 2) continue // ignore groups you rarely train — avoids nagging
     const thisWeek = thisWeekVol.get(group) ?? 0
-    if (thisWeek < baseline * 0.5) out.push({ group, thisWeek, baseline })
+    const bar = baseline * 0.5 * progress * (1 - SLACKING_EPSILON)
+    if (thisWeek < bar) out.push({ group, thisWeek, baseline })
   }
   return out.sort((a, b) => a.thisWeek / a.baseline - b.thisWeek / b.baseline)
 }

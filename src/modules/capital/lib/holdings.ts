@@ -97,6 +97,13 @@ export function holdingsFor(accountId: string, holdings: Holding[]): Holding[] {
 /**
  * Current value of an account: Σ live market value when it has holdings, else the
  * manual `fallbackBalance` (its latest snapshot balance).
+ *
+ * STRICT, like the snapshot stamp: the live sum only counts when EVERY holding
+ * has a quote and a ₪ rate. It used to fall back per-holding to cost basis at
+ * rate 1, which let unconverted USD masquerade as ₪ in the Vault, the accounts
+ * list and the allocation bars (only the portfolio board labelled it). A number
+ * the UI can't label must be the last truthful one instead — the snapshot
+ * balance. Callers say so via `accountDegradedCurrencies` / `liveNetWorth`.
  */
 export function accountLiveValue(
   accountId: string,
@@ -105,11 +112,8 @@ export function accountLiveValue(
   fx: Fx,
   fallbackBalance: number,
 ): number {
-  const hs = holdingsFor(accountId, holdings)
-  if (hs.length === 0) return fallbackBalance
-  let total = 0
-  for (const h of hs) total += marketValueILS(h, prices, fx) ?? costValueILS(h, fx)
-  return total
+  if (holdingsFor(accountId, holdings).length === 0) return fallbackBalance
+  return accountLiveValueILSStrict(accountId, holdings, prices, fx) ?? fallbackBalance
 }
 
 export function isPriced(accountId: string, holdings: Holding[]): boolean {
@@ -140,6 +144,36 @@ export function accountLiveValueILSStrict(
     total += h.shares * q.price * rateFor(cur, fx)
   }
   return total
+}
+
+/**
+ * Currencies keeping this account off a live ₪ value — a holding with no cached
+ * quote (its declared currency), or a quote whose currency has no ₪ rate. Empty
+ * means the account values live; non-empty means it is showing its last saved
+ * balance, and the UI owes the user that sentence.
+ */
+export function accountDegradedCurrencies(
+  accountId: string,
+  holdings: Holding[],
+  prices: Prices,
+  fx: Fx,
+): string[] {
+  const blocked = new Set<string>()
+  for (const h of holdingsFor(accountId, holdings)) {
+    const q = quoteFor(h, prices)
+    if (!q) {
+      blocked.add(h.currency.toUpperCase())
+      continue
+    }
+    const cur = priceCurrency(h, q).toUpperCase()
+    if (cur !== 'ILS' && fx[cur] == null) blocked.add(cur)
+  }
+  return [...blocked].sort()
+}
+
+/** A priced account that can't be valued live right now — see above. */
+export function isDegraded(accountId: string, holdings: Holding[], prices: Prices, fx: Fx): boolean {
+  return accountDegradedCurrencies(accountId, holdings, prices, fx).length > 0
 }
 
 export interface PortfolioTotals {

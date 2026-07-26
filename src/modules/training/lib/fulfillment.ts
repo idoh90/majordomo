@@ -19,30 +19,34 @@ const MATCH_AFTER_END_MS = 24 * HOUR_MS
 const isTimedTraining = (e: CalendarEvent) => e.kind === 'training' && !e.allDay
 
 /**
- * The training block a workout fulfils: timed training events, not already
- * linked, with performedAt in [start − 2h, end + 24h]; nearest start wins.
+ * Every block a workout could fulfil, best first: timed training events, not
+ * already linked, with performedAt in [start − 2h, end + 24h].
+ *
+ * Ranking is TIERED, not nearest-start. A block that has already begun
+ * outranks one still ahead, however close the future one sits: an afternoon
+ * log belongs to the morning block that passed unrecorded — the exact pair
+ * the butler's "passed unrecorded" heads-up puts on screen — not to tonight's
+ * booking. Future blocks (still inside the 2h pre-window) are only reached
+ * when nothing has begun in range. Nearest start breaks ties inside a tier.
  * Call with the COMMITTED events list — never a what-if sandbox's.
  */
-export function matchTrainingEvent(
+export function rankTrainingEventMatches(
   events: CalendarEvent[],
   performedAt: string,
   linkedEventIds: Set<string>,
-): CalendarEvent | null {
+): CalendarEvent[] {
   const t = new Date(performedAt).getTime()
-  let best: CalendarEvent | null = null
-  let bestDist = Infinity
+  const scored: { event: CalendarEvent; tier: number; dist: number }[] = []
   for (const e of events) {
     if (!isTimedTraining(e) || linkedEventIds.has(e.id)) continue
     const start = new Date(e.start).getTime()
     const end = new Date(e.end).getTime()
     if (t < start - MATCH_BEFORE_START_MS || t > end + MATCH_AFTER_END_MS) continue
-    const dist = Math.abs(t - start)
-    if (dist < bestDist) {
-      best = e
-      bestDist = dist
-    }
+    scored.push({ event: e, tier: t >= start ? 0 : 1, dist: Math.abs(t - start) })
   }
-  return best
+  // sort is stable, so an exact tie keeps the store's start-ascending order
+  scored.sort((a, b) => a.tier - b.tier || a.dist - b.dist)
+  return scored.map((s) => s.event)
 }
 
 /** every eventId currently claimed by a workout */

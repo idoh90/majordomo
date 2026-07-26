@@ -1,6 +1,7 @@
 import type { Account, Holding, Snapshot } from '../types'
 import { ASSET_CLASSES } from '../lib/money'
-import { accountLiveValue, isPriced, type Fx, type Prices } from '../lib/holdings'
+import { accountLiveValue, isDegraded, isPriced, type Fx, type Prices } from '../lib/holdings'
+import { voice } from '../../../core/voice'
 import { Amount } from './Amount'
 
 interface AccountsPanelProps {
@@ -35,6 +36,9 @@ export function AccountsPanel({ accounts, latest, holdings, prices, fx, onEdit, 
             const val = valueOf(a)
             const isDebt = ASSET_CLASSES[a.assetClass].liability
             const priced = isPriced(a.id, holdings)
+            // priced but unvaluable = showing the last snapshot balance, not a
+            // live one; the same 'held' wording the snapshot stamp uses
+            const held = priced && isDegraded(a.id, holdings, prices, fx)
             return (
               <li key={a.id}>
                 <button
@@ -47,7 +51,15 @@ export function AccountsPanel({ accounts, latest, holdings, prices, fx, onEdit, 
                     <span className="block truncate text-sm text-ink">{a.name}</span>
                     <span className="block text-[11px] text-ink-faint">
                       {ASSET_CLASSES[a.assetClass].label}
-                      {priced && <span className="text-accent"> · live</span>}
+                      {priced &&
+                        (held ? (
+                          <span className="cursor-help" title={voice.capital.stampHeldTitle}>
+                            {' · '}
+                            {voice.capital.stampHeld}
+                          </span>
+                        ) : (
+                          <span className="text-accent"> · {voice.capital.stampLive}</span>
+                        ))}
                     </span>
                   </span>
                   <span className={`tabular-nums ${isDebt ? 'text-danger' : 'text-ink'}`}>
