@@ -237,7 +237,15 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
       const n = Number(s)
       return s.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined
     }
-    const performedAt = draft.whenTouched ? draft.performedAt : new Date().toISOString()
+    // a workout cannot have happened in the future — the picker's rule for days
+    // and times, enforced once more at the save instant, where a sheet left open
+    // has drifted past its own stamp. A moment that still stands is kept
+    // VERBATIM, so an edit's "time untouched" test survives the round trip.
+    const nowMs = Date.now()
+    const performedAt =
+      draft.whenTouched && new Date(draft.performedAt).getTime() <= nowMs
+        ? draft.performedAt
+        : new Date(nowMs).toISOString()
     // re-resolve at save-instant: an untouched new workout stamps NOW, and a
     // rematch that finds nothing must clear a stale link (eventId: undefined).
     // A block picked by hand outranks the rematch while it stays in range.
