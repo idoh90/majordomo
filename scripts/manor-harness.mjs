@@ -482,6 +482,20 @@ async function desktopChecks(browser) {
     await c.close()
   }
 
+  /* --- A7: a block's accessible name is not title+time run together ------- */
+  {
+    const named = await page.evaluate(() => {
+      const b = document.querySelector('[data-event-block]')
+      const label = b?.getAttribute('aria-label') ?? ''
+      // the visible text composes them with only a margin, e.g.
+      // "Linear Algebra15:00 → 16:30" — the label must separate them
+      return { label, ok: /,\s*\d\d:\d\d/.test(label) }
+    })
+    named.ok
+      ? ok('A7 blocks spell their name and time apart', named.label.slice(0, 46))
+      : bad('A7 blocks spell their name and time apart', `aria-label: "${named.label}"`)
+  }
+
   /* --- A3: no console errors --------------------------------------------- */
   errors.length === 0
     ? ok('A3 console clean')

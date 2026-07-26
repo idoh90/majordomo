@@ -174,9 +174,19 @@ export interface VoicePack {
     nextWatch: string
     /** mobile header pill: time until the next watch begins */
     nextIn: (v: { h: number; m: number }) => string
+    /** NEXT WATCH panel: nothing booked anywhere ahead */
     noneAhead: string
+    /** THIS WEEK'S WATCHES: empty for THIS WEEK — which is a different claim,
+     *  and using noneAhead here denied watches that were plainly booked */
+    noneThisWeek: string
     post: string
     weekList: string
+    /** the duty ring with nothing expected — a setup state, not a 0.0/0.0 score */
+    ringIdle: string
+    /** heading for watches beyond this calendar week */
+    aheadList: string
+    /** their one-line summary beside THIS WEEK'S WATCHES */
+    aheadSummary: (v: { count: number; hours: number }) => string
     dayShift: string
     nightShift: string
     duplicate: string
@@ -198,6 +208,14 @@ export interface VoicePack {
     fulfils: (v: { day: string }) => string
     /** dim tag on a booked block that already has a workout linked */
     fulfilledTag: string
+    /** empty log: heading, then the control to press — named per platform,
+     *  since the desktop has a header button and no glowing + anywhere */
+    emptyLogTitle: string
+    emptyLogMobile: string
+    emptyLogDesktop: string
+    /** body-map hint before a muscle is chosen — device-neutral, because it
+     *  renders under a mouse as often as a thumb */
+    mapHint: string
   }
   study: {
     /** rings hero card title */
@@ -391,6 +409,10 @@ export interface VoicePack {
     }
   }
   settings: {
+    /** gear-menu headings: the estate's own settings vs the Grounds' own, which
+     *  sat in one flat list where a workout export read as an estate concern */
+    groupEstate: string
+    groupGrounds: string
     /** gear menu item: strike the workout log (and ONLY the workout log) */
     clearWorkouts: string
     clearWorkoutsTitle: string

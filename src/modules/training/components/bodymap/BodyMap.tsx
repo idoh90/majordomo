@@ -6,6 +6,7 @@ import { VISUAL_FLOOR, lastTrained } from '../../lib/strain'
 import { glowOpacity, strainToColor } from '../../lib/strainColor'
 import { SKINS } from '../../../../core/ui/skins'
 import { useShellStore } from '../../../../core/store/shell'
+import { voice } from '../../../../core/voice'
 import {
   VOLUME_COLORS,
   VOLUME_STATUS_LABEL,
@@ -58,7 +59,8 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
   function buildInfo(): { text: string; dim: boolean } {
     if (!selected) {
       return {
-        text: mode === 'strain' ? 'Tap a muscle for details' : 'Weekly volume vs your targets',
+        // device-neutral: this renders under a mouse as often as a thumb
+        text: mode === 'strain' ? voice.grounds.mapHint : 'Weekly volume vs your targets',
         dim: true,
       }
     }

@@ -80,7 +80,75 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto">
+          {/* Below 420 px the five columns need 288 px inside a 274 px card,
+              so Unreal. P/L was cut off and the numbers ran together. Same
+              rows, two lines each. (Whether the WIDE layout should stack or
+              paginate is a design decision, deferred to the revamp.) */}
+          <div className="flex flex-col min-[420px]:hidden">
+            {rows.map((r) => (
+              <button
+                key={r.holding.id}
+                type="button"
+                onClick={() => onEditHolding(r.holding)}
+                className="w-full border-t border-line py-2.5 text-left"
+              >
+                <span className="flex items-baseline gap-1.5">
+                  <span className="text-sm font-semibold text-ink">
+                    {r.holding.symbol.toUpperCase()}
+                  </span>
+                  <span className="text-[11px] text-ink-faint">{r.holding.shares}×</span>
+                  {!r.priced && <span className="text-[10px] text-ink-faint">(no price)</span>}
+                  <span className="ml-auto text-sm tabular-nums text-ink">
+                    {r.unconvertedCurrency ? (
+                      nativePrice(r.marketValue, r.unconvertedCurrency)
+                    ) : (
+                      <Amount value={r.marketValue} kind="compact" />
+                    )}
+                  </span>
+                </span>
+                <span className="mt-0.5 flex items-baseline gap-2 text-[11.5px] tabular-nums">
+                  <span className="text-ink-dim">
+                    {r.quote ? nativePrice(r.quote.price, r.quote.currency) : '—'}
+                  </span>
+                  <span className={sign(r.dayChange)}>
+                    {r.quote ? (
+                      <>
+                        {r.unconvertedCurrency ? (
+                          nativeDelta(r.dayChange, r.unconvertedCurrency)
+                        ) : (
+                          <Amount value={r.dayChange} kind="delta" />
+                        )}
+                        {r.dayChangePct != null && ` ${formatPercent(r.dayChangePct)}`}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </span>
+                  <span className={`ml-auto ${sign(r.unrealized)}`}>
+                    {r.unconvertedCurrency ? (
+                      nativeDelta(r.unrealized, r.unconvertedCurrency)
+                    ) : (
+                      <Amount value={r.unrealized} kind="delta" />
+                    )}
+                  </span>
+                </span>
+              </button>
+            ))}
+            <div className="flex items-baseline gap-2 border-t border-line pt-2 text-[11.5px] font-semibold tabular-nums">
+              <span className="text-ink-dim">Total</span>
+              <span className={sign(totals.dayChange)}>
+                <Amount value={totals.dayChange} kind="delta" />
+              </span>
+              <span className="ml-auto text-ink">
+                <Amount value={totals.marketValue} kind="compact" />
+              </span>
+              <span className={sign(totals.unrealized)}>
+                <Amount value={totals.unrealized} kind="delta" />
+              </span>
+            </div>
+          </div>
+
+          <div className="hidden overflow-x-auto min-[420px]:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[10px] uppercase tracking-[0.12em] text-ink-faint">

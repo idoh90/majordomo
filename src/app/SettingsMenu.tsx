@@ -77,14 +77,10 @@ export function SettingsMenu() {
         <>
           <div className="fixed inset-0 z-30" onPointerDown={() => setMenuOpen(false)} />
           <div className="menu-panel absolute right-0 top-12 z-40 w-52 animate-[step-in_140ms_ease-out] overflow-hidden">
-            <MenuItem
-              onClick={() => {
-                setMenuOpen(false)
-                setProfileOpen(true)
-              }}
-            >
-              Profile &amp; nutrition
-            </MenuItem>
+            {/* Two groups, same items, same behaviour: the estate's own
+                settings, then the Grounds' own. Flat, they read alike — a
+                workout JSON export sat beside the whole-estate backup. */}
+            <MenuGroup>{voice.settings.groupEstate}</MenuGroup>
             <MenuItem
               onClick={() => {
                 setMenuOpen(false)
@@ -93,7 +89,6 @@ export function SettingsMenu() {
             >
               App skin…
             </MenuItem>
-            <div className="border-t border-line" />
             <div className="px-3.5 py-2.5">
               <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
                 Week starts
@@ -115,7 +110,6 @@ export function SettingsMenu() {
                 ))}
               </div>
             </div>
-            <div className="border-t border-line" />
             {/* the estate: every wing, for moving between devices/origins */}
             <MenuItem onClick={exportEstate}>{voice.backup.estate.exportItem}</MenuItem>
             <MenuItem
@@ -127,7 +121,16 @@ export function SettingsMenu() {
               {voice.backup.estate.importItem}
             </MenuItem>
             <div className="border-t border-line" />
-            {/* the training-only pair — older files, and the workouts alone */}
+            {/* the training-only set — the profile, older files, the log */}
+            <MenuGroup>{voice.settings.groupGrounds}</MenuGroup>
+            <MenuItem
+              onClick={() => {
+                setMenuOpen(false)
+                setProfileOpen(true)
+              }}
+            >
+              Profile &amp; nutrition
+            </MenuItem>
             <MenuItem onClick={exportFile}>Export workouts only</MenuItem>
             <MenuItem onClick={copyJson}>{copied ? 'Copied ✓' : 'Copy workouts JSON'}</MenuItem>
             <MenuItem
@@ -138,7 +141,6 @@ export function SettingsMenu() {
             >
               Import workouts…
             </MenuItem>
-            <div className="border-t border-line" />
             <MenuItem
               danger
               onClick={() => {
@@ -171,6 +173,15 @@ export function SettingsMenu() {
           clearAll()
         }}
       />
+    </div>
+  )
+}
+
+/** a quiet heading over a run of related menu items */
+function MenuGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-3.5 pb-1 pt-2.5 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
+      {children}
     </div>
   )
 }

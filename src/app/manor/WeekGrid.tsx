@@ -1050,6 +1050,10 @@ const EventBlock = memo(function EventBlock({
     <button
       type="button"
       data-event-block
+      // the visible text composes title + time with only a margin between
+      // them, so the accessible name and any copy/paste read "Linear
+      // Algebra15:00 → 16:30". Spell it properly here.
+      aria-label={`${e.title}, ${timeText}, ${fullHours.toFixed(1)} hours`}
       onClick={(ev) => onClick(col, e, (ev.currentTarget as HTMLElement).offsetTop)}
       onPointerDown={onPointerDown ? (ev) => onPointerDown(e, ev) : undefined}
       className="absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left"
@@ -1099,9 +1103,13 @@ const EventBlock = memo(function EventBlock({
         >
           {e.title}
           {!twoLine && (
-            <span className="ml-1 text-[10.5px] font-normal text-ink-dim [font-variant-numeric:tabular-nums]">
-              {timeText}
-            </span>
+            <>
+              {/* a real space, not just a margin — this pair is inline, so a
+                  margin alone makes the copied text read "Algebra15:00" */}{' '}
+              <span className="text-[10.5px] font-normal text-ink-dim [font-variant-numeric:tabular-nums]">
+                {timeText}
+              </span>
+            </>
           )}
         </span>
         {twoLine && (

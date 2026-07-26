@@ -31,6 +31,12 @@ export interface WatchStats {
   next: CalendarEvent | null
   /** this calendar week's shifts, by start */
   weekShifts: CalendarEvent[]
+  /**
+   * Shifts beyond this calendar week, by start. The screen used to know only
+   * about the current week, so posting next week's watches left it reading
+   * "No watch posted, sir." — a screenful of denial immediately after the act.
+   */
+  ahead: CalendarEvent[]
 }
 
 export function watchStats(
@@ -50,7 +56,8 @@ export function watchStats(
     .reduce((t, e) => t + hoursOf(e), 0)
   const expectedH = weekShifts.reduce((t, e) => t + hoursOf(e), 0)
   const next = shifts.find((e) => new Date(e.start).getTime() > now) ?? null
-  return { doneH, expectedH, next, weekShifts }
+  const ahead = shifts.filter((e) => new Date(e.start) >= w1)
+  return { doneH, expectedH, next, weekShifts, ahead }
 }
 
 export function countdownLabel(next: CalendarEvent, now: number): string {

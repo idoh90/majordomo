@@ -147,13 +147,29 @@ export function WatchScreen() {
                 style={{ filter: 'drop-shadow(0 0 6px var(--glow-accent))' }}
               />
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="stat-num font-display text-[34px] leading-none">
-                {stats.doneH.toFixed(1)}
-              </div>
-              <div className="text-[11.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
-                of {stats.expectedH.toFixed(1)} h expected
-              </div>
+            {/* With nothing on the books the ring used to read "0.0 of 0.0 h
+                expected" — a live figure that looks like broken arithmetic on
+                a first run. Nothing expected is a setup state, not a score. */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+              {stats.expectedH > 0 ? (
+                <>
+                  <div className="stat-num font-display text-[34px] leading-none">
+                    {stats.doneH.toFixed(1)}
+                  </div>
+                  <div className="text-[11.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
+                    of {stats.expectedH.toFixed(1)} h expected
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="stat-num font-display text-[34px] leading-none text-ink-faint">
+                    —
+                  </div>
+                  <div className="mt-1 text-[11.5px] leading-snug text-ink-dim">
+                    {voice.watch.ringIdle}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -186,7 +202,11 @@ export function WatchScreen() {
       <div className="flex flex-col gap-4">
         <div ref={rosterRef} className="panel scroll-mt-4 p-5">
           <div className="card-title">{voice.watch.post}</div>
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          {/* Two weeks, one row each. This was flex-wrap with fixed 58px
+              chips on desktop, so a wide panel fitted 13 and stranded the
+              14th on a row of its own. A 7-column grid can only ever break
+              where a week does. */}
+          <div className="mt-3 grid grid-cols-7 gap-1.5 md:w-[442px]">
             {stripDays.map((day, i) => {
               const picked = pickedDay === i
               const has = hasShiftOnDay(events, day)
@@ -196,7 +216,7 @@ export function WatchScreen() {
                   key={i}
                   type="button"
                   onClick={() => setPickedDay(picked ? null : i)}
-                  className="min-h-[56px] w-[calc((100%-36px)/7)] rounded-[9px] border pb-1.5 pt-2 text-center transition-colors hover:border-accent md:min-h-0 md:w-[58px]"
+                  className="min-h-[56px] rounded-[9px] border pb-1.5 pt-2 text-center transition-colors hover:border-accent md:min-h-0"
                   style={{
                     borderColor: picked
                       ? 'var(--color-accent)'
@@ -271,10 +291,23 @@ export function WatchScreen() {
         </div>
 
         <div className="panel p-5">
-          <div className="card-title">{voice.watch.weekList}</div>
+          <div className="flex items-baseline gap-3">
+            <div className="card-title">{voice.watch.weekList}</div>
+            {/* posting next week used to leave this panel saying "No watch
+                posted, sir." — correct for the week, and pure denial right
+                after the act. The roster beyond this week gets a line. */}
+            {stats.ahead.length > 0 && (
+              <span className="ml-auto text-[11px] text-ink-dim [font-variant-numeric:tabular-nums]">
+                {voice.watch.aheadSummary({
+                  count: stats.ahead.length,
+                  hours: stats.ahead.reduce((t, e) => t + hoursOf(e), 0),
+                })}
+              </span>
+            )}
+          </div>
           <div className="mt-2 flex flex-col">
             {stats.weekShifts.length === 0 && (
-              <div className="py-2 text-sm text-ink-dim">{voice.watch.noneAhead}</div>
+              <div className="py-2 text-sm text-ink-dim">{voice.watch.noneThisWeek}</div>
             )}
             {stats.weekShifts.map((e) => {
               const s = new Date(e.start)
@@ -315,6 +348,37 @@ export function WatchScreen() {
               )
             })}
           </div>
+
+          {stats.ahead.length > 0 && (
+            <>
+              <div className="card-title mt-5">{voice.watch.aheadList}</div>
+              <div className="mt-2 flex flex-col">
+                {stats.ahead.slice(0, 6).map((e) => {
+                  const s = new Date(e.start)
+                  const en = new Date(e.end)
+                  return (
+                    <div
+                      key={e.id}
+                      className="flex items-baseline gap-3 border-b border-line py-2.5 last:border-b-0"
+                    >
+                      <span className="w-16 text-[12.5px] font-semibold [font-variant-numeric:tabular-nums]">
+                        {WD[s.getDay()]} {s.getDate()}
+                      </span>
+                      <span className="text-[12.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
+                        {hhmm(s)} → {hhmm(en)}
+                      </span>
+                      <span className="ml-auto font-display text-[15px] font-semibold [font-variant-numeric:tabular-nums]">
+                        {hoursOf(e).toFixed(1)} h
+                      </span>
+                      <span className="w-16 text-right text-[10px] tracking-[0.14em] text-ink-dim">
+                        {voice.watch.status.ahead}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
       </div>
 

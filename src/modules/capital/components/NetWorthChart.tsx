@@ -60,9 +60,12 @@ export function NetWorthChart({
 
   return (
     <div className="panel p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="card-title">Net worth · trend</h3>
-        <div className="flex items-center gap-2.5">
+      {/* flex-wrap, not a squeezed row: at 390 px the heading was compressed
+          to 41 px and stacked one word per line. It keeps its own line and
+          the controls drop below it rather than crushing it. */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h3 className="card-title whitespace-nowrap">Net worth · trend</h3>
+        <div className="flex flex-none items-center gap-2.5">
           {onHistory && (
             <button
               type="button"
@@ -72,9 +75,12 @@ export function NetWorthChart({
               History
             </button>
           )}
+          {/* fewer than two points draws nothing at any range — the tabs were
+              rendering live beside a chart saying there was nothing to draw */}
           <SegmentedControl
             value={range}
             onChange={setRange}
+            disabled={full.length < 2}
             options={[
               { value: 'all', label: 'All' },
               { value: '1y', label: '1Y' },

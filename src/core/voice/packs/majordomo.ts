@@ -142,6 +142,10 @@ export const majordomoPack: VoicePack = {
       return `This fulfils ${d}'s block, sir.`
     },
     fulfilledTag: 'LOGGED',
+    emptyLogTitle: 'No workouts yet',
+    emptyLogMobile: 'Tap the + to log your first one.',
+    emptyLogDesktop: 'Use Log Workout, above, to record your first one.',
+    mapHint: 'Select a muscle for details',
   },
   study: {
     readingWeek: 'THE READING THIS WEEK',
@@ -287,8 +291,13 @@ export const majordomoPack: VoicePack = {
     nextWatch: 'NEXT WATCH',
     nextIn: ({ h, m }) => (h > 0 ? `NEXT IN ${h} H ${m} M` : `NEXT IN ${m} M`),
     noneAhead: 'No watch posted, sir.',
+    noneThisWeek: 'None this week, sir.',
     post: 'POST A WATCH',
     weekList: "THIS WEEK'S WATCHES",
+    ringIdle: 'none on the books this week, sir',
+    aheadList: 'FURTHER AHEAD',
+    aheadSummary: ({ count, hours }) =>
+      `${count} ahead · ${hours.toFixed(1)} h`,
     dayShift: 'Day',
     nightShift: 'Night',
     duplicate: 'There is already a watch that day, sir.',
@@ -345,6 +354,8 @@ export const majordomoPack: VoicePack = {
     },
   },
   settings: {
+    groupEstate: 'THE ESTATE',
+    groupGrounds: 'THE GROUNDS',
     clearWorkouts: 'Clear the workout log…',
     clearWorkoutsTitle: 'Clear the workout log, sir?',
     clearWorkoutsBody: (n) =>
