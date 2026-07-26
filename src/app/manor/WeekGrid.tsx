@@ -48,6 +48,35 @@ const isMidnight = (offset: number) => (SEAM_HOUR + offset) % 24 === 0
 const px = (from: Date, to: Date) => ((to.getTime() - from.getTime()) / 3_600_000) * PXH
 const HOUR_MS = 3_600_000
 
+/**
+ * Where a dragged block may START, in hours from the column seam.
+ *
+ * The START is the only thing a drag clamps: to the column, and to the 0.5 h
+ * grid. It must NEVER be pulled back to make the block fit inside one day —
+ * a 19:00 night watch simply crosses midnight and the grid splits it at the
+ * seam. Clamping to `24 - durH` instead rewrote a 13 h watch's start on any
+ * nudge, silently committing 19:00→08:00 as 11:00→00:00.
+ *
+ * This is the rule quickAddPick already documents; routing every drag site
+ * through one helper is what makes drag and quick-add finally agree.
+ */
+const clampStart = (ts: number) => Math.max(0, Math.min(23.5, ts))
+
+/** the dotted seam edge, shared by clipped blocks and by crossing drag ghosts */
+const CUT_EDGE = '2px dotted color-mix(in srgb, var(--color-ink) 45%, transparent)'
+
+/**
+ * Mobile puts each day's header INSIDE the horizontally-scrolled column, so
+ * the column body starts this far below the top of the flex row that also
+ * holds the hour rail — header height plus the grid box's 1 px border. The
+ * rail is positioned from the top of that row, so without the same offset it
+ * printed every label ~1.4 h above the blocks it describes.
+ *
+ * Desktop is unaffected: its DayHeaders sit outside the grid box, offset 0.
+ */
+const MOBILE_HEADER_H = 32
+const MOBILE_RAIL_OFFSET = MOBILE_HEADER_H + 1
+
 /** stable identity for the "no ghosts" case — a fresh [] would defeat DayBody's memo */
 const EMPTY_CLIPS: ClippedEvent[] = []
 
@@ -334,7 +363,7 @@ export function WeekGrid({
       const y = pendingY - rect.top
       const tc = Math.max(0, Math.min(6, Math.floor(x / colW)))
       let ts = Math.round((y / PXH - grabH) * 2) / 2
-      ts = Math.max(0, Math.min(24 - durH, ts))
+      ts = clampStart(ts)
       const prev = dragRef.current
       if (prev && prev.tc === tc && prev.ts === ts) return // snapped to the same slot
       const next: DragState = {
@@ -404,7 +433,7 @@ export function WeekGrid({
       const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect()
       let ts = Math.floor(((ev.clientY - rect.top) / PXH) * 2) / 2
       const durH = hoursOf(placing)
-      ts = Math.max(0, Math.min(24 - Math.min(durH, 24), ts))
+      ts = clampStart(ts)
       const fromCol = columns.findIndex((w) => {
         const s = new Date(placing.start)
         return s >= w.start && s < w.end
@@ -723,15 +752,17 @@ const Rules = memo(function Rules() {
   )
 })
 
-const TickAxis = memo(function TickAxis() {
+/** `offset` = px between the top of the rail's flex row and the column body it
+ *  describes (see MOBILE_RAIL_OFFSET); 0 on desktop, where they share a top. */
+const TickAxis = memo(function TickAxis({ offset = 0 }: { offset?: number }) {
   return (
-    <div className="relative w-12 flex-none" style={{ height: BODY_H }}>
+    <div className="relative w-12 flex-none" style={{ height: BODY_H + offset }}>
       {TICKS.map((h) => (
         <div
           key={h}
           className="absolute right-2.5 -translate-y-1/2 text-[10px] tracking-[0.04em] [font-variant-numeric:tabular-nums]"
           style={{
-            top: h * PXH,
+            top: h * PXH + offset,
             color: isMidnight(h) ? 'var(--color-accent)' : 'var(--color-ink-faint)',
           }}
         >
@@ -906,7 +937,7 @@ const EventBlock = memo(function EventBlock({
   const twoLine = visibleHours >= 2
   const big = visibleHours >= 8
   const timeText = `${hhmm(new Date(e.start))} → ${hhmm(new Date(e.end))}`
-  const cutEdge = '2px dotted color-mix(in srgb, var(--color-ink) 45%, transparent)'
+  const cutEdge = CUT_EDGE
   const hairline = isRest
     ? '1px dashed color-mix(in srgb, var(--color-ink-dim) 45%, transparent)'
     : `1px solid color-mix(in srgb, ${meta.color} 28%, transparent)`
@@ -1025,15 +1056,30 @@ function DragGhost({ drag, columns }: { drag: DragState; columns: ColumnWindow[]
   const meta = KIND_META[drag.kind]
   const start = new Date(columns[drag.tc].start.getTime() + drag.ts * HOUR_MS)
   const end = new Date(start.getTime() + drag.durH * HOUR_MS)
+  // A drag no longer shrinks to fit the day, so a crossing block's ghost would
+  // overflow the column box. Clip it at the seam and cut the edge the way a
+  // dropped block will actually be drawn — the ghost shows what it becomes.
+  const crosses = drag.ts + drag.durH > 24
+  const visibleH = Math.min(drag.durH, 24 - drag.ts)
   return (
     <div
       className="pointer-events-none absolute left-0 top-0 z-[6] rounded-[7px] px-2 py-[5px]"
       style={{
         width: drag.colW - 6,
-        height: drag.durH * PXH - 2,
+        height: Math.max(visibleH * PXH - 2, 12),
         transform: `translate3d(${drag.tc * drag.colW + 3}px, ${drag.ts * PXH + 1}px, 0) scale(1.02)`,
         willChange: 'transform',
-        border: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        overflow: 'hidden',
+        // per-side longhands, not the `border` shorthand: React warns about (and
+        // unreliably applies) a shorthand mixed with borderBottom on rerender
+        borderTop: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        borderLeft: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        borderRight: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        borderBottom: crosses
+          ? CUT_EDGE
+          : `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        borderBottomLeftRadius: crosses ? 0 : undefined,
+        borderBottomRightRadius: crosses ? 0 : undefined,
         background: drag.valid
           ? `color-mix(in srgb, ${meta.color} 26%, var(--color-panel-2))`
           : 'color-mix(in srgb, var(--color-danger) 22%, var(--color-panel-2))',
@@ -1348,7 +1394,7 @@ function MobileWeek({
         const bodyRect = colBodyRefs.current[tc]?.getBoundingClientRect()
         if (bodyRect && lastY > (wrapRect?.top ?? -Infinity) + ESCAPE_H) {
           ts = Math.round(((lastY - bodyRect.top) / PXH - grabH) * 2) / 2
-          ts = Math.max(0, Math.min(24 - Math.min(durH, 24), ts))
+          ts = clampStart(ts)
         }
       }
 
@@ -1532,7 +1578,7 @@ function MobileWeek({
         })}
       </div>
       <div className="mt-3 flex">
-        <TickAxis />
+        <TickAxis offset={MOBILE_RAIL_OFFSET} />
         <div ref={wrapRef} className="relative min-w-0 flex-1">
           {mDrag && (
             <div
@@ -1567,7 +1613,11 @@ function MobileWeek({
           >
             {columns.map((win, i) => (
               <div key={i} className="w-full flex-none snap-center">
-                <div className="flex h-8 items-center gap-2 px-2">
+                {/* height is MOBILE_RAIL_OFFSET's source — keep them tied */}
+                <div
+                  className="flex items-center gap-2 px-2"
+                  style={{ height: MOBILE_HEADER_H }}
+                >
                   <span className="font-display text-[13px] font-semibold tracking-[0.12em] text-ink">
                     {WD[win.day.getDay()]} {win.day.getDate()}
                   </span>
@@ -1622,14 +1672,24 @@ function MobileDragGhost({ drag, columns }: { drag: MobileDrag; columns: ColumnW
   const start = new Date(columns[drag.tc].start.getTime() + drag.ts * HOUR_MS)
   const end = new Date(start.getTime() + drag.durH * HOUR_MS)
   const badge = `${hhmm(start)} → ${hhmm(end)}`
+  // same seam treatment as the desktop ghost — clipped at midnight, cut edge
+  const crosses = drag.ts + drag.durH > 24
+  const visibleH = Math.min(drag.durH, 24 - drag.ts)
   return (
     <div
       className="pointer-events-none absolute left-[3px] right-[3px] top-0 z-[6] rounded-[8px] px-2.5 py-1.5"
       style={{
-        height: Math.min(drag.durH, 24) * PXH - 2,
+        height: Math.max(visibleH * PXH - 2, 12),
         transform: `translate3d(0, ${drag.ts * PXH + 1}px, 0) scale(1.03)`,
         willChange: 'transform',
-        border: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        borderTop: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        borderLeft: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        borderRight: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        borderBottom: crosses
+          ? CUT_EDGE
+          : `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
+        borderBottomLeftRadius: crosses ? 0 : undefined,
+        borderBottomRightRadius: crosses ? 0 : undefined,
         background: drag.valid
           ? `color-mix(in srgb, ${meta.color} 24%, var(--color-panel-2))`
           : 'color-mix(in srgb, var(--color-danger) 22%, var(--color-panel-2))',
