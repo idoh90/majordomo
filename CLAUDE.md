@@ -27,12 +27,43 @@ never committed, tree-shaken from builds). Two standing rules from the pivot onw
 Sections below describe the app as it exists today; each milestone updates only
 the lines it invalidates.
 
+## How to report back (standing rule)
+
+When a task is finished, explain it **the way you'd brief the person who asked
+for it** — not the way you'd brief another engineer. This is the default for
+every wrap-up and every answer, unless the owner explicitly asks for the
+technical version.
+
+- **Lead with what was broken and why it mattered**, in plain terms — what a
+  person using the app would actually have experienced ("nudge a night shift
+  and 13 hours silently became 2"), not what the code did wrong.
+- **Then what changed**, described as behaviour: what you can now do that you
+  couldn't. One short paragraph per thing, not a bullet swarm.
+- **Name the judgment calls** — anything you decided that the owner might want
+  to overrule, and why you went the way you did. Say plainly when something is
+  left half-done and why.
+- **End with what still needs him**: manual checks you couldn't do, decisions
+  you're holding, anything you couldn't verify. Be specific about the limits of
+  what was tested — never let a green run imply more coverage than it has.
+- **No file paths, function names, commit hashes or jargon** in the body. A
+  short table of what landed is fine. Keep the whole thing skimmable — context
+  where it earns its place, no padding.
+
 ## Commands
 
 - `npm run dev` — Vite dev server on port 5173 (also via `.claude/launch.json`)
 - `npm run build` — typecheck (`tsc --noEmit`) + production build
 - `npm run lint` — ESLint, **import-boundary rules only** (no style rules)
-- No test runner; verification is done in the browser.
+- `npm run check:manor` — the **Manor harness** (`scripts/manor-harness.mjs`): drives
+  a real headless Chromium through the running dev server and asserts the calendar's
+  numeric contract — a 13 h watch survives a drag, the mobile hour rail agrees with
+  its blocks, an unfittable template isn't offered. Needs `npm run dev` up; exits
+  non-zero on failure. `CHROME_PATH` / `MANOR_BASE` override the browser and origin.
+- No test runner **for the app at large**; verification is done in the browser. The
+  Manor is the one exception — its contract is numeric, and "looks plausible" is
+  exactly how a cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness
+  after touching `WeekGrid.tsx` / `ManorScreen.tsx`. It does NOT cover the mobile
+  350 ms long-press drag (not drivable by synthetic events) or DST.
 
 ## Ship: it is live
 
