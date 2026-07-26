@@ -38,6 +38,17 @@ export interface VoicePack {
     /** drag refused: the block began before the viewed week, so it has no
      *  column here to be moved from */
     anchoredEarlier: string
+    /** quick-add's free-form escape hatch, past the one-tap templates */
+    custom: {
+      /** the row that opens the mini-form */
+      row: string
+      kindLabel: string
+      book: string
+      /** back to the one-tap templates */
+      back: string
+      /** shown against a template that cannot fit the chosen slot */
+      wontFit: string
+    }
     /** drop rejected: the target slot overlaps something */
     occupied: string
     /** drag ghost time-line when the slot is taken */
@@ -90,7 +101,12 @@ export interface VoicePack {
     }
     /** mobile month legend labels */
     monthLegend: { runsPast: string; strain: string }
-    /** quick-add templates (title copy is pack content) */
+    /**
+     * Quick-add templates (title copy is pack content). ONE list, read by both
+     * the desktop popover and the mobile sheet — so making these user-editable
+     * rituals later means changing where this array comes from, and nothing
+     * else. Kept a plain array for exactly that reason.
+     */
     templates: { kind: 'shift' | 'training' | 'study' | 'sleep'; title: string; hours: number }[]
     strain: {
       /** tooltip on a day's strain bar. `names` = muscles still hot at that

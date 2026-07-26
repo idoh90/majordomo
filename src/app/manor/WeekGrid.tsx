@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { voice } from '../../core/voice'
 import { useIsMobile } from '../useIsMobile'
 import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
+import { CustomEventForm } from './fields'
 import { EventEditSheet, MobileEventSheet, MobileQuickAddSheet } from './MobileSheets'
 import { nearWatch } from './nearWatch'
 import { StrainBar } from './StrainBar'
@@ -703,6 +704,7 @@ export function WeekGrid({
                 columns={columns}
                 onPick={quickAddPick}
                 onClose={() => setQuickAdd(null)}
+                fits={(h) => slotFree(null, quickAdd.col, quickAdd.ts, h)}
                 style={{
                   left:
                     quickAdd.col < 4
@@ -751,7 +753,7 @@ export function WeekGrid({
                 ? new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS)
                 : null
             }
-            free={quickAdd ? slotFree(null, quickAdd.col, quickAdd.ts, 0.5) : true}
+            fits={(h) => (quickAdd ? slotFree(null, quickAdd.col, quickAdd.ts, h) : true)}
             onPick={quickAddPick}
             onClose={() => setQuickAdd(null)}
           />
@@ -1299,19 +1301,25 @@ function QuickAddPopover({
   columns,
   onPick,
   onClose,
+  fits,
   style,
 }: {
   quickAdd: QuickAdd
   columns: ColumnWindow[]
   onPick: (tpl: { kind: EventKind; title: string; hours: number }) => void
   onClose: () => void
+  /** would a block of `hours` fit the slot this popover opened on? */
+  fits: (hours: number) => boolean
   style: React.CSSProperties
 }) {
   const when = new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS)
+  const [custom, setCustom] = useState(false)
   return (
     <div
       data-manor-popover
-      className="menu-panel absolute z-[11] w-[212px] animate-[fade-in_160ms_ease-out] p-3.5"
+      className={`menu-panel absolute z-[11] animate-[fade-in_160ms_ease-out] p-3.5 ${
+        custom ? 'w-[264px]' : 'w-[212px]'
+      }`}
       style={style}
     >
       <div className="flex items-center gap-2">
@@ -1327,31 +1335,50 @@ function QuickAddPopover({
           ✕
         </button>
       </div>
-      <div className="mt-2 flex flex-col gap-1.5">
-        {voice.manor.templates.map((tpl) => {
-          const meta = KIND_META[tpl.kind]
-          return (
-            <button
-              key={tpl.title}
-              type="button"
-              onClick={() => onPick(tpl)}
-              className="card flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs transition-colors"
-              style={{ borderColor: undefined }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = meta.color)}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '')}
-            >
-              <span
-                className="h-[7px] w-[7px] flex-none rounded-full"
-                style={{ background: meta.color }}
-              />
-              {tpl.title}
-              <span className="ml-auto text-[10.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
-                {tpl.hours.toFixed(1)} h
-              </span>
-            </button>
-          )
-        })}
-      </div>
+      {custom ? (
+        <CustomEventForm fits={fits} onBook={onPick} onBack={() => setCustom(false)} />
+      ) : (
+        <div className="mt-2 flex flex-col gap-1.5">
+          {voice.manor.templates.map((tpl) => {
+            const meta = KIND_META[tpl.kind]
+            // fit-checked against ITS OWN hours: the slot was found by hunting
+            // for a free half-hour, so a 13 h template could be offered and
+            // then bounce with "occupied, sir" after the tap
+            const room = fits(tpl.hours)
+            return (
+              <button
+                key={tpl.title}
+                type="button"
+                disabled={!room}
+                title={room ? undefined : voice.manor.custom.wontFit}
+                onClick={() => onPick(tpl)}
+                className="card flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ borderColor: undefined }}
+                onMouseEnter={(e) =>
+                  room && ((e.currentTarget as HTMLElement).style.borderColor = meta.color)
+                }
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '')}
+              >
+                <span
+                  className="h-[7px] w-[7px] flex-none rounded-full"
+                  style={{ background: meta.color }}
+                />
+                {tpl.title}
+                <span className="ml-auto text-[10.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
+                  {tpl.hours.toFixed(1)} h
+                </span>
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            onClick={() => setCustom(true)}
+            className="card flex w-full items-center gap-2 border-dashed px-2.5 py-2 text-left text-xs text-ink-dim transition-colors hover:text-ink"
+          >
+            {voice.manor.custom.row}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -27,6 +27,13 @@ export const majordomoPack: VoicePack = {
       return parts.join(' · ')
     },
     anchoredEarlier: 'That one begins last week, sir. Move it from there.',
+    custom: {
+      row: 'Something else…',
+      kindLabel: 'KIND',
+      book: 'ON THE BOOKS',
+      back: '‹ Templates',
+      wontFit: "Won't fit here, sir.",
+    },
     occupied:'That hour is already spoken for, sir.',
     occupiedShort: 'occupied, sir',
     moved: 'Moved, sir.',

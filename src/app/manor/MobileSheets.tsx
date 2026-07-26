@@ -5,7 +5,7 @@ import { localDayKey } from '../../core/dates'
 import { useNavStore } from '../../core/store/nav'
 import { Sheet } from '../../core/ui/Sheet'
 import { voice } from '../../core/voice'
-import { Stepper, TitleField } from './fields'
+import { CustomEventForm, Stepper, TitleField } from './fields'
 import { KIND_META, eventMeta, hhmm } from './kinds'
 import type { NearWatch } from './nearWatch'
 
@@ -30,17 +30,23 @@ const OPEN_IN: Partial<Record<EventKind, { view: string; name: () => string }>> 
 export function MobileQuickAddSheet({
   open,
   when,
-  free,
+  fits,
   onPick,
   onClose,
 }: {
   open: boolean
   when: Date | null
-  /** the tapped half-hour is unoccupied (the footer's reassurance line) */
-  free: boolean
+  /** would a block of `hours` fit the tapped slot? */
+  fits: (hours: number) => boolean
   onPick: (tpl: { kind: EventKind; title: string; hours: number }) => void
   onClose: () => void
 }) {
+  const [custom, setCustom] = useState(false)
+  // each opening starts on the fast path, whatever the last one ended on
+  useEffect(() => {
+    if (open) setCustom(false)
+  }, [open])
+  const free = fits(0.5)
   return (
     <Sheet open={open} onClose={onClose}>
       {when && (
@@ -61,34 +67,50 @@ export function MobileQuickAddSheet({
               ✕
             </button>
           </div>
-          <div className="mt-2.5 flex flex-col gap-1.5">
-            {voice.manor.templates.map((tpl) => {
-              const meta = KIND_META[tpl.kind]
-              return (
+          {custom ? (
+            <CustomEventForm fits={fits} onBook={onPick} onBack={() => setCustom(false)} />
+          ) : (
+            <>
+              <div className="mt-2.5 flex flex-col gap-1.5">
+                {voice.manor.templates.map((tpl) => {
+                  const meta = KIND_META[tpl.kind]
+                  // fit-checked against its own hours — see the desktop popover
+                  const room = fits(tpl.hours)
+                  return (
+                    <button
+                      key={tpl.title}
+                      type="button"
+                      disabled={!room}
+                      onClick={() => onPick(tpl)}
+                      className="card flex h-[46px] w-full items-center gap-2.5 px-3.5 text-left text-[13px] font-semibold transition-colors disabled:opacity-40"
+                    >
+                      <span
+                        className="h-2 w-2 flex-none rounded-full"
+                        style={{ background: meta.color }}
+                      />
+                      {tpl.title}
+                      <span className="ml-auto text-[11px] font-normal text-ink-dim [font-variant-numeric:tabular-nums]">
+                        {room ? `${tpl.hours.toFixed(1)} h` : voice.manor.custom.wontFit}
+                      </span>
+                    </button>
+                  )
+                })}
                 <button
-                  key={tpl.title}
                   type="button"
-                  onClick={() => onPick(tpl)}
-                  className="card flex h-[46px] w-full items-center gap-2.5 px-3.5 text-left text-[13px] font-semibold transition-colors"
+                  onClick={() => setCustom(true)}
+                  className="card flex h-[46px] w-full items-center gap-2.5 border-dashed px-3.5 text-left text-[13px] font-semibold text-ink-dim transition-colors"
                 >
-                  <span
-                    className="h-2 w-2 flex-none rounded-full"
-                    style={{ background: meta.color }}
-                  />
-                  {tpl.title}
-                  <span className="ml-auto text-[11px] font-normal text-ink-dim [font-variant-numeric:tabular-nums]">
-                    {tpl.hours.toFixed(1)} h
-                  </span>
+                  {voice.manor.custom.row}
                 </button>
-              )
-            })}
-          </div>
-          <div
-            className="mt-2.5 text-[11px] italic"
-            style={{ color: free ? 'var(--color-ink-dim)' : 'var(--color-danger)' }}
-          >
-            {free ? voice.manor.slotClear : voice.manor.occupied}
-          </div>
+              </div>
+              <div
+                className="mt-2.5 text-[11px] italic"
+                style={{ color: free ? 'var(--color-ink-dim)' : 'var(--color-danger)' }}
+              >
+                {free ? voice.manor.slotClear : voice.manor.occupied}
+              </div>
+            </>
+          )}
         </div>
       )}
     </Sheet>
