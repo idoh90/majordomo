@@ -132,10 +132,13 @@ export const majordomoPack: VoicePack = {
     scheduledNote: 'Booked on the Manor, sir — move or remove them there.',
     recoveryTitle: 'RECOVERY',
     settles: ({ day, time }) => `settles ${day} ${time}`,
-    fulfils: ({ day }) => {
+    fulfils: ({ day, time }) => {
       const d = day === 'Today' || day === 'Yesterday' ? day.toLowerCase() : day
-      return `This fulfils ${d}'s block, sir.`
+      return `This fulfils ${d}'s ${time} block, sir.`
     },
+    fulfilsNothing: 'This fulfils no booked block, sir.',
+    fulfilsChange: 'change',
+    fulfilsNoBlock: "None — don't link",
     fulfilledTag: 'LOGGED',
   },
   study: {

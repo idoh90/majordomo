@@ -165,8 +165,14 @@ export interface VoicePack {
     /** recovery card: title + per-muscle settle line */
     recoveryTitle: string
     settles: (v: { day: string; time: string }) => string
-    /** passive line over the save button when the session will fulfil a booked block */
-    fulfils: (v: { day: string }) => string
+    /** line over the save button naming the booked block the session will fulfil */
+    fulfils: (v: { day: string; time: string }) => string
+    /** the same slot once the user has aimed the session at no block at all */
+    fulfilsNothing: string
+    /** tap affordance on that line when several blocks are in range */
+    fulfilsChange: string
+    /** the opt-out row of the block picker */
+    fulfilsNoBlock: string
     /** dim tag on a booked block that already has a workout linked */
     fulfilledTag: string
   }

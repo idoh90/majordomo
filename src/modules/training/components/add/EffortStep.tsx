@@ -6,6 +6,7 @@ import { REP_STYLES } from '../../lib/strain'
 import { CalendarPicker } from '../ui/CalendarPicker'
 import { Slider } from '../ui/Slider'
 import type { Selection } from './AddWorkoutSheet'
+import { BlockLinkNote, type BlockLink } from './BlockLinkNote'
 
 const REP_STYLE_ORDER: RepStyle[] = ['light', 'mixed', 'heavy']
 
@@ -24,8 +25,9 @@ interface EffortStepProps {
   onPerformedAt: (iso: string) => void
   workouts: Workout[]
   onSave: () => void
-  /** passive log-fulfills-block note ("This fulfils Tuesday's block, sir.") */
-  fulfilsLine?: string | null
+  /** log-fulfills-block note ("This fulfils today's 7:15 AM block, sir.") —
+   *  tappable into a picker when several blocks are in range */
+  blockLink?: BlockLink | null
   /** dev screenshot aid — start with the calendar expanded */
   whenInitiallyOpen?: boolean
 }
@@ -44,7 +46,7 @@ export function EffortStep({
   onPerformedAt,
   workouts,
   onSave,
-  fulfilsLine,
+  blockLink,
   whenInitiallyOpen,
 }: EffortStepProps) {
   const [whenOpen, setWhenOpen] = useState(whenInitiallyOpen ?? false)
@@ -160,20 +162,11 @@ export function EffortStep({
         )}
       </div>
 
-      {fulfilsLine && (
-        <p className="mt-4 flex items-center gap-2 text-xs text-ink-dim">
-          <span
-            aria-hidden
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ background: 'var(--color-w-grounds)' }}
-          />
-          {fulfilsLine}
-        </p>
-      )}
+      {blockLink && <BlockLinkNote {...blockLink} />}
       <button
         type="button"
         onClick={onSave}
-        className={`btn-cta w-full py-3.5 text-lg transition active:scale-[0.99] ${fulfilsLine ? 'mt-2.5' : 'mt-6'}`}
+        className={`btn-cta w-full py-3.5 text-lg transition active:scale-[0.99] ${blockLink ? 'mt-2.5' : 'mt-6'}`}
       >
         {editing ? 'Save Changes' : isRun ? 'Save Run' : 'Save Workout'}
       </button>

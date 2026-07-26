@@ -2,11 +2,12 @@ import { useEffect, useMemo, useReducer } from 'react'
 import type { MuscleId, PplType, RepStyle, Workout } from '../../types'
 import { PPL_MAP, RUN_MAP } from '../../data/muscles'
 import { makeId, useWorkoutStore } from '../../store'
-import { linkedEventIds, matchTrainingEvent } from '../../lib/fulfillment'
+import { linkedEventIds, rankTrainingEventMatches } from '../../lib/fulfillment'
 import { useEventsStore } from '../../../../core/events/store'
-import { relativeDayLabel } from '../../../../core/dates'
+import { relativeDayLabel, timeLabel } from '../../../../core/dates'
 import { voice } from '../../../../core/voice'
 import { Sheet } from '../../../../core/ui/Sheet'
+import type { BlockLink } from './BlockLinkNote'
 import { EffortStep } from './EffortStep'
 import { MethodStep } from './MethodStep'
 import { MuscleStep } from './MuscleStep'
@@ -17,6 +18,10 @@ export type Selection = Partial<Record<MuscleId, 'primary' | 'secondary'>>
 
 type Step = 'method' | 'ppl' | 'muscles' | 'run' | 'effort'
 type Method = 'ppl' | 'custom' | 'run'
+
+/** log-fulfills-block aim: follow the ranked match, claim a named block, or
+ *  claim none. Any change of time re-ranks, so the override dies with it. */
+type LinkChoice = { kind: 'auto' } | { kind: 'none' } | { kind: 'event'; id: string }
 
 interface Draft {
   step: Step
@@ -32,6 +37,7 @@ interface Draft {
   performedAt: string
   /** true once the user picked a date/time — otherwise new workouts stamp save time */
   whenTouched: boolean
+  link: LinkChoice
 }
 
 type Action =
@@ -46,6 +52,7 @@ type Action =
   | { type: 'strainFeel'; value: number }
   | { type: 'repStyle'; value: RepStyle }
   | { type: 'performedAt'; value: string }
+  | { type: 'link'; value: LinkChoice }
   | { type: 'reset'; draft: Draft }
 
 /** a run's muscles are resolved at save time, like PPL — tuning RUN_MAP later
@@ -95,7 +102,10 @@ function reducer(d: Draft, a: Action): Draft {
     case 'repStyle':
       return { ...d, repStyle: a.value }
     case 'performedAt':
-      return { ...d, performedAt: a.value, whenTouched: true }
+      // a new time re-ranks the candidates — an aim taken at the old one is void
+      return { ...d, performedAt: a.value, whenTouched: true, link: { kind: 'auto' } }
+    case 'link':
+      return { ...d, link: a.value }
     case 'reset':
       return a.draft
   }
@@ -113,6 +123,7 @@ const freshDraft = (): Draft => ({
   repStyle: 'mixed',
   performedAt: new Date().toISOString(),
   whenTouched: false,
+  link: { kind: 'auto' },
 })
 
 function draftFromWorkout(w: Workout): Draft {
@@ -131,6 +142,7 @@ function draftFromWorkout(w: Workout): Draft {
     repStyle: w.repStyle ?? 'mixed',
     performedAt: w.performedAt,
     whenTouched: true,
+    link: { kind: 'auto' }, // auto = whatever it already claims, until re-aimed
   }
 }
 
@@ -164,19 +176,51 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
     if (open) dispatch({ type: 'reset', draft: editing ? draftFromWorkout(editing) : freshDraft() })
   }, [open, editing])
 
-  /** the scheduled block this session would fulfil (log-fulfills-block).
-   *  Editing without touching the time keeps the existing link untouched. */
-  const matchedEvent = useMemo(() => {
-    if (editing && draft.performedAt === editing.performedAt) {
-      return editing.eventId ? (events.find((e) => e.id === editing.eventId) ?? null) : null
-    }
+  /** the scheduled block this session would fulfil, and every block it could
+   *  (log-fulfills-block). Editing without touching the time keeps the
+   *  existing link — including no link — until the picker says otherwise. */
+  const { options, matchedEvent } = useMemo(() => {
     const linked = linkedEventIds(workouts)
     if (editing?.eventId) linked.delete(editing.eventId) // its own block stays claimable
-    return matchTrainingEvent(events, draft.performedAt, linked)
-  }, [events, workouts, draft.performedAt, editing])
+    const ranked = rankTrainingEventMatches(events, draft.performedAt, linked)
+    const untouchedEdit = editing !== null && draft.performedAt === editing.performedAt
+    const held =
+      untouchedEdit && editing.eventId
+        ? (events.find((e) => e.id === editing.eventId) ?? null)
+        : null
+    // a held block that has drifted out of match range still belongs in the list
+    const options = held && !ranked.some((e) => e.id === held.id) ? [held, ...ranked] : ranked
+    const auto = untouchedEdit ? held : (ranked[0] ?? null)
+    const link = draft.link
+    const matchedEvent =
+      link.kind === 'none'
+        ? null
+        : link.kind === 'event'
+          ? (options.find((e) => e.id === link.id) ?? auto)
+          : auto
+    return { options, matchedEvent }
+  }, [events, workouts, draft.performedAt, draft.link, editing])
 
-  const fulfilsLine = matchedEvent
-    ? voice.grounds.fulfils({ day: relativeDayLabel(matchedEvent.start, new Date()) })
+  const now = new Date()
+  // no match and no deliberate opt-out (which keeps the picker reachable) = no note
+  const showLink = matchedEvent !== null || (draft.link.kind === 'none' && options.length > 1)
+  const blockLink: BlockLink | null = showLink
+    ? {
+        line: matchedEvent
+          ? voice.grounds.fulfils({
+              day: relativeDayLabel(matchedEvent.start, now),
+              time: timeLabel(matchedEvent.start),
+            })
+          : voice.grounds.fulfilsNothing,
+        options: options.map((e) => ({
+          id: e.id,
+          title: e.title,
+          when: `${relativeDayLabel(e.start, now)} · ${timeLabel(e.start)}`,
+        })),
+        selectedId: matchedEvent?.id ?? null,
+        onSelect: (id) =>
+          dispatch({ type: 'link', value: id ? { kind: 'event', id } : { kind: 'none' } }),
+      }
     : null
 
   const save = () => {
@@ -195,15 +239,20 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
     }
     const performedAt = draft.whenTouched ? draft.performedAt : new Date().toISOString()
     // re-resolve at save-instant: an untouched new workout stamps NOW, and a
-    // rematch that finds nothing must clear a stale link (eventId: undefined)
-    const eventId =
-      editing && performedAt === editing.performedAt
-        ? editing.eventId
-        : (() => {
-            const linked = linkedEventIds(workouts)
-            if (editing?.eventId) linked.delete(editing.eventId)
-            return matchTrainingEvent(events, performedAt, linked)?.id
-          })()
+    // rematch that finds nothing must clear a stale link (eventId: undefined).
+    // A block picked by hand outranks the rematch while it stays in range.
+    const eventId = (() => {
+      const link = draft.link
+      if (link.kind === 'none') return undefined
+      if (editing && performedAt === editing.performedAt) {
+        return link.kind === 'event' ? link.id : editing.eventId
+      }
+      const linked = linkedEventIds(workouts)
+      if (editing?.eventId) linked.delete(editing.eventId)
+      const ranked = rankTrainingEventMatches(events, performedAt, linked)
+      if (link.kind === 'event' && ranked.some((e) => e.id === link.id)) return link.id
+      return ranked[0]?.id
+    })()
     const base = {
       performedAt,
       method: draft.method ?? 'custom',
@@ -296,7 +345,7 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
             onPerformedAt={(value) => dispatch({ type: 'performedAt', value })}
             workouts={workouts}
             onSave={save}
-            fulfilsLine={fulfilsLine}
+            blockLink={blockLink}
             whenInitiallyOpen={devWhenOpen}
           />
         )}
