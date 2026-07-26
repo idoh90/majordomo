@@ -5,6 +5,7 @@ import { localDayKey } from '../../core/dates'
 import { useNavStore } from '../../core/store/nav'
 import { Sheet } from '../../core/ui/Sheet'
 import { voice } from '../../core/voice'
+import { Stepper, TitleField } from './fields'
 import { KIND_META, eventMeta, hhmm } from './kinds'
 import type { NearWatch } from './nearWatch'
 
@@ -219,7 +220,11 @@ function EventTimeLine({ e }: { e: CalendarEvent }) {
 
 /* ------------------------------------------------------------ edit sheet */
 
-export function MobileEventEditSheet({
+/** The event editor. Named without "Mobile" because it is BOTH platforms' —
+ *  Sheet renders a bottom sheet below md and a centered modal above it, so the
+ *  desktop popover's Edit action opens this same clash-checked pipeline rather
+ *  than a second implementation of it. */
+export function EventEditSheet({
   open,
   event,
   onSave,
@@ -261,17 +266,7 @@ export function MobileEventEditSheet({
         <div className="pt-1 font-display text-xs font-semibold tracking-[0.24em] text-ink-dim">
           {voice.manor.eventSheet.editTitle}
         </div>
-        <label className="mt-3 block">
-          <span className="text-[10px] tracking-[0.2em] text-ink-dim">
-            {voice.manor.eventSheet.titleLabel}
-          </span>
-          <input
-            type="text"
-            value={title}
-            onChange={(ev) => setTitle(ev.target.value)}
-            className="card mt-1.5 h-11 w-full px-3.5 text-[13.5px] outline-none focus:border-accent"
-          />
-        </label>
+        <TitleField value={title} onChange={setTitle} />
         <Stepper
           label={voice.manor.eventSheet.startLabel}
           value={`${WD[startDate.getDay()]} ${startDate.getDate()} · ${hhmm(startDate)}`}
@@ -280,7 +275,9 @@ export function MobileEventEditSheet({
         />
         <Stepper
           label={voice.manor.eventSheet.durationLabel}
-          value={`${durH.toFixed(1)} h`}
+          // live end readout: hhmm of the computed end, so a block that runs
+          // past midnight says so instead of looking like it was truncated
+          value={`${durH.toFixed(1)} h · → ${hhmm(new Date(startDate.getTime() + durH * 3_600_000))}`}
           onDec={() => setDurH((d) => Math.max(0.5, d - 0.5))}
           onInc={() => setDurH((d) => Math.min(24, d + 0.5))}
         />
@@ -299,41 +296,3 @@ export function MobileEventEditSheet({
   )
 }
 
-function Stepper({
-  label,
-  value,
-  onDec,
-  onInc,
-}: {
-  label: string
-  value: string
-  onDec: () => void
-  onInc: () => void
-}) {
-  return (
-    <div className="mt-3">
-      <span className="text-[10px] tracking-[0.2em] text-ink-dim">{label}</span>
-      <div className="mt-1.5 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onDec}
-          className="card h-11 w-12 flex-none text-[16px] leading-none transition-colors hover:border-accent"
-          aria-label={`${label} down`}
-        >
-          −
-        </button>
-        <div className="card flex h-11 flex-1 items-center justify-center text-[13.5px] font-semibold [font-variant-numeric:tabular-nums]">
-          {value}
-        </div>
-        <button
-          type="button"
-          onClick={onInc}
-          className="card h-11 w-12 flex-none text-[16px] leading-none transition-colors hover:border-accent"
-          aria-label={`${label} up`}
-        >
-          +
-        </button>
-      </div>
-    </div>
-  )
-}

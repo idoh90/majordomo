@@ -26,7 +26,8 @@ export const majordomoPack: VoicePack = {
       if (studyH > 0) parts.push(`${studyH.toFixed(0)} h study`)
       return parts.join(' · ')
     },
-    occupied: 'That hour is already spoken for, sir.',
+    anchoredEarlier: 'That one begins last week, sir. Move it from there.',
+    occupied:'That hour is already spoken for, sir.',
     occupiedShort: 'occupied, sir',
     moved: 'Moved, sir.',
     restored: 'Restored, sir.',

@@ -14,7 +14,7 @@ import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { voice } from '../../core/voice'
 import { useIsMobile } from '../useIsMobile'
 import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
-import { MobileEventEditSheet, MobileEventSheet, MobileQuickAddSheet } from './MobileSheets'
+import { EventEditSheet, MobileEventSheet, MobileQuickAddSheet } from './MobileSheets'
 import { nearWatch } from './nearWatch'
 import { StrainBar } from './StrainBar'
 import type { DayStrain } from './strain'
@@ -184,6 +184,38 @@ export function WeekGrid({
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suppressClickUntil = useRef(0)
 
+  /* Escape closes the transient desktop surfaces. The mobile branch gets this
+     free from the Sheet primitive; the popovers are plain absolute panels, so
+     they need their own — matching Sheet's handling rather than inventing a
+     second convention. The editor is a Sheet and closes itself. */
+  useEffect(() => {
+    if (!popover && !quickAdd && !placing) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setPopover(null)
+      setQuickAdd(null)
+      setPlacing(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [popover, quickAdd, placing])
+
+  /* Escape's pointer twin. Deliberately NOT a full-viewport scrim like Sheet's:
+     an invisible layer over live chrome would swallow the first press on any
+     control while a popover is open — the app would look interactive and not
+     be. Dismiss on a press outside the panel instead, and let the press reach
+     whatever it landed on. */
+  useEffect(() => {
+    if (!popover && !quickAdd) return
+    const onDown = (e: PointerEvent) => {
+      if ((e.target as HTMLElement | null)?.closest('[data-manor-popover]')) return
+      setPopover(null)
+      setQuickAdd(null)
+    }
+    window.addEventListener('pointerdown', onDown)
+    return () => window.removeEventListener('pointerdown', onDown)
+  }, [popover, quickAdd])
+
   const butler = (msg: string, undo = false) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
     setToast({ msg, undo })
@@ -346,7 +378,13 @@ export function WeekGrid({
     const rect = box.getBoundingClientRect()
     const s = new Date(e.start)
     const fromCol = columns.findIndex((w) => s >= w.start && s < w.end)
-    if (fromCol < 0) return // starts before this week's window — not draggable here
+    if (fromCol < 0) {
+      // last week's overnight tail: it renders here but is anchored outside the
+      // viewed window, so there is no column to drag it from. Say so — silence
+      // reads as breakage (M-02).
+      butler(voice.manor.anchoredEarlier)
+      return
+    }
     const startOffsetH = (s.getTime() - columns[fromCol].start.getTime()) / HOUR_MS
     const grabH = (ev.clientY - rect.top) / PXH - startOffsetH
     const durH = hoursOf(e)
@@ -646,6 +684,10 @@ export function WeekGrid({
                 popover={popover}
                 onClose={() => setPopover(null)}
                 onDelete={() => removeEvent(popover.event.id)}
+                onEdit={() => {
+                  setEditing(popover.event)
+                  setPopover(null)
+                }}
                 style={{
                   left:
                     popover.col < 4
@@ -740,14 +782,19 @@ export function WeekGrid({
               setPopover(null)
             }}
           />
-          <MobileEventEditSheet
-            open={editing !== null}
-            event={editing}
-            onSave={saveEdit}
-            onClose={() => setEditing(null)}
-          />
         </>
       )}
+
+      {/* Both platforms', unlike the sheets above: `editing` is not shared with
+          any desktop popover, so mounting it everywhere double-renders nothing
+          — and Sheet already gives desktop a centered modal with Escape and a
+          dismissing scrim. The desktop popover's Edit action opens this. */}
+      <EventEditSheet
+        open={editing !== null}
+        event={editing}
+        onSave={saveEdit}
+        onClose={() => setEditing(null)}
+      />
 
       <ConfirmDialog
         open={confirm !== null}
@@ -1156,11 +1203,13 @@ function EventPopover({
   popover,
   onClose,
   onDelete,
+  onEdit,
   style,
 }: {
   popover: Popover
   onClose: () => void
   onDelete: () => void
+  onEdit: () => void
   style: React.CSSProperties
 }) {
   const e = popover.event
@@ -1170,6 +1219,7 @@ function EventPopover({
   const cross = localDayKey(s) !== localDayKey(en)
   return (
     <div
+      data-manor-popover
       className="menu-panel absolute z-[11] w-[236px] animate-[fade-in_160ms_ease-out] p-4"
       style={style}
     >
@@ -1209,8 +1259,24 @@ function EventPopover({
       </div>
       <button
         type="button"
+        onClick={onEdit}
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-line py-1.5 text-[11.5px] font-semibold tracking-[0.12em] text-ink-dim transition-colors hover:border-accent hover:text-ink"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path
+            d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16v4Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        {voice.manor.eventSheet.edit}
+      </button>
+      <button
+        type="button"
         onClick={onDelete}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[11.5px] font-semibold tracking-[0.12em] text-danger transition-colors hover:bg-panel-2"
+        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[11.5px] font-semibold tracking-[0.12em] text-danger transition-colors hover:bg-panel-2"
         style={{ borderColor: 'color-mix(in srgb, var(--color-danger) 40%, transparent)' }}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -1244,6 +1310,7 @@ function QuickAddPopover({
   const when = new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS)
   return (
     <div
+      data-manor-popover
       className="menu-panel absolute z-[11] w-[212px] animate-[fade-in_160ms_ease-out] p-3.5"
       style={style}
     >

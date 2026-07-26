@@ -35,6 +35,9 @@ export interface VoicePack {
     briefing: (count: number) => string
     /** briefing-strip stat readout */
     briefingStat: (v: { watchH: number; trainingCount: number; studyH: number }) => string
+    /** drag refused: the block began before the viewed week, so it has no
+     *  column here to be moved from */
+    anchoredEarlier: string
     /** drop rejected: the target slot overlaps something */
     occupied: string
     /** drag ghost time-line when the slot is taken */
