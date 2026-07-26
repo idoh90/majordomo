@@ -3,6 +3,7 @@ import type { MuscleId, Workout } from '../../types'
 import { MUSCLES, PPL_LABELS } from '../../data/muscles'
 import { hoursBetween, relativeDayLabel, timeLabel } from '../../../../core/dates'
 import {
+  MAX_STRAIN,
   REP_STYLES,
   recoveryPhase,
   repStyleOf,
@@ -104,13 +105,17 @@ export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDet
                 <div
                   className="chip h-full transition-[width]"
                   style={{
-                    width: `${Math.min(10, current) * 10}%`,
+                    width: `${Math.min(MAX_STRAIN, current) * 10}%`,
                     background: strainToColor(current, heatRamp),
                   }}
                 />
               </div>
+              {/* one workout can contribute past the 0–10 the rest of the app
+                  reads on (a maximal session peaks near 11.5), and the bar has
+                  always pinned at full — so the number says so instead of
+                  printing an off-scale figure */}
               <span className="w-8 shrink-0 text-right text-xs tabular-nums text-ink">
-                {current.toFixed(1)}
+                {current > MAX_STRAIN ? `>${MAX_STRAIN}` : current.toFixed(1)}
               </span>
             </div>
           )

@@ -1,22 +1,15 @@
 import type { Workout } from '../../types'
 import { dailyTargets, proteinPerMeal, weeklyProtein } from '../../lib/nutrition'
 import { useWorkoutStore } from '../../store'
+import { voice } from '../../../../core/voice'
 
 interface NutritionCardProps {
   workouts: Workout[]
   now: number
 }
 
-// meat-diet nudges (spec Part 5) — rotate deterministically by day so it's stable
-const TIPS = [
-  'Mostly-meat diet: add a piece of fruit today for vitamin C + potassium.',
-  'Add a starch (potato, rice, oats) on training days to hit your carbs.',
-  'Greek yogurt or milk covers calcium the meat is missing.',
-  'Liver once a week fills the folate & vitamin-A gaps — no veg required.',
-  'Low on fiber? Oats or a fiber supplement closes the gap gently.',
-  'Been a while? A periodic lipid panel (LDL/ApoB) is worth it on red meat.',
-]
-
+// the meat-diet notes (spec Part 5) live in the voice pack now; they still
+// rotate deterministically by day so the card is stable across a session
 // per-skin macro colors, declared in index.css skin bundles
 const MACRO_COLORS = {
   protein: 'var(--macro-protein)',
@@ -39,13 +32,14 @@ export function NutritionCard({ workouts, now }: NutritionCardProps) {
   const dayOfYear = Math.floor(
     (nowDate.getTime() - new Date(nowDate.getFullYear(), 0, 0).getTime()) / 86_400_000,
   )
-  const tip = TIPS[dayOfYear % TIPS.length]
+  const tips = voice.grounds.fuelTips
+  const tip = tips[dayOfYear % tips.length]
 
   return (
     <div className="panel p-4">
       <div className="flex items-start justify-between">
         <div>
-          <div className="card-title">Fuel · Today</div>
+          <div className="card-title">{voice.grounds.fuelTitle}</div>
           <div className="mt-0.5 flex items-baseline gap-1.5">
             <span className="stat-num text-3xl leading-none text-ink">
               {t.calories.toLocaleString()}
@@ -60,7 +54,7 @@ export function NutritionCard({ workouts, now }: NutritionCardProps) {
               : 'border-line text-ink-faint'
           }`}
         >
-          {t.isTrainingDay ? 'Training day' : 'Rest day'}
+          {t.isTrainingDay ? voice.grounds.fuelTrainingDay : voice.grounds.fuelRestDay}
         </span>
       </div>
 

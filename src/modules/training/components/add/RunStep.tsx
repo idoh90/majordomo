@@ -1,3 +1,8 @@
+import { voice } from '../../../../core/voice'
+
+/** past this many minutes per km it isn't a running pace any more */
+const WALKING_PACE_MIN_PER_KM = 30
+
 interface RunStepProps {
   distanceKm: string
   durationMin: string
@@ -17,9 +22,15 @@ export function RunStep({
   const dist = Number(distanceKm)
   const mins = Number(durationMin)
   const pace = dist > 0 && mins > 0 ? mins / dist : 0
-  const paceLabel = pace
-    ? `${Math.floor(pace)}:${String(Math.round((pace % 1) * 60)).padStart(2, '0')} /km`
-    : null
+  // round to whole seconds FIRST, then split — rounding the remainder alone
+  // prints 5:60 for a 5.999 pace
+  const totalSec = Math.round(pace * 60)
+  const paceClock = `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, '0')}`
+  const paceLine = !pace
+    ? voice.grounds.runOptional
+    : pace > WALKING_PACE_MIN_PER_KM
+      ? voice.grounds.runPaceWalking
+      : voice.grounds.runPace({ pace: paceClock })
 
   return (
     <div>
@@ -42,9 +53,7 @@ export function RunStep({
         />
       </div>
 
-      <p className="mt-2 text-xs text-ink-faint">
-        {paceLabel ? `That's ${paceLabel}.` : 'Both optional — effort is what drives the strain.'}
-      </p>
+      <p className="mt-2 text-xs text-ink-faint">{paceLine}</p>
 
       <button
         type="button"
@@ -83,7 +92,13 @@ function Field({
           step={step}
           value={value}
           placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)}
+          // refuse a negative outright rather than take it and drop it at save
+          // (the old num() quietly discarded anything <= 0, losing the run detail)
+          onChange={(e) => {
+            const next = e.target.value
+            if (next !== '' && Number(next) < 0) return
+            onChange(next)
+          }}
           className="stat-num w-full min-w-0 bg-transparent text-xl text-ink outline-none placeholder:text-ink-faint"
         />
         <span className="shrink-0 text-sm text-ink-faint">{unit}</span>

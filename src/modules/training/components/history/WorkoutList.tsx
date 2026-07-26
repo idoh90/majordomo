@@ -1,5 +1,6 @@
 import type { Workout } from '../../types'
 import { localDayKey, relativeDayLabel } from '../../../../core/dates'
+import { voice } from '../../../../core/voice'
 import { WorkoutCard } from './WorkoutCard'
 
 interface WorkoutListProps {
@@ -14,10 +15,15 @@ export function WorkoutList({ workouts, now, onEdit, onOpen }: WorkoutListProps)
     return (
       <section className="rounded-2xl border border-dashed border-line bg-panel/50 p-8 text-center">
         <p className="font-display text-lg font-semibold tracking-wide text-ink-dim">
-          No workouts yet
+          {voice.grounds.historyEmptyTitle}
         </p>
-        <p className="mt-1 text-sm text-ink-faint">
-          Hit the glowing + button to log your first one.
+        {/* the glowing + lives in the mobile TabBar (md:hidden); desktop logs
+            from the header button, so each viewport is told the truth */}
+        <p className="mt-1 text-sm text-ink-faint md:hidden">
+          {voice.grounds.historyEmptyMobile}
+        </p>
+        <p className="mt-1 hidden text-sm text-ink-faint md:block">
+          {voice.grounds.historyEmptyDesktop}
         </p>
       </section>
     )

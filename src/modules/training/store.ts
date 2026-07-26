@@ -12,6 +12,9 @@ export { makeId }
 adoptLegacyKey('majordomo-training', 'batman-workouts')
 
 export const DEFAULT_WEEKLY_GOAL = 4
+/** the one ceiling: the goal stepper and the store clamp read the same number
+ *  (they disagreed — a stepper that stopped at 14 over a store that took 21) */
+export const MAX_WEEKLY_GOAL = 14
 
 interface WorkoutState {
   workouts: Workout[]
@@ -51,7 +54,8 @@ export const useWorkoutStore = create<WorkoutState>()(
       deleteWorkout: (id) => set((s) => ({ workouts: s.workouts.filter((w) => w.id !== id) })),
       clearAll: () => set({ workouts: [] }),
       replaceAll: (workouts) => set({ workouts: [...workouts].sort(byDateDesc) }),
-      setWeeklyGoal: (goal) => set({ weeklyGoal: Math.max(0, Math.min(21, Math.round(goal))) }),
+      setWeeklyGoal: (goal) =>
+        set({ weeklyGoal: Math.max(0, Math.min(MAX_WEEKLY_GOAL, Math.round(goal))) }),
       setProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
       setSkin: (skin) => set({ skin }),
     }),

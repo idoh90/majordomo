@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import type { Workout } from '../../types'
 import { GROUP_LABELS } from '../../data/muscles'
 import { slackingGroups, thisWeekCount } from '../../lib/insights'
-import { useWorkoutStore } from '../../store'
+import { MAX_WEEKLY_GOAL, useWorkoutStore } from '../../store'
 import { useShellStore } from '../../../../core/store/shell'
+import { voice } from '../../../../core/voice'
 
 interface WeeklyGoalCardProps {
   workouts: Workout[]
@@ -30,7 +31,7 @@ export function WeeklyGoalCard({ workouts, now }: WeeklyGoalCardProps) {
     >
       <div className="flex items-start justify-between">
         <div>
-          <div className="card-title">This week</div>
+          <div className="card-title">{voice.grounds.weekTitle}</div>
           <div className="mt-0.5 flex items-baseline gap-1.5">
             <span className="stat-num text-3xl leading-none text-ink">{done}</span>
             {hasGoal && (
@@ -60,11 +61,9 @@ export function WeeklyGoalCard({ workouts, now }: WeeklyGoalCardProps) {
           </div>
           <div className="mt-1.5 text-sm">
             {met ? (
-              <span className="font-medium text-accent">Goal smashed — nice.</span>
+              <span className="font-medium text-accent">{voice.grounds.goalMet}</span>
             ) : (
-              <span className="text-ink-dim">
-                <span className="font-semibold text-ink">{remaining}</span> more to hit your goal
-              </span>
+              <span className="text-ink-dim">{voice.grounds.goalRemaining(remaining)}</span>
             )}
           </div>
         </>
@@ -72,13 +71,17 @@ export function WeeklyGoalCard({ workouts, now }: WeeklyGoalCardProps) {
 
       {slacking.length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
-          <div className="card-title text-[10px]">Slacking this week</div>
+          <div className="card-title text-[10px]">{voice.grounds.slackingTitle}</div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {slacking.map((s) => (
               <span
                 key={s.group}
                 className="chip border border-danger/40 bg-danger/10 px-2.5 py-0.5 text-xs font-medium text-ink"
-                title={`${GROUP_LABELS[s.group]}: ${Math.round(s.thisWeek)} vs usual ${Math.round(s.baseline)} / week`}
+                title={voice.grounds.slackingDetail({
+                  group: GROUP_LABELS[s.group],
+                  thisWeek: s.thisWeek,
+                  baseline: s.baseline,
+                })}
               >
                 {GROUP_LABELS[s.group]}
               </span>
@@ -131,10 +134,10 @@ function GoalDialog({
         aria-modal="true"
         className="sheet-surface relative w-full max-w-xs animate-[step-in_180ms_ease-out] rounded-2xl border p-5"
       >
-        <h3 className="font-display text-lg font-bold tracking-wide">Weekly goal</h3>
-        <p className="mt-1 text-sm text-ink-dim">
-          How many workouts do you want to hit this calendar week? Change it anytime.
-        </p>
+        <h3 className="font-display text-lg font-bold tracking-wide">
+          {voice.grounds.goalDialogTitle}
+        </h3>
+        <p className="mt-1 text-sm text-ink-dim">{voice.grounds.goalDialogBody}</p>
 
         <div className="mt-5 flex items-center justify-center gap-5">
           <Stepper
@@ -146,12 +149,14 @@ function GoalDialog({
           </Stepper>
           <div className="text-center">
             <div className="stat-num text-5xl leading-none text-accent">{value}</div>
-            <div className="mt-1 text-xs text-ink-faint">{value === 0 ? 'no goal' : 'per week'}</div>
+            <div className="mt-1 text-xs text-ink-faint">
+              {value === 0 ? voice.grounds.goalNone : voice.grounds.goalPerWeek}
+            </div>
           </div>
           <Stepper
             label="Increase"
-            disabled={value >= 14}
-            onClick={() => setValue((v) => Math.min(14, v + 1))}
+            disabled={value >= MAX_WEEKLY_GOAL}
+            onClick={() => setValue((v) => Math.min(MAX_WEEKLY_GOAL, v + 1))}
           >
             +
           </Stepper>

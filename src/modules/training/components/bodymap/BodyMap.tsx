@@ -14,6 +14,7 @@ import {
   weeklyVolume,
 } from '../../lib/volume'
 import { relativeDayLabel } from '../../../../core/dates'
+import { voice } from '../../../../core/voice'
 import { SegmentedControl } from '../../../../core/ui/SegmentedControl'
 import { BodySvg } from './BodySvg'
 import { Legend, VolumeLegend } from './Legend'
@@ -58,7 +59,7 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
   function buildInfo(): { text: string; dim: boolean } {
     if (!selected) {
       return {
-        text: mode === 'strain' ? 'Tap a muscle for details' : 'Weekly volume vs your targets',
+        text: mode === 'strain' ? voice.grounds.mapIdleStrain : voice.grounds.mapIdleVolume,
         dim: true,
       }
     }
@@ -145,6 +146,7 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
               glowFor={() => 0}
               selected={null}
               onSelect={() => {}}
+              decorative
               className={`${view === 'front' ? '' : 'hidden'} lg:block ${svgClass}`}
             />
             <BodySvg
@@ -153,6 +155,7 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
               glowFor={() => 0}
               selected={null}
               onSelect={() => {}}
+              decorative
               className={`${view === 'back' ? '' : 'hidden'} lg:block ${svgClass}`}
             />
           </div>
@@ -184,12 +187,13 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
       {over.length >= 2 && (
         <div className="mt-3 rounded-xl border border-danger/40 bg-danger/10 px-3.5 py-2.5 text-sm">
           <span className="font-display font-bold uppercase tracking-[0.12em] text-danger">
-            Deload check
+            {voice.grounds.deloadTitle}
           </span>
           <span className="ml-2 text-ink-dim">
-            {over.length} muscles are overreaching this week (
-            {over.slice(0, 3).map(muscleLabel).join(', ')}
-            {over.length > 3 ? '…' : ''}). A lighter session or an extra rest day helps.
+            {voice.grounds.deload({
+              count: over.length,
+              muscles: over.slice(0, 3).map(muscleLabel).join(', ') + (over.length > 3 ? '…' : ''),
+            })}
           </span>
         </div>
       )}

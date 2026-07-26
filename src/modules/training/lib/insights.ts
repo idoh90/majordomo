@@ -44,7 +44,8 @@ export function weeklyCounts(
   return buckets
 }
 
-/** Total undecayed training volume per muscle over the last `days` days. */
+/** Total undecayed LIFTING volume per muscle over the last `days` days — runs
+ *  excluded, so the chart reads as what was trained, not what was covered. */
 export function topMuscles(
   workouts: Workout[],
   now: Date,
@@ -54,6 +55,10 @@ export function topMuscles(
   const cutoffMs = addDays(now, -days).getTime()
   const totals = new Map<MuscleId, number>()
   for (const w of workouts) {
+    // runs are conditioning, not training volume — the same line the weekly
+    // count and the RP landmarks already draw. One long run otherwise puts
+    // calves and quads on top of a chart that means "what you trained".
+    if (isRun(w)) continue
     const t = new Date(w.performedAt).getTime()
     if (t < cutoffMs) continue
     for (const m of ALL_MUSCLE_IDS) {

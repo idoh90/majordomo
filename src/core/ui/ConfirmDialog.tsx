@@ -18,9 +18,11 @@ export function ConfirmDialog({
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-6">
+      {/* onClick, not onPointerDown — same rule as Sheet: a drag that ends on
+          the scrim is not a dismissal */}
       <div
         className="sheet-backdrop absolute inset-0 animate-[fade-in_150ms_ease-out] backdrop-blur-[2px]"
-        onPointerDown={onCancel}
+        onClick={onCancel}
       />
       <div
         role="alertdialog"

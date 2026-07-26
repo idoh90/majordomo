@@ -175,6 +175,38 @@ export interface VoicePack {
     fulfilsNoBlock: string
     /** dim tag on a booked block that already has a workout linked */
     fulfilledTag: string
+    /** run step: the pace read-out, its walking-pace floor, and the hint */
+    runPace: (v: { pace: string }) => string
+    runPaceWalking: string
+    runOptional: string
+    /** weekly-goal card + its dialog */
+    weekTitle: string
+    goalMet: string
+    goalRemaining: (n: number) => string
+    slackingTitle: string
+    slackingDetail: (v: { group: string; thisWeek: number; baseline: number }) => string
+    goalDialogTitle: string
+    goalDialogBody: string
+    goalPerWeek: string
+    goalNone: string
+    /** fuel card: title, day chips, and the rotating diet notes */
+    fuelTitle: string
+    fuelTrainingDay: string
+    fuelRestDay: string
+    fuelTips: string[]
+    /** history with nothing in it — the prompt differs by where the button is */
+    historyEmptyTitle: string
+    historyEmptyMobile: string
+    historyEmptyDesktop: string
+    /** body map: the idle info line per mode, and the over-volume hint */
+    mapIdleStrain: string
+    mapIdleVolume: string
+    deloadTitle: string
+    deload: (v: { count: number; muscles: string }) => string
+    /** most-trained chart — lifting only, so it says so */
+    topMusclesTitle: string
+    topMusclesNote: string
+    topMusclesEmpty: string
   }
   study: {
     /** rings hero card title */

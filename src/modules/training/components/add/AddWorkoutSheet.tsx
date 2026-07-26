@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer } from 'react'
+import { useEffect, useMemo, useReducer, useRef } from 'react'
 import type { MuscleId, PplType, RepStyle, Workout } from '../../types'
 import { PPL_MAP, RUN_MAP } from '../../data/muscles'
 import { makeId, useWorkoutStore } from '../../store'
@@ -146,6 +146,9 @@ function draftFromWorkout(w: Workout): Draft {
   }
 }
 
+/** every field the user can change — the step they stand on is not one */
+const fingerprint = (d: Draft) => JSON.stringify({ ...d, step: undefined })
+
 const TITLES: Record<Step, string> = {
   method: 'Log Workout',
   ppl: 'What kind of day?',
@@ -171,10 +174,20 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
   // COMMITTED events only — a what-if rehearsal must never be linked against
   const events = useEventsStore((s) => s.events)
   const [draft, dispatch] = useReducer(reducer, undefined, freshDraft)
+  /** the draft as the sheet opened — what "dirty" is measured against */
+  const opened = useRef<Draft>(draft)
 
   useEffect(() => {
-    if (open) dispatch({ type: 'reset', draft: editing ? draftFromWorkout(editing) : freshDraft() })
+    if (!open) return
+    const fresh = editing ? draftFromWorkout(editing) : freshDraft()
+    opened.current = fresh
+    dispatch({ type: 'reset', draft: fresh })
   }, [open, editing])
+
+  /** anything the user has chosen — step position alone doesn't count, since
+   *  reaching a step always means a choice was made to get there. Sheet owns
+   *  the confirm itself (the Ledger's close guard); this only feeds it. */
+  const dirty = fingerprint(draft) !== fingerprint(opened.current)
 
   /** the scheduled block this session would fulfil, and every block it could
    *  (log-fulfills-block). Editing without touching the time keeps the
@@ -282,7 +295,7 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
   }
 
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={onClose} dirty={dirty}>
       <div className="mb-4 flex items-center gap-2">
         {draft.step !== 'method' && (
           <button

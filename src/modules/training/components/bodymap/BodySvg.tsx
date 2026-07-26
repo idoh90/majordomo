@@ -1,4 +1,4 @@
-import type { PointerEvent } from 'react'
+import { useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { BodyView, MuscleId } from '../../types'
 import { MUSCLES } from '../../data/muscles'
 import { BACK_PLATES, FRONT_PLATES, SILHOUETTE_HALF } from './paths'
@@ -15,6 +15,9 @@ interface BodySvgProps {
   onSelect: (m: MuscleId | null) => void
   debugRainbow?: boolean
   className?: string
+  /** a copy that is scenery (Ghost's floor reflection): no roles, no tab stops
+   *  — a focusable element inside an aria-hidden wrapper is a trap */
+  decorative?: boolean
 }
 
 export function BodySvg({
@@ -25,8 +28,10 @@ export function BodySvg({
   onSelect,
   debugRainbow,
   className,
+  decorative = false,
 }: BodySvgProps) {
   const plates = view === 'front' ? FRONT_PLATES : BACK_PLATES
+  const [focused, setFocused] = useState<MuscleId | null>(null)
 
   const fillFor = (muscle: MuscleId, i: number) =>
     debugRainbow ? `hsl(${(i * 137.5) % 360} 75% 55%)` : colorFor(muscle)
@@ -70,24 +75,51 @@ export function BodySvg({
         </g>
       )}
 
-      {/* crisp muscle plates */}
+      {/* crisp muscle plates. The GROUP is the control, not each path: a
+          mirrored pair is one muscle and must be one tab stop, announced once. */}
       {plates.map((p, i) => {
         const isSelected = selected === p.muscle
+        const isFocused = focused === p.muscle
+        const toggle = () => onSelect(isSelected ? null : p.muscle)
         const handleDown = (e: PointerEvent) => {
           e.stopPropagation()
-          onSelect(isSelected ? null : p.muscle)
+          toggle()
+        }
+        // a <g role="button"> gets no free click from Enter/Space — wire it
+        const handleKey = (e: KeyboardEvent) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return
+          e.preventDefault() // Space would otherwise scroll the page
+          e.stopPropagation()
+          toggle()
         }
         const shared = {
           fill: fillFor(p.muscle, i),
-          stroke: isSelected ? 'var(--color-accent)' : 'var(--plate-stroke, rgb(10 11 14 / 0.55))',
-          strokeWidth: isSelected ? 1.75 : 0.75,
+          stroke:
+            isSelected || isFocused
+              ? 'var(--color-accent)'
+              : 'var(--plate-stroke, rgb(10 11 14 / 0.55))',
+          strokeWidth: isSelected ? 1.75 : isFocused ? 2.25 : 0.75,
+          // focus reads as a dashed ring so it never masquerades as selection
+          strokeDasharray: isFocused && !isSelected ? '5 3' : undefined,
           strokeLinejoin: 'round' as const,
           className: 'muscle-plate',
           style: { transition: 'fill 500ms ease' },
           onPointerDown: handleDown,
         }
+        const control = decorative
+          ? {}
+          : {
+              role: 'button',
+              tabIndex: 0,
+              'aria-label': MUSCLES[p.muscle].label,
+              'aria-pressed': isSelected,
+              onKeyDown: handleKey,
+              onFocus: () => setFocused(p.muscle),
+              onBlur: () => setFocused(null),
+              style: { outline: 'none' }, // the dashed plate ring IS the indicator
+            }
         return (
-          <g key={p.muscle}>
+          <g key={p.muscle} {...control}>
             <path d={p.d} {...shared}>
               <title>{MUSCLES[p.muscle].label}</title>
             </path>
