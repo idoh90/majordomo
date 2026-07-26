@@ -135,3 +135,29 @@ export function liveNetWorth(
     degraded: [...degraded].sort(),
   }
 }
+
+/**
+ * The delta the Vault and the briefing print, or **null when there is nothing to
+ * compare against** — the row is then omitted rather than printed as a
+ * meaningless '▲ ₪0 vs last'. Two ways to have no basis:
+ *   · no holdings and a single snapshot — there is no prior point;
+ *   · holdings whose live side fell back to the latest snapshot (missing quote
+ *     or ₪ rate), so the comparison is that snapshot against itself.
+ * With holdings the delta is live-vs-last-snapshot (the market move since the
+ * save); without, it's the Phase-1 last-vs-previous-snapshot move.
+ */
+export function displayDelta(opts: {
+  live: LiveNetWorth
+  series: NetWorthPoint[]
+  latest: Snapshot | null
+  snapshotNetWorth: number
+  hasHoldings: boolean
+}): NetWorthDelta | null {
+  const { live, series, latest, snapshotNetWorth, hasHoldings } = opts
+  if (hasHoldings && latest) {
+    const absolute = live.netWorth - snapshotNetWorth
+    if (absolute === 0 && live.degraded.length > 0) return null
+    return { absolute, fraction: snapshotNetWorth !== 0 ? absolute / Math.abs(snapshotNetWorth) : null }
+  }
+  return series.length >= 2 ? latestDelta(series) : null
+}

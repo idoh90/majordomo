@@ -206,6 +206,18 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   card, accounts list, **portfolio board** with per-holding price / day-move / P/L).
   Charts are hand-rolled inline SVG using `text-accent` + `currentColor`, recoloring
   per skin for free (verified on Ironworks-Paper).
+  The **▲/▼ row needs a basis** — `displayDelta()` in `lib/networth.ts` returns null
+  (and the Vault/briefing then omit the row rather than print '▲ ₪0 vs last') when a
+  lone snapshot has no prior point, or when a degraded live side is being compared
+  with the very snapshot it fell back to. Both surfaces call that one function.
+- **Trend chart conventions** (`NetWorthChart`) — axis dates are `Mar '26`, never
+  `Mar 26` (a bare 2-digit year reads as a day). A range pill shows **only what its
+  window holds**: fewer than two points renders the range's own empty state plus a
+  *Show all*, never points from outside the window. The endpoint marker is an
+  HTML span positioned in percent, NOT an SVG `<circle>` — the chart's
+  `preserveAspectRatio="none"` would squash a circle into an ellipse, and at x=W half
+  of it falls outside the viewBox (its overhang lands inside the panel's padding).
+  Anything else pinned to a data coordinate needs the same treatment.
 - **The budget** (`lib/budget.ts`) — a running **month-to-date spend** the user
   overwrites whenever they check their card app, vs a monthly target. `budgetPace()`
   linearly projects month-end spend and flags under/on/over.

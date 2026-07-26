@@ -307,6 +307,10 @@ export const majordomoPack: VoicePack = {
     stampHeldTitle:
       'No fresh quote or ₪ rate, sir — keeping the last saved value rather than writing a wrong one.',
     recentEntries: 'RECENT ENTRIES',
+    trend: {
+      rangeEmpty: (months) => `Not enough points in the last ${months} months, sir — two make a line.`,
+      showAll: 'Show all',
+    },
     spend: {
       history: 'History',
       prevMonth: 'Previous month',

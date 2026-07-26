@@ -323,6 +323,12 @@ export interface VoicePack {
     stampHeldTitle: string
     /** recent one-off spends card title */
     recentEntries: string
+    /** the net-worth trend chart */
+    trend: {
+      /** the selected range holds fewer than two points — say so, don't widen it */
+      rangeEmpty: (months: number) => string
+      showAll: string
+    }
     /** the spending sheet, month by month */
     spend: {
       /** the spend card's affordance onto the sheet's month pager */

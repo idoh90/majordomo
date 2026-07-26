@@ -7,7 +7,9 @@ interface VaultProps {
   netWorth: number
   assets: number
   liabilities: number
-  delta: NetWorthDelta
+  /** null when there is nothing to compare against — the row is then omitted
+   *  rather than shown as a meaningless '▲ ₪0 vs last' */
+  delta: NetWorthDelta | null
   hasData: boolean
   /** currencies awaiting a quote/₪ rate — those accounts read from their last
    *  saved balance, and the Vault says so rather than showing a live-looking total */
@@ -16,7 +18,7 @@ interface VaultProps {
 
 /** The hero: total net worth, dramatic, with the move since last snapshot. */
 export function Vault({ netWorth, assets, liabilities, delta, hasData, degraded = [] }: VaultProps) {
-  const up = delta.absolute >= 0
+  const up = (delta?.absolute ?? 0) >= 0
   const tone = up ? 'text-accent' : 'text-danger'
 
   return (
@@ -37,14 +39,16 @@ export function Vault({ netWorth, assets, liabilities, delta, hasData, degraded 
         <>
           <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
             <Amount value={netWorth} className="stat-num font-display text-5xl leading-none text-ink sm:text-6xl" />
-            <div className={`mb-1 flex items-center gap-1.5 text-sm font-semibold ${tone}`}>
-              <span aria-hidden className="text-base">{up ? '▲' : '▼'}</span>
-              <Amount value={delta.absolute} kind="delta" />
-              {delta.fraction !== null && (
-                <span className="text-ink-faint">({formatPercent(delta.fraction)})</span>
-              )}
-              <span className="text-ink-faint">vs last</span>
-            </div>
+            {delta && (
+              <div className={`mb-1 flex items-center gap-1.5 text-sm font-semibold ${tone}`}>
+                <span aria-hidden className="text-base">{up ? '▲' : '▼'}</span>
+                <Amount value={delta.absolute} kind="delta" />
+                {delta.fraction !== null && (
+                  <span className="text-ink-faint">({formatPercent(delta.fraction)})</span>
+                )}
+                <span className="text-ink-faint">vs last</span>
+              </div>
+            )}
           </div>
 
           <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 border-t border-line pt-4 text-sm">

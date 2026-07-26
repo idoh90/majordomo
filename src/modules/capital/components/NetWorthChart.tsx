@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { SegmentedControl } from '../../../core/ui/SegmentedControl'
+import { voice } from '../../../core/voice'
 import type { NetWorthPoint } from '../lib/networth'
 import { formatCompact } from '../lib/money'
 import { Amount } from './Amount'
@@ -28,14 +29,15 @@ export function NetWorthChart({
     return [...series, { id: 'live', takenAt: new Date().toISOString(), value: liveValue }]
   }, [series, liveValue])
 
+  // strictly what the selected range holds. It used to fall back to
+  // full.slice(-2), which drew points from OUTSIDE the range under a '3M' pill —
+  // an honest empty state beats a chart that quietly answers a different question.
   const pts = useMemo(() => {
     const months = RANGE_MONTHS[range]
     if (months == null) return full
     const cutoff = new Date()
     cutoff.setMonth(cutoff.getMonth() - months)
-    const filtered = full.filter((p) => new Date(p.takenAt) >= cutoff)
-    // keep at least the last two points so short histories still draw a line
-    return filtered.length >= 2 ? filtered : full.slice(-2)
+    return full.filter((p) => new Date(p.takenAt) >= cutoff)
   }, [full, range])
 
   const geometry = useMemo(() => {
@@ -55,14 +57,22 @@ export function NetWorthChart({
     return { vMin, vMax, x, y, line, area, lastX: x(last.takenAt), lastY: y(last.value) }
   }, [pts])
 
-  const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+  // the whole history could draw, but the chosen window can't
+  const rangeIsEmpty = range !== 'all' && full.length >= 2
+
+  // "Mar '26", never "Mar 26" — a bare 2-digit year reads as a day of the month
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso)
+    return `${d.toLocaleDateString('en-US', { month: 'short' })} '${String(d.getFullYear() % 100).padStart(2, '0')}`
+  }
 
   return (
     <div className="panel p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
+      {/* below md the controls take their own row — 'NET WORTH · TREND' plus a
+          4-pill control does not fit 390px and the title wraps a word per line */}
+      <div className="mb-3 flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
         <h3 className="card-title">Net worth · trend</h3>
-        <div className="flex items-center gap-2.5">
+        <div className="flex w-full items-center justify-between gap-2.5 md:w-auto md:justify-end">
           {onHistory && (
             <button
               type="button"
@@ -87,33 +97,48 @@ export function NetWorthChart({
 
       {geometry ? (
         <div className="relative">
-          <svg
-            viewBox={`0 0 ${W} ${H}`}
-            width="100%"
-            height={H}
-            preserveAspectRatio="none"
-            className="text-accent"
-            role="img"
-            aria-label="Net worth over time"
-          >
-            <defs>
-              <linearGradient id="nw-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />
-                <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <path d={geometry.area} fill="url(#nw-fill)" />
-            <path
-              d={geometry.line}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
+          {/* leading-none: the svg is inline, and its baseline gap would put the
+              percentage-positioned marker below its own coordinate space */}
+          <div className="relative leading-none">
+            <svg
+              viewBox={`0 0 ${W} ${H}`}
+              width="100%"
+              height={H}
+              preserveAspectRatio="none"
+              className="text-accent"
+              role="img"
+              aria-label="Net worth over time"
+            >
+              <defs>
+                <linearGradient id="nw-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path d={geometry.area} fill="url(#nw-fill)" />
+              <path
+                d={geometry.line}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+            {/* the endpoint marker is HTML, not <circle>: preserveAspectRatio="none"
+                squashes an SVG dot into an ellipse, and at x=W half of it falls
+                outside the viewBox. Percentage-positioned it stays round and whole
+                (its 4px overhang lands inside the panel's own padding). */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent"
+              style={{
+                left: `${(geometry.lastX / W) * 100}%`,
+                top: `${(geometry.lastY / H) * 100}%`,
+              }}
             />
-            <circle cx={geometry.lastX} cy={geometry.lastY} r="3.5" fill="currentColor" vectorEffect="non-scaling-stroke" />
-          </svg>
+          </div>
 
           {/* y-range labels */}
           <div className="pointer-events-none absolute right-1 top-0 text-[10px] tabular-nums text-ink-faint">
@@ -130,6 +155,19 @@ export function NetWorthChart({
             </span>
             <span>{fmtDate(pts[pts.length - 1].takenAt)}</span>
           </div>
+        </div>
+      ) : rangeIsEmpty ? (
+        // the range, not the history, is what's short — keep the pill honest and
+        // offer the way out instead of silently widening the window
+        <div className="py-8 text-center">
+          <p className="text-sm text-ink-faint">{voice.capital.trend.rangeEmpty(RANGE_MONTHS[range] ?? 0)}</p>
+          <button
+            type="button"
+            onClick={() => setRange('all')}
+            className="mt-2 text-sm text-accent transition-opacity hover:opacity-80"
+          >
+            {voice.capital.trend.showAll}
+          </button>
         </div>
       ) : (
         <p className="py-8 text-center text-sm text-ink-faint">

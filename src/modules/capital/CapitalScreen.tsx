@@ -8,7 +8,7 @@ import { useCapitalUi } from './uiStore'
 import type { Account, Holding, Snapshot, SpendItem } from './types'
 import { Amount } from './components/Amount'
 import { monthKey, monthlySpent } from './lib/budget'
-import { latestDelta, latestSnapshot, liveNetWorth, netWorthOf, netWorthSeries, type NetWorthDelta } from './lib/networth'
+import { displayDelta, latestSnapshot, liveNetWorth, netWorthOf, netWorthSeries } from './lib/networth'
 import { Vault } from './components/Vault'
 import { NetWorthChart } from './components/NetWorthChart'
 import { Allocation } from './components/Allocation'
@@ -93,15 +93,14 @@ export function CapitalScreen() {
     const live = liveNetWorth(accounts, holdings, prices, fx, latest)
     const snapshotNW = latest ? netWorthOf(latest, accounts) : 0
 
-    // with holdings, "delta" = live vs your last snapshot (market move since);
-    // without, keep the Phase-1 last-vs-previous-snapshot delta
-    let delta: NetWorthDelta
-    if (holdings.length > 0 && latest) {
-      const absolute = live.netWorth - snapshotNW
-      delta = { absolute, fraction: snapshotNW !== 0 ? absolute / Math.abs(snapshotNW) : null }
-    } else {
-      delta = latestDelta(series)
-    }
+    // null when there's nothing to compare — the Vault then drops the row
+    const delta = displayDelta({
+      live,
+      series,
+      latest,
+      snapshotNetWorth: snapshotNW,
+      hasHoldings: holdings.length > 0,
+    })
 
     return { latest, series, live, delta }
   }, [snapshots, accounts, holdings, prices, fx])

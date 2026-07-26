@@ -36,11 +36,23 @@ export function CapitalSettingsSheet({ open, onClose }: CapitalSettingsSheetProp
     }
   }, [open, apiKey, paydayDay])
 
+  /**
+   * Clamp as the user types, so the field always shows the day that will be
+   * saved. Typing 45 used to sail through and land as 0 — the marker silently
+   * switched OFF, which is not what anyone types 45 to mean. Empty (and any
+   * 0-or-less) stays empty: that IS the off state, and the placeholder says so.
+   */
+  const clampDay = (raw: string): string => {
+    if (!raw.trim()) return ''
+    const n = Math.round(Number(raw))
+    if (!Number.isFinite(n) || n <= 0) return ''
+    return String(Math.min(31, n))
+  }
+
   const save = () => {
     setApiKey(draft)
     if (draft.trim()) void refreshPrices()
-    const day = Math.round(Number(paydayDraft))
-    const next = Number.isFinite(day) && day >= 1 && day <= 31 ? day : 0
+    const next = Number(clampDay(paydayDraft) || 0)
     setPaydayDay(next)
     reconcilePaydayMarkers(next, Date.now())
     onClose()
@@ -118,7 +130,7 @@ export function CapitalSettingsSheet({ open, onClose }: CapitalSettingsSheetProp
           min={1}
           max={31}
           value={paydayDraft}
-          onChange={(e) => setPaydayDraft(e.target.value)}
+          onChange={(e) => setPaydayDraft(clampDay(e.target.value))}
           placeholder={voice.capital.settings.paydayOff}
           className="card w-28 py-2 pl-3 pr-2 text-sm text-ink outline-none [font-variant-numeric:tabular-nums] placeholder:text-ink-faint focus:border-accent/60"
         />

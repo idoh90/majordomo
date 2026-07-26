@@ -7,7 +7,7 @@ import { reconcilePaydayMarkers } from './lib/payday'
 import { monthKey, monthlySpent } from './lib/budget'
 import { formatPercent } from './lib/money'
 import { holdingRow, portfolioTotals } from './lib/holdings'
-import { latestDelta, latestSnapshot, liveNetWorth, netWorthOf, netWorthSeries } from './lib/networth'
+import { displayDelta, latestSnapshot, liveNetWorth, netWorthOf, netWorthSeries } from './lib/networth'
 import { Amount } from './components/Amount'
 import { CapitalScreen } from './CapitalScreen'
 
@@ -67,10 +67,14 @@ function Briefing() {
   const overBudget = monthlyBudget > 0 && spent > monthlyBudget
   const live = liveNetWorth(accounts, holdings, prices, fx, latest)
   const snapshotNW = latest ? netWorthOf(latest, accounts) : 0
-  const delta =
-    holdings.length > 0 && latest
-      ? { absolute: live.netWorth - snapshotNW, fraction: snapshotNW !== 0 ? (live.netWorth - snapshotNW) / Math.abs(snapshotNW) : null }
-      : latestDelta(netWorthSeries(snapshots, accounts))
+  // same rule as the Vault: no basis for a comparison, no delta clause
+  const delta = displayDelta({
+    live,
+    series: netWorthSeries(snapshots, accounts),
+    latest,
+    snapshotNetWorth: snapshotNW,
+    hasHoldings: holdings.length > 0,
+  })
 
   // portfolio snapshot stats — only when live-priced holdings exist
   const rows = holdings.map((h) => holdingRow(h, prices, fx))
@@ -112,7 +116,7 @@ function Briefing() {
         {hasWorth && (
           <>
             Net worth <span className="text-ink"><Amount value={live.netWorth} kind="compact" /></span>
-            {delta.fraction !== null && (
+            {delta?.fraction != null && (
               <>
                 {' '}
                 <span className={delta.absolute >= 0 ? 'text-accent' : 'text-danger'}>
