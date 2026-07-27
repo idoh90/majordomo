@@ -592,6 +592,7 @@ export function WeekGrid({
               markers={markersByCol[i]}
               strain={strain?.[i]}
               now={now}
+              booked={bookedHours(clipsByCol[i])}
             />
           ))}
         </div>
@@ -882,16 +883,36 @@ const TickAxis = memo(function TickAxis() {
   )
 })
 
+/**
+ * Hours a day has already been spoken for, counted as the day actually holds
+ * them: a night watch running past midnight gives each date its own share
+ * rather than billing both for the whole thing.
+ *
+ * Sleep is excluded. It is pencilled by the estate rather than committed by
+ * the user, and counting it made almost every day read as twenty hours spent.
+ */
+function bookedHours(clips: ClippedEvent[]): number {
+  return clips.reduce(
+    (t, c) =>
+      c.event.kind === 'marker' || c.event.kind === 'sleep'
+        ? t
+        : t + (c.end.getTime() - c.start.getTime()) / 3_600_000,
+    0,
+  )
+}
+
 const DayHeader = memo(function DayHeader({
   win,
   markers,
   strain,
   now,
+  booked = 0,
 }: {
   win: ColumnWindow
   markers: CalendarEvent[]
   strain?: DayStrain
   now: number
+  booked?: number
 }) {
   const isToday = localDayKey(win.day) === localDayKey(new Date(now))
   return (
@@ -909,6 +930,11 @@ const DayHeader = memo(function DayHeader({
         >
           {win.day.getDate()}
         </span>
+        {booked > 0 && (
+          <span className="ml-auto text-[10px] text-ink-faint [font-variant-numeric:tabular-nums]">
+            {booked.toFixed(1)} h
+          </span>
+        )}
       </div>
       {strain && (
         <div className="mt-1.5">
@@ -1045,11 +1071,10 @@ const EventBlock = memo(function EventBlock({
   const fullHours = hoursOf(e)
   const twoLine = visibleHours >= 2
   const big = visibleHours >= 8
+  // Under ~45 minutes there is no room for both, and a squeezed time range
+  // wins the space from the one thing that says what the block IS.
+  const tooShortForTime = visibleHours < 0.75
   const timeText = `${hhmm(new Date(e.start))} → ${hhmm(new Date(e.end))}`
-  const cutEdge = CUT_EDGE
-  const hairline = isRest
-    ? '1px dashed color-mix(in srgb, var(--color-ink-dim) 45%, transparent)'
-    : `1px solid color-mix(in srgb, ${meta.color} 28%, transparent)`
   return (
     <button
       type="button"
@@ -1060,25 +1085,29 @@ const EventBlock = memo(function EventBlock({
       aria-label={`${e.title}, ${timeText}, ${fullHours.toFixed(1)} hours`}
       onClick={(ev) => onClick(col, e, (ev.currentTarget as HTMLElement).offsetTop)}
       onPointerDown={onPointerDown ? (ev) => onPointerDown(e, ev) : undefined}
-      className="absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left"
+      className={[
+        'block block-interactive absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left',
+        isRest && 'block-hatch',
+        // the second half of a block cut by midnight is the quieter one — it
+        // already happened, and two equally loud halves read as two events
+        clip.continuesBefore && 'block-cut-before block-dim',
+        clip.continuesAfter && 'block-cut-after',
+        selected && 'block-glow',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       style={{
+        ['--block-accent' as string]: meta.color,
         top: topPx + 1,
         height: Math.max(heightPx - 2, 12),
         cursor: onPointerDown ? 'grab' : 'pointer',
         touchAction: onPointerDown ? blockTouchAction : undefined,
         WebkitTouchCallout: 'none',
         opacity: dimmed ? 0.3 : 1,
-        borderLeft: isRest ? hairline : `3px solid ${meta.color}`,
-        borderRight: hairline,
-        borderTop: clip.continuesBefore ? cutEdge : hairline,
-        borderBottom: clip.continuesAfter ? cutEdge : hairline,
         borderTopLeftRadius: clip.continuesBefore ? 0 : undefined,
         borderTopRightRadius: clip.continuesBefore ? 0 : undefined,
         borderBottomLeftRadius: clip.continuesAfter ? 0 : undefined,
         borderBottomRightRadius: clip.continuesAfter ? 0 : undefined,
-        background: isRest
-          ? 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-ink-dim) 10%, transparent) 0 4px, transparent 4px 9px)'
-          : `color-mix(in srgb, ${meta.color} 14%, transparent)`,
         outline: selected
           ? `1.5px solid ${meta.color}`
           : changed
@@ -1106,7 +1135,7 @@ const EventBlock = memo(function EventBlock({
           }}
         >
           {e.title}
-          {!twoLine && (
+          {!twoLine && !tooShortForTime && (
             <>
               {/* a real space, not just a margin — this pair is inline, so a
                   margin alone makes the copied text read "Algebra15:00" */}{' '}
@@ -1684,6 +1713,12 @@ function MobileWeek({
           </button>
         </div>
       )}
+      {/* the key to the strain bars and the seam's dotted edges. It used to be
+          desktop-only, which left the one layout with the least room to guess
+          from explaining the least — red on a bar reads as an error. */}
+      <div className="mb-2">
+        <ManorLegend variant="week" />
+      </div>
       <div className="flex gap-1.5">
         {columns.map((win, i) => {
           const isToday = localDayKey(win.day) === localDayKey(new Date(now))
@@ -1698,7 +1733,10 @@ function MobileWeek({
               }}
               type="button"
               onClick={() => goTo(i)}
-              className="chip relative flex-1 border py-1.5 text-center transition-colors"
+              /* a soft rectangle, not .chip: these carry three stacked lines,
+                 and a pill radius turned each one into an ellipse with the
+                 strain bar hanging out of its bottom edge */
+              className="relative flex-1 overflow-hidden rounded-[10px] border py-1.5 text-center transition-colors"
               style={{
                 borderColor: armed || on ? 'var(--color-accent)' : 'var(--color-line)',
                 borderStyle: armed ? 'dashed' : 'solid',
@@ -1760,6 +1798,11 @@ function MobileWeek({
               </span>
             )
           })}
+          {bookedHours(clipsByCol[active]) > 0 && (
+            <span className="ml-auto flex-none text-[10px] text-ink-faint [font-variant-numeric:tabular-nums]">
+              {bookedHours(clipsByCol[active]).toFixed(1)} h
+            </span>
+          )}
         </div>
       </div>
       <div className="flex">

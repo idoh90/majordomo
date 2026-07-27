@@ -68,7 +68,7 @@ export function SettingsMenu() {
         type="button"
         aria-label="Settings"
         onClick={() => setMenuOpen((v) => !v)}
-        className="chip border border-line bg-panel p-2.5 text-ink-dim transition-colors hover:text-ink"
+        className="chip flex h-11 w-11 items-center justify-center border border-line bg-panel text-ink-dim transition-colors hover:text-ink md:h-10 md:w-10"
       >
         <GearIcon />
       </button>

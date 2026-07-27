@@ -332,6 +332,12 @@ input[type='datetime-local'] {
   }
   .seg-btn {
     border-radius: var(--radius-pill);
+    /* touch first: a segment is a primary control on every wing, and at
+       desktop's 25px it was one of the smallest targets in the app */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
     padding: 4px 14px;
     font-family: var(--title-font, var(--font-display));
     font-weight: var(--seg-weight, 700);
@@ -345,6 +351,13 @@ input[type='datetime-local'] {
   }
   .seg-btn:hover {
     color: var(--color-ink);
+  }
+  /* pointer devices don't need the touch minimum, and four call sites look
+     better without it */
+  @media (pointer: fine) {
+    .seg-btn {
+      min-height: 30px;
+    }
   }
   .seg-btn[aria-selected='true'] {
     background: var(--seg-active-bg, var(--color-accent));
@@ -414,6 +427,10 @@ input[type='datetime-local'] {
     );
     border-left: 3px solid var(--blk);
     border-top: 1px solid color-mix(in srgb, var(--blk-top) 75%, transparent);
+    /* the other two edges are definition, not decoration: without them a block
+       bleeds into the hour rules behind it */
+    border-right: 1px solid color-mix(in srgb, var(--blk) 28%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--blk) 28%, transparent);
   }
 
   /* live / current / selected */
@@ -431,6 +448,8 @@ input[type='datetime-local'] {
     );
     border-left-color: color-mix(in srgb, var(--blk) 55%, transparent);
     border-top-color: color-mix(in srgb, var(--blk-top) 38%, transparent);
+    border-right-color: color-mix(in srgb, var(--blk) 16%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--blk) 16%, transparent);
     box-shadow: none;
   }
 

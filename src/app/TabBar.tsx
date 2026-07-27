@@ -80,7 +80,7 @@ export function TabBar({ view, onNav }: { view: string; onNav: (view: string) =>
                 if (!on) navigator.vibrate?.(4)
                 onNav(t.id)
               }}
-              className="flex min-w-0 flex-1 flex-col items-center gap-[3px] px-0.5 py-1 transition-colors"
+              className="flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-[3px] px-0.5 py-1 transition-colors"
               style={{ color: on ? 'var(--color-accent)' : 'var(--color-ink-dim)' }}
             >
               <svg width="19" height="19" viewBox="0 0 20 20" fill="none" aria-hidden>

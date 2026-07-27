@@ -43,7 +43,7 @@ export function BriefingStrip({
         type="button"
         onClick={() => setExpanded((x) => !x)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-3 text-left md:pointer-events-none"
+        className="flex min-h-11 w-full items-center gap-3 py-1 text-left md:pointer-events-none md:min-h-0 md:py-0"
       >
         <span
           className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-full border font-display text-xs font-bold"

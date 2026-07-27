@@ -129,19 +129,22 @@ export function ManorScreen() {
         <button
           type="button"
           onClick={() => setAnchor(new Date())}
-          className="h-[30px] rounded-lg border border-line px-3 text-[11px] tracking-[0.14em] text-ink-dim transition-colors hover:text-ink"
+          className="h-11 rounded-lg border border-line px-3 text-[11px] tracking-[0.14em] text-ink-dim transition-colors hover:text-ink md:h-[30px]"
         >
           TODAY
         </button>
-        <SegmentedControl
-          className="ml-1.5"
-          options={[
-            { value: 'week', label: 'Week' },
-            { value: 'month', label: 'Month' },
-          ]}
-          value={mode}
-          onChange={setMode}
-        />
+        {/* w-full below md takes the whole line, so Week/Month can afford a
+            44px target instead of being squeezed in beside the pager */}
+        <div className="w-full md:ml-1.5 md:w-auto">
+          <SegmentedControl
+            options={[
+              { value: 'week', label: 'Week' },
+              { value: 'month', label: 'Month' },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
+        </div>
         {mode === 'week' && !sandbox && (
           <div className="ml-auto flex items-center gap-2.5">
             {/* desktop's twin of the mobile tab bar's + — the mailbox it presses
@@ -158,7 +161,7 @@ export function ManorScreen() {
             <button
               type="button"
               onClick={() => useEventsStore.getState().enterSandbox()}
-              className="h-8 rounded-lg border border-dashed px-4 font-display text-[12.5px] font-semibold tracking-[0.2em] transition-colors"
+              className="h-11 rounded-lg border border-dashed px-4 font-display text-[12.5px] font-semibold tracking-[0.2em] transition-colors md:h-8"
               style={{
                 borderColor: 'var(--color-accent)',
                 color: 'var(--color-accent)',
@@ -492,7 +495,7 @@ function NavButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="h-[30px] w-[30px] rounded-lg border border-line bg-panel text-[15px] leading-none text-ink-dim transition-colors hover:text-ink"
+      className="h-11 w-11 rounded-lg border border-line bg-panel text-[15px] leading-none text-ink-dim transition-colors hover:text-ink md:h-[30px] md:w-[30px]"
     >
       {children}
     </button>
