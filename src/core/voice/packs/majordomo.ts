@@ -518,6 +518,38 @@ export const majordomoPack: VoicePack = {
     openManor: 'Open the Manor →',
     status: { logged: 'LOGGED', next: 'NEXT', ahead: 'AHEAD' },
     aheadNone: 'Nothing beyond this week, sir.',
+    bandNote: 'Pick a day to post it; the Manor takes it from there.',
+    cycle: {
+      title: 'THE CYCLE',
+      nights: 'NIGHTS',
+      days: 'DAYS',
+      pencilled: 'PENCILLED',
+      turnaround: 'SHORTEST TURNAROUND',
+      onDuty: 'ON DUTY',
+      own: 'YOUR OWN',
+      splitTitle: "THE WEEK'S 168 HOURS",
+      empty: 'No duty this week, sir. The whole hundred and sixty-eight are yours.',
+      line: ({ nights, days, pencilledH, turnaroundH, ownH }) => {
+        const shape = [
+          nights > 0 ? `${lower(nights)} ${plural(nights, 'night', 'nights')}` : '',
+          days > 0 ? `${lower(days)} ${plural(days, 'day', 'days')}` : '',
+        ]
+          .filter(Boolean)
+          .join(' and ')
+        const hrs = (h: number) => `${hoursWord(h)} ${plural(Math.round(h), 'hour', 'hours')}`
+        const parts = [
+          pencilledH > 0
+            ? `${sentence(shape)}, with ${hrs(pencilledH)} pencilled for sleep.`
+            : `${sentence(shape)}, with no sleep pencilled after them.`,
+        ]
+        // a turnaround under eight hours is the one figure here worth a remark
+        if (turnaroundH !== null && turnaroundH < 8) {
+          parts.push(`${sentence(hrs(turnaroundH))} is the tightest turnaround, sir.`)
+        }
+        parts.push(`${sentence(hrs(ownH))} of the week are your own.`)
+        return parts.join(' ')
+      },
+    },
     briefingPanel: {
       chips: ({ doneH, expectedH, next, nights }) => [
         {

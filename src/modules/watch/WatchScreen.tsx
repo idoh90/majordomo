@@ -10,6 +10,7 @@ import {
   SHIFT_PRESETS,
   atHour,
   countdownLabel,
+  cycleStats,
   hasShiftOnDay,
   rangeFree,
   watchStats,
@@ -17,6 +18,8 @@ import {
 } from './lib'
 import { useWatchUi } from './uiStore'
 import { WatchBriefing } from './Briefing'
+import { CycleCard } from './CycleCard'
+import { DutyBand } from './DutyBand'
 
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
@@ -30,6 +33,7 @@ export function WatchScreen() {
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
   const stats = watchStats(events, now, weekStart)
+  const cycle = cycleStats(events, now, weekStart)
 
   const [pickedDay, setPickedDay] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -131,10 +135,13 @@ export function WatchScreen() {
         </div>
       )}
       {/* ---------------------------------------------------- left rail */}
-      <div className="flex flex-col gap-4">
-        <div className="panel p-5 text-center">
+      <div className="flex min-w-0 flex-col gap-4">
+        <div
+          className="panel panel-lit p-5 text-center"
+          style={{ ['--lit-accent' as string]: 'var(--color-w-watch)' }}
+        >
           <div className="card-title justify-center">{voice.watch.onDuty}</div>
-          <div className="relative mx-auto mt-4 h-[176px] w-[176px]">
+          <div className="trough relative mx-auto mt-4 flex h-[196px] w-full items-center justify-center">
             <svg width="176" height="176" viewBox="0 0 176 176" aria-hidden>
               <circle cx="88" cy="88" r="72" fill="none" stroke="var(--color-panel-2)" strokeWidth="10" />
               <circle
@@ -175,94 +182,49 @@ export function WatchScreen() {
               )}
             </div>
           </div>
+
+          {/* docked to the ring rather than floating in a panel of its own —
+              the countdown is a reading OF the ring, not a separate fact */}
+          <div className="subcard mt-3 px-4 py-3 text-left">
+            <div className="card-title">{voice.watch.nextWatch}</div>
+            <div className="stat-num mt-1.5 font-display text-[26px] leading-none">
+              {stats.next ? countdownLabel(stats.next, now) : '—'}
+            </div>
+            <div className="mt-1.5 text-[12px] text-ink-dim [font-variant-numeric:tabular-nums]">
+              {stats.next
+                ? `${WD[new Date(stats.next.start).getDay()]} ${hhmm(new Date(stats.next.start))} → ${WD[new Date(stats.next.end).getDay()]} ${hhmm(new Date(stats.next.end))}`
+                : voice.watch.noneAhead}
+            </div>
+          </div>
         </div>
 
-        <div className="panel p-5">
-          <div className="card-title">{voice.watch.nextWatch}</div>
-          <div className="stat-num mt-2 font-display text-[30px] leading-none">
-            {stats.next ? countdownLabel(stats.next, now) : '—'}
-          </div>
-          <div className="mt-1.5 text-[12.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
-            {stats.next
-              ? `${WD[new Date(stats.next.start).getDay()]} ${hhmm(new Date(stats.next.start))} → ${WD[new Date(stats.next.end).getDay()]} ${hhmm(new Date(stats.next.end))}`
-              : voice.watch.noneAhead}
-          </div>
-        </div>
+        <CycleCard stats={cycle} />
 
         <div className="rounded-[14px] border border-dashed border-line px-4 py-3.5 text-xs italic text-ink-dim">
           {voice.watch.note}
           <button
             type="button"
             onClick={() => useNavStore.getState().requestView('manor')}
-            className="mt-2 block text-xs not-italic text-accent hover:underline"
+            className="mt-1 inline-flex min-h-11 items-center text-xs not-italic text-accent hover:underline md:mt-2 md:min-h-0"
           >
             {voice.watch.openManor}
           </button>
         </div>
       </div>
 
-      {/* ---------------------------------------------------- right rail */}
-      <div className="flex flex-col gap-4">
+      {/* min-w-0: without it the duty band's own horizontal scroller sets
+          this grid column's minimum width and pushes the whole page sideways */}
+      <div className="flex min-w-0 flex-col gap-4">
         <div ref={rosterRef} className="panel scroll-mt-4 p-5">
           <div className="card-title">{voice.watch.post}</div>
-          {/* Two weeks, one row each. This was flex-wrap with fixed 58px
-              chips on desktop, so a wide panel fitted 13 and stranded the
-              14th on a row of its own. A 7-column grid can only ever break
-              where a week does. */}
-          <div className="mt-3 grid grid-cols-7 gap-1.5 md:w-[442px]">
-            {stripDays.map((day, i) => {
-              const picked = pickedDay === i
-              const has = hasShiftOnDay(events, day)
-              const isToday = localDayKey(day) === localDayKey(new Date(now))
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setPickedDay(picked ? null : i)}
-                  className="min-h-[56px] rounded-[9px] border pb-1.5 pt-2 text-center transition-colors hover:border-accent md:min-h-0"
-                  style={{
-                    borderColor: picked
-                      ? 'var(--color-accent)'
-                      : has
-                        ? 'color-mix(in srgb, var(--color-w-watch) 55%, transparent)'
-                        : 'var(--color-line)',
-                    background: picked
-                      ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
-                      : has
-                        ? 'color-mix(in srgb, var(--color-w-watch) 14%, var(--color-panel-2))'
-                        : 'var(--color-panel-2)',
-                  }}
-                >
-                  <span
-                    className="block text-[9px] tracking-[0.16em]"
-                    style={{ color: isToday ? 'var(--color-accent)' : 'var(--color-ink-dim)' }}
-                  >
-                    {WD[day.getDay()]}
-                  </span>
-                  <span className="block font-display text-base font-semibold [font-variant-numeric:tabular-nums]">
-                    {day.getDate()}
-                  </span>
-                  {/* mobile: the tile states its verb; desktop keeps the dot */}
-                  <span
-                    className="block text-[11px] leading-tight md:hidden"
-                    style={{
-                      color: has ? 'var(--color-ink)' : 'var(--color-ink-dim)',
-                    }}
-                  >
-                    {has ? '✓' : '+'}
-                  </span>
-                  <span className="hidden h-[5px] md:block">
-                    {has && (
-                      <span
-                        className="inline-block h-[5px] w-[5px] rounded-full"
-                        style={{ background: 'var(--color-w-watch)' }}
-                      />
-                    )}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+          <p className="mt-1 text-[12px] text-ink-dim">{voice.watch.bandNote}</p>
+          <DutyBand
+            events={events}
+            days={stripDays}
+            picked={pickedDay}
+            onPick={(i) => setPickedDay(pickedDay === i ? null : i)}
+            now={now}
+          />
           {pickedDay !== null && (
             <div className="mt-4 flex flex-wrap items-center gap-2.5 animate-[fade-in_160ms_ease-out]">
               <span className="text-[12.5px] text-ink-dim">
@@ -352,9 +314,15 @@ export function WatchScreen() {
             })}
           </div>
 
-          {stats.ahead.length > 0 && (
+          {/* Always present, empty or not. A heading that vanishes when there
+              is nothing beyond this week reads as "there is nothing here to
+              know about" rather than "nothing is booked" — the same denial the
+              ring used to perform with 0.0 of 0.0. */}
+          <div className="card-title mt-5">{voice.watch.aheadList}</div>
+          {stats.ahead.length === 0 ? (
+            <div className="py-2 text-sm text-ink-dim">{voice.watch.aheadNone}</div>
+          ) : (
             <>
-              <div className="card-title mt-5">{voice.watch.aheadList}</div>
               <div className="mt-2 flex flex-col">
                 {stats.ahead.slice(0, 6).map((e) => {
                   const s = new Date(e.start)

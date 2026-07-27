@@ -294,6 +294,29 @@ export interface VoicePack {
     /** THIS WEEK'S WATCHES has a FURTHER AHEAD section whether or not anything
      *  is in it — a heading that vanishes reads as "there is nothing to know" */
     aheadNone: string
+    /** the fortnight band under POST A WATCH */
+    bandNote: string
+    /** THE CYCLE — the shape of the week's duty */
+    cycle: {
+      title: string
+      nights: string
+      days: string
+      pencilled: string
+      turnaround: string
+      /** the week's 168 hours, split three ways */
+      onDuty: string
+      own: string
+      splitTitle: string
+      /** nothing on the books this week */
+      empty: string
+      line: (v: {
+        nights: number
+        days: number
+        pencilledH: number
+        turnaroundH: number | null
+        ownH: number
+      }) => string
+    }
     briefingPanel: {
       chips: (v: WatchBriefingFacts) => BriefingChip[]
       headline: (v: WatchBriefingFacts) => string
