@@ -3,25 +3,32 @@ import type { ConsoleModule } from '../../core/module'
 import { voice } from '../../core/voice'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
-import { DailySummary } from './components/DailySummary'
+import { GroundsBriefing } from './Briefing'
 import { thisWeekCount } from './lib/insights'
 import { computeStrains } from './lib/strain'
 import { useWorkoutStore } from './store'
 import { TrainingScreen } from './TrainingScreen'
 
-/** Briefing lines — the existing DailySummary, fed exactly as App fed it. */
+/** The Grounds' briefing strip, plus the DEV strain handle it has always
+ *  owned — this mounts wherever the Manor renders, so __strains stays live
+ *  on every view. The strain map is computed once here and handed down so
+ *  the strip and the summary can never describe two different bodies. */
 function Briefing() {
   const workouts = useWorkoutStore((s) => s.workouts)
   const now = useNow()
-  const strains = useMemo(() => computeStrains(workouts, now), [workouts, now])
+  const nowH = Math.floor(now / 3_600_000) * 3_600_000
+  const strains = useMemo(() => computeStrains(workouts, nowH), [workouts, nowH])
 
-  // the briefing is mounted on menu and console views alike, so the dev
-  // handle stays live everywhere (previously assigned by App)
   if (import.meta.env.DEV) {
     ;(window as unknown as Record<string, unknown>).__strains = strains
   }
 
-  return <DailySummary workouts={workouts} strains={strains} now={now} />
+  // The strip now says everything the old prose summary said — workouts, what
+  // is still hot, the day's fuel — so rendering both made the Manor repeat
+  // itself. DailySummary is left in place rather than deleted: its carb/fat
+  // split and per-muscle wording are a feature of the Grounds, and where the
+  // design omits an old feature the old feature wins.
+  return <GroundsBriefing strains={strains} />
 }
 
 /** Menu-tile stat: sessions this calendar week vs the weekly goal. */

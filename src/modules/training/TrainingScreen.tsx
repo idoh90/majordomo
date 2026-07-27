@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Workout } from './types'
 import { useNow } from '../../core/useNow'
+import { GroundsBriefing } from './Briefing'
 import { AddWorkoutSheet } from './components/add/AddWorkoutSheet'
 import { BodyMap } from './components/bodymap/BodyMap'
 import { WorkoutCalendar } from './components/history/WorkoutCalendar'
@@ -62,6 +63,7 @@ export function TrainingScreen() {
 
   return (
     <>
+      <GroundsBriefing strains={strains} className="mt-4" />
       <main className="mt-4 flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:items-start">
         <div className="flex flex-col gap-4">
           <BodyMap workouts={workouts} strains={strains} now={now} />

@@ -3,6 +3,7 @@ import { useNow } from '../../core/useNow'
 import { Sheet } from '../../core/ui/Sheet'
 import { voice } from '../../core/voice'
 import { useCapitalStore } from './store'
+import { LedgerBriefing } from './Briefing'
 import { reconcilePaydayMarkers } from './lib/payday'
 import { useCapitalUi } from './uiStore'
 import type { Account, Holding, Snapshot, SpendItem } from './types'
@@ -111,6 +112,7 @@ export function CapitalScreen() {
 
   return (
     <>
+      <LedgerBriefing className="mt-4" />
       <div className="mt-4 mb-4 flex items-center justify-end gap-2">
         <button
           type="button"

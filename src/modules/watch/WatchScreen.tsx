@@ -16,6 +16,7 @@ import {
   type ShiftKey,
 } from './lib'
 import { useWatchUi } from './uiStore'
+import { WatchBriefing } from './Briefing'
 
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
@@ -113,7 +114,9 @@ export function WatchScreen() {
       : null
 
   return (
-    <div className="mt-4 grid gap-4 lg:grid-cols-[300px_1fr]">
+    <>
+      <WatchBriefing className="mt-4" />
+      <div className="mt-4 grid gap-4 lg:grid-cols-[300px_1fr]">
       {nextIn && (
         <div className="-mb-1 flex justify-end md:hidden">
           <span
@@ -387,6 +390,7 @@ export function WatchScreen() {
           {toast}
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }

@@ -233,6 +233,47 @@ export function computeStrains(workouts: Workout[], nowMs: number): StrainMap {
   return strains
 }
 
+export type ReadinessBand = 'fresh' | 'ready' | 'worn' | 'spent'
+
+export interface Readiness {
+  /** 0–100, higher is fresher */
+  score: number
+  band: ReadinessBand
+  /** the muscle currently costing the most readiness, if anything is warm */
+  limiter: MuscleId | null
+}
+
+/**
+ * One number for "how much training is in me today, sir".
+ *
+ * Dominated by the single hottest muscle rather than the average, because
+ * that is what actually caps the next session — sixteen fresh muscles and one
+ * fried one is not a fresh body. The whole-body term is kept as a smaller
+ * weight so a broadly-worked week still reads lower than a single hard
+ * isolation day. Endpoints are exact: nothing trained is 100, everything at
+ * MAX_STRAIN is 0. The weights are a heuristic in the app's own units, not a
+ * physiological measure — tune them the way the strain constants are tuned.
+ */
+export function readiness(strains: StrainMap): Readiness {
+  let max = 0
+  let limiter: MuscleId | null = null
+  let sum = 0
+  for (const m of ALL_MUSCLE_IDS) {
+    const s = strains[m] ?? 0
+    sum += s
+    if (s > max) {
+      max = s
+      limiter = m
+    }
+  }
+  const mean = sum / ALL_MUSCLE_IDS.length
+  const load = Math.min(1, Math.max(0, (0.6 * max + 0.4 * mean) / MAX_STRAIN))
+  const score = Math.round(100 * (1 - load))
+  const band: ReadinessBand =
+    score >= 75 ? 'fresh' : score >= 55 ? 'ready' : score >= 35 ? 'worn' : 'spent'
+  return { score, band, limiter: max > 0 ? limiter : null }
+}
+
 /** Most recent workout that involved the muscle, or undefined. */
 export function lastTrained(workouts: Workout[], m: MuscleId): Workout | undefined {
   let latest: Workout | undefined

@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import type { ConsoleModule } from '../../core/module'
-import { localDayKey } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
 import { voice } from '../../core/voice'
-import { bookedHoursBeforeExam, daysUntil, nextExam, reconcileMarkers, studyStats } from './lib'
+import { daysUntil, nextExam, reconcileMarkers, studyStats } from './lib'
 import { useStudyStore } from './store'
+import { StudyBriefing } from './Briefing'
 import { StudyScreen } from './StudyScreen'
 
 /** Tile stat: countdown to the next examination, else hours read this week. */
@@ -48,13 +48,7 @@ function Tile() {
  *  reconcile: it mounts wherever the Manor renders, so due chips heal and
  *  overdue ones trail to today even if the wing itself is never opened. */
 function Briefing() {
-  const events = useEventsStore((s) => s.events)
   const subjects = useStudyStore((s) => s.subjects)
-  const sessions = useStudyStore((s) => s.sessions)
-  const homework = useStudyStore((s) => s.homework)
-  const exams = useStudyStore((s) => s.exams)
-  const weekStart = useShellStore((s) => s.weekStart)
-  const now = useNow()
 
   useEffect(() => {
     const store = useEventsStore.getState()
@@ -65,35 +59,7 @@ function Briefing() {
 
   if (subjects.filter((s) => !s.archived).length === 0) return null
 
-  const stats = studyStats(events, sessions, subjects, now, weekStart)
-  const next = nextExam(exams, now)
-  const weekEndKey = localDayKey(stats.weekEnd)
-  const dueCount = homework.filter((h) => !h.done && h.due && h.due < weekEndKey).length
-
-  const line = next
-    ? voice.study.briefingExam({
-        subject: subjects.find((s) => s.id === next.subjectId)?.name ?? '—',
-        days: daysUntil(next.on, now),
-        // "on the books" means BOOKED, so count what is scheduled between now
-        // and the exam — not examProgress, which is hours already done and is
-        // what made this line contradict the Manor's exam heads-up
-        hours: bookedHoursBeforeExam(next, events, now),
-      })
-    : dueCount > 0
-      ? voice.study.briefingHomework(dueCount)
-      : voice.study.briefingWeek({
-          fulfilled: stats.totalFulfilled,
-          goal: subjects.filter((s) => !s.archived).reduce((t, s) => t + s.goalH, 0),
-        })
-
-  return (
-    <section className="panel px-4 py-3.5 sm:px-5">
-      <div className="mb-1.5">
-        <h2 className="card-title">{voice.modules.study.name}</h2>
-      </div>
-      <p className="text-sm leading-relaxed text-ink-dim">{line}</p>
-    </section>
-  )
+  return <StudyBriefing />
 }
 
 function Icon() {

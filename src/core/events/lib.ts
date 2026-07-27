@@ -91,6 +91,80 @@ export function hoursOf(e: CalendarEvent): number {
   return (new Date(e.end).getTime() - new Date(e.start).getTime()) / 3_600_000
 }
 
+/**
+ * Which week a boundary-crossing event belongs to. The estate has always had
+ * two answers and they disagree by design:
+ *
+ *   'intersect'     — the week owns any event overlapping it, counted whole.
+ *                     What eventsInRange + hoursByKind do, so it is what the
+ *                     Manor's week line and the what-if diff already say.
+ *   'startAnchored' — the week that the event BEGINS in owns all of it.
+ *                     What watchStats does, so it is what the duty ring says.
+ *
+ * A Sunday-night watch running into Monday therefore counts in both weeks
+ * under 'intersect' and once under 'startAnchored'. Neither is wrong; a
+ * surface just has to pick the one its own wing already prints, or the House
+ * rail will quietly contradict the screen it is sitting next to.
+ */
+export type WeekAttribution = 'intersect' | 'startAnchored'
+
+/**
+ * Hours of the given kinds per week, oldest first, ending with the week that
+ * contains `anchor`. Weeks before the estate had any events read 0 — which is
+ * honest but indistinguishable from a week off, so sparklines should say what
+ * their window is rather than implying a trend from the run-up.
+ */
+export function weeklyHoursSeries(
+  events: CalendarEvent[],
+  kinds: EventKind[],
+  weeks: number,
+  anchor: Date,
+  weekStart?: WeekStart,
+  mode: WeekAttribution = 'intersect',
+): number[] {
+  const current = startOfWeek(anchor, weekStart)
+  const wanted = new Set(kinds)
+  return Array.from({ length: weeks }, (_, i) => {
+    const w0 = addDays(current, -7 * (weeks - 1 - i))
+    const w1 = addDays(w0, 7)
+    const inWeek =
+      mode === 'intersect'
+        ? eventsInRange(events, w0, w1)
+        : events.filter((e) => {
+            const s = new Date(e.start)
+            return s >= w0 && s < w1
+          })
+    let total = 0
+    for (const e of inWeek) if (!e.allDay && wanted.has(e.kind)) total += hoursOf(e)
+    return total
+  })
+}
+
+/** Count of events of the given kinds in each of `weeks` weeks, oldest first. */
+export function weeklyCountSeries(
+  events: CalendarEvent[],
+  kinds: EventKind[],
+  weeks: number,
+  anchor: Date,
+  weekStart?: WeekStart,
+  mode: WeekAttribution = 'startAnchored',
+): number[] {
+  const current = startOfWeek(anchor, weekStart)
+  const wanted = new Set(kinds)
+  return Array.from({ length: weeks }, (_, i) => {
+    const w0 = addDays(current, -7 * (weeks - 1 - i))
+    const w1 = addDays(w0, 7)
+    const inWeek =
+      mode === 'intersect'
+        ? eventsInRange(events, w0, w1)
+        : events.filter((e) => {
+            const s = new Date(e.start)
+            return s >= w0 && s < w1
+          })
+    return inWeek.filter((e) => !e.allDay && wanted.has(e.kind)).length
+  })
+}
+
 /** total timed hours per kind (the what-if diff panel's currency) */
 export function hoursByKind(events: CalendarEvent[]): Record<EventKind, number> {
   const totals: Record<EventKind, number> = {

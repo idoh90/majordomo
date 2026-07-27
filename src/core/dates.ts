@@ -60,6 +60,24 @@ export function relativeDayLabel(iso: string, now: Date): string {
   })
 }
 
+/**
+ * A day named the way the briefing speaks about it — 'Today', 'Tomorrow',
+ * then the weekday for the week ahead, then a date. Written to sit in front
+ * of a possessive: "Friday's day watch", "Today's block". Forward-looking
+ * only; use relativeDayLabel for anything that can be in the past.
+ */
+export function dayNameLabel(iso: string | Date, now: Date): string {
+  const dayKey = localDayKey(iso)
+  if (dayKey === localDayKey(now)) return 'Today'
+  if (dayKey === localDayKey(addDays(now, 1))) return 'Tomorrow'
+  const d = iso instanceof Date ? iso : new Date(iso)
+  const days = Math.round(
+    (startOfLocalDay(d).getTime() - startOfLocalDay(now).getTime()) / 86_400_000,
+  )
+  if (days > 1 && days < 7) return d.toLocaleDateString('en-US', { weekday: 'long' })
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 export function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }

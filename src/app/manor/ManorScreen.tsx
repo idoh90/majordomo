@@ -240,9 +240,12 @@ export function ManorScreen() {
       {/* room for the mobile diff drawer over the grid's last hours */}
       {sandbox && <div className="h-32 md:hidden" />}
 
-      {/* daily briefing — every wing contributes its own lines (this panel
-          gets absorbed into the briefing strip as the wings come online) */}
-      {CONSOLES.map((c) => c.Briefing && <c.Briefing key={c.id} />)}
+      {/* every wing reports in below the grid, in registry order. The wrapper
+          is load-bearing: the panels carry no margin of their own, so without
+          it they butt against each other and against the calendar. */}
+      <div className="mt-4 flex flex-col gap-4">
+        {CONSOLES.map((c) => c.Briefing && <c.Briefing key={c.id} />)}
+      </div>
 
       {sandbox && (
         <div

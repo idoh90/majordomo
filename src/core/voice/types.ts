@@ -8,7 +8,98 @@
  * exclamation. One "sir", sentence-final, at most once per message. Never
  * begs, never guilts, no emoji. Errors state fact + remedy.
  */
+/** one figure on a briefing strip: a micro-label and the number under it */
+export interface BriefingChip {
+  label: string
+  value: string
+}
+
+/** what the Watch knows about its own week when it reports in */
+export interface WatchBriefingFacts {
+  doneH: number
+  expectedH: number
+  /** watches this week that have already ended */
+  logged: number
+  /** watches this week still to come */
+  remaining: number
+  nights: number
+  days: number
+  /** recovery sleep pencilled after this week's nights */
+  sleepH: number
+  /** the next watch anywhere ahead, with time until it begins */
+  next: { dayLabel: string; night: boolean; h: number; m: number } | null
+  /** duty hours in each of the last several weeks, oldest first, this week last */
+  weeklyH: number[]
+  /** watches booked beyond this week */
+  aheadCount: number
+  /** …of which this many fall in next week */
+  nextWeekCount: number
+}
+
+export interface GroundsBriefingFacts {
+  done: number
+  goal: number
+  hot: number
+  muscles: number
+  /** the hottest muscle right now, if anything is warm */
+  top: { name: string; strain: number } | null
+  readiness: { score: number; band: 'fresh' | 'ready' | 'worn' | 'spent' }
+  kcal: number
+  protein: number
+  meals: number
+  isTrainingDay: boolean
+  /** the next training block booked on the Manor */
+  nextBlock: { title: string; dayLabel: string } | null
+  blocksAhead: number
+}
+
+export interface StudyBriefingFacts {
+  fulfilledH: number
+  bookedH: number
+  goalH: number
+  /** hours DONE before the exam vs hours still SCHEDULED before it — two
+   *  different questions, and answering one with the other is the M-03 bug */
+  exam: { subject: string; days: number; doneH: number; aheadH: number } | null
+  awaiting: number
+  dueCount: number
+  syllabusPct: number | null
+  /** which syllabus the percentage is of — null means every subject at once,
+   *  and the line must say so rather than imply one */
+  syllabusSubject: string | null
+  nextSession: { subject: string; dayLabel: string } | null
+}
+
+export interface CapitalBriefingFacts {
+  /** money arrives pre-formatted — the ₪ formatter lives in the wing */
+  netWorth: string
+  /** null when there is no basis to compare against, and then the clause is dropped */
+  delta: { amount: string; up: boolean; basis: string } | null
+  spent: string
+  budget: string
+  left: string
+  over: boolean
+  hasBudget: boolean
+  dayOfMonth: number
+  daysInMonth: number
+  perDay: string | null
+  underPace: boolean
+  portfolio: {
+    value: string
+    dayPL: string
+    dayUp: boolean
+    unrealized: string
+    unrealUp: boolean
+  } | null
+}
+
 export interface VoicePack {
+  /** the briefing strip every wing renders */
+  briefing: {
+    /** scope label prefix: "THE BRIEFING · THE WATCH" */
+    label: string
+    expand: string
+    collapse: string
+  }
   /** product name — document.title, exports, about */
   appName: string
   /** masthead wordmark: `lead` first, `accent` rendered in the accent color
@@ -200,8 +291,21 @@ export interface VoicePack {
     note: string
     openManor: string
     status: { logged: string; next: string; ahead: string }
+    /** THIS WEEK'S WATCHES has a FURTHER AHEAD section whether or not anything
+     *  is in it — a heading that vanishes reads as "there is nothing to know" */
+    aheadNone: string
+    briefingPanel: {
+      chips: (v: WatchBriefingFacts) => BriefingChip[]
+      headline: (v: WatchBriefingFacts) => string
+      detail: (v: WatchBriefingFacts) => string
+    }
   }
   grounds: {
+    briefingPanel: {
+      chips: (v: GroundsBriefingFacts) => BriefingChip[]
+      headline: (v: GroundsBriefingFacts) => string
+      detail: (v: GroundsBriefingFacts) => string
+    }
     /** card of upcoming training sessions booked on the Manor */
     scheduledTitle: string
     /** footnote under the list */
@@ -372,6 +476,11 @@ export interface VoicePack {
     briefingExam: (v: { subject: string; days: number; hours: number }) => string
     briefingHomework: (n: number) => string
     briefingWeek: (v: { fulfilled: number; goal: number }) => string
+    briefingPanel: {
+      chips: (v: StudyBriefingFacts) => BriefingChip[]
+      headline: (v: StudyBriefingFacts) => string
+      detail: (v: StudyBriefingFacts) => string
+    }
   }
   /** wing chip labels per event kind */
   kinds: {
@@ -388,6 +497,11 @@ export interface VoicePack {
     capital: { name: string; tagline: string }
   }
   capital: {
+    briefingPanel: {
+      chips: (v: CapitalBriefingFacts) => BriefingChip[]
+      headline: (v: CapitalBriefingFacts) => string
+      detail: (v: CapitalBriefingFacts) => string
+    }
     /** Vault empty state — no accounts/snapshots yet */
     vaultEmpty: string
     /** FX rate missing for these currencies — their figures render unconverted */

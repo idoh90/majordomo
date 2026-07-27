@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { addDays, atHour, localDayKey, startOfWeek } from '../../core/dates'
 import { hoursOf, rangeFree } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
+import { StudyBriefing } from './Briefing'
 import type { CalendarEvent } from '../../core/events/types'
 import { useShellStore } from '../../core/store/shell'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
@@ -75,6 +76,8 @@ export function StudyScreen() {
 
   return (
     <div className="mt-4 flex flex-col gap-4">
+      {active.length > 0 && <StudyBriefing />}
+
       <RingsPanel subjects={active} stats={stats} onEnrol={() => setSheet('enrol')} />
 
       <ExamsPanel events={activeEvents} sessions={sessions} subjects={subjects} now={now} />

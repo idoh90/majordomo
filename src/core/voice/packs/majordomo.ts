@@ -1,7 +1,65 @@
 import type { VoicePack } from '../types'
 
+/** Prose spells small numbers out; chips and figures stay digits. Index 0 is
+ *  "No" so a zero case reads as a sentence rather than as a score. */
+const WORDS = [
+  'No',
+  'One',
+  'Two',
+  'Three',
+  'Four',
+  'Five',
+  'Six',
+  'Seven',
+  'Eight',
+  'Nine',
+  'Ten',
+  'Eleven',
+  'Twelve',
+]
+
+/** small integers as words, anything larger as digits */
+function word(n: number): string {
+  return WORDS[n] ?? String(n)
+}
+
+/** …the same, mid-sentence */
+function lower(n: number): string {
+  const w = WORDS[n]
+  return w ? w.toLowerCase() : String(n)
+}
+
+/** hours as words where they land whole, else a figure ("twelve and a half") */
+function hoursWord(h: number): string {
+  const rounded = Math.round(h * 2) / 2
+  const whole = Math.floor(rounded)
+  const half = rounded - whole >= 0.5
+  if (rounded > 12) return `${rounded % 1 === 0 ? rounded : rounded.toFixed(1)}`
+  if (!half) return lower(whole)
+  return whole === 0 ? 'half an' : `${lower(whole)} and a half`
+}
+
+function plural(n: number, one: string, many: string): string {
+  return n === 1 ? one : many
+}
+
+/** capitalise a clause that a number-word may be leading ("no hours stood…") */
+function sentence(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+/** "9 h 20 m" — the countdown format the Watch already prints */
+function untilLabel(h: number, m: number): string {
+  return h > 0 ? `${h} h ${String(m).padStart(2, '0')} m` : `${m} m`
+}
+
 /** The Majordomo — the commercial voice. Dry, composed, quietly satisfied. */
 export const majordomoPack: VoicePack = {
+  briefing: {
+    label: 'THE BRIEFING',
+    expand: 'Read the rest of the briefing',
+    collapse: 'Fold the briefing away',
+  },
   appName: 'Majordomo',
   wordmark: { lead: 'MAJORDOMO', accent: '' },
   skinPickerBlurb: 'Three presets, one house. Switches instantly — nothing else changes.',
@@ -140,6 +198,49 @@ export const majordomoPack: VoicePack = {
     },
   },
   grounds: {
+    briefingPanel: {
+      chips: ({ done, goal, hot, muscles, readiness }) => [
+        { label: 'WEEK', value: goal > 0 ? `${done} / ${goal}` : String(done) },
+        { label: 'HOT', value: `${hot} of ${muscles}` },
+        { label: 'READY', value: String(readiness.score) },
+      ],
+      headline: ({ done, goal, hot, top }) => {
+        const week =
+          goal > 0
+            ? `${word(done)} ${plural(done, 'workout', 'workouts')} of ${lower(goal)} this week, sir`
+            : done > 0
+              ? `${word(done)} ${plural(done, 'workout', 'workouts')} this week, sir`
+              : 'Nothing logged this week, sir'
+        if (hot === 0 || !top) {
+          return `${week}, and nothing is still sore. The body is yours to spend.`
+        }
+        return `${week}, and ${lower(hot)} ${plural(hot, 'muscle group is', 'muscle groups are')} still hot. ${top.name} leads at ${top.strain.toFixed(1)}.`
+      },
+      detail: ({ readiness, kcal, protein, meals, isTrainingDay, nextBlock, blocksAhead }) => {
+        const bandWord = {
+          fresh: 'fresh',
+          ready: 'ready',
+          worn: 'worn',
+          spent: 'spent',
+        }[readiness.band]
+        const parts = [`Readiness ${readiness.score} of 100, ${bandWord}.`]
+        if (kcal > 0) {
+          parts.push(
+            `Fuel asks ${kcal.toLocaleString('en-US')} kcal on ${isTrainingDay ? 'a training day' : 'a rest day'} — ${protein} g of protein across ${lower(meals)} ${plural(meals, 'meal', 'meals')}.`,
+          )
+        }
+        if (nextBlock) {
+          const more =
+            blocksAhead > 1
+              ? `${word(blocksAhead)} blocks remain on the books; the next is`
+              : 'One block remains on the books:'
+          parts.push(`${more} ${nextBlock.dayLabel}'s ${nextBlock.title}.`)
+        } else {
+          parts.push('Nothing further is booked on the Manor.')
+        }
+        return parts.join(' ')
+      },
+    },
     scheduledTitle: 'On the books',
     scheduledNote: 'Booked on the Manor, sir — move or remove them there.',
     recoveryTitle: 'RECOVERY',
@@ -315,6 +416,73 @@ export const majordomoPack: VoicePack = {
       goal > 0
         ? `${fulfilled.toFixed(1)} of ${goal.toFixed(1)} hours read this week, sir.`
         : `${fulfilled.toFixed(1)} hours read this week, sir.`,
+    briefingPanel: {
+      chips: ({ fulfilledH, bookedH, exam, awaiting }) => [
+        { label: 'READ', value: `${fulfilledH.toFixed(1)} / ${bookedH.toFixed(1)} h` },
+        {
+          label: 'EXAM',
+          value: exam
+            ? exam.days <= 0
+              ? 'today'
+              : exam.days === 1
+                ? 'tomorrow'
+                : `${exam.days} d`
+            : '—',
+        },
+        { label: 'AWAITING', value: String(awaiting) },
+      ],
+      headline: ({ fulfilledH, bookedH, goalH, exam }) => {
+        const read =
+          bookedH > 0
+            ? `${hoursWord(fulfilledH).charAt(0).toUpperCase()}${hoursWord(fulfilledH).slice(1)} ${plural(Math.round(fulfilledH), 'hour', 'hours')} read of ${hoursWord(bookedH)} booked, sir.`
+            : goalH > 0
+              ? `Nothing booked this week against a goal of ${hoursWord(goalH)} ${plural(Math.round(goalH), 'hour', 'hours')}, sir.`
+              : 'Nothing booked this week, sir.'
+        if (!exam) return `${read} No examination is on the horizon.`
+        const when = exam.days <= 0 ? 'today' : exam.days === 1 ? 'tomorrow' : `in ${lower(exam.days)} days`
+        // hours BEHIND you and hours STILL BOOKED are different questions;
+        // answering one with the other is how this line used to contradict
+        // the Manor's heads-up
+        const behind = `${hoursWord(exam.doneH)} ${plural(Math.round(exam.doneH), 'hour', 'hours')} behind you`
+        const ahead =
+          exam.aheadH > 0
+            ? `${hoursWord(exam.aheadH)} more on the books`
+            : 'nothing further on the books'
+        return `${read} The ${exam.subject} examination is ${when}, with ${behind} and ${ahead}.`
+      },
+      detail: ({ awaiting, dueCount, syllabusPct, syllabusSubject, nextSession }) => {
+        const parts: string[] = []
+        const clauses: string[] = []
+        if (awaiting > 0) {
+          clauses.push(
+            `${lower(awaiting)} ${plural(awaiting, 'session still awaits its report', 'sessions still await their reports')}`,
+          )
+        }
+        if (dueCount > 0) {
+          clauses.push(`${lower(dueCount)} ${plural(dueCount, 'matter falls', 'matters fall')} due this week`)
+        }
+        if (syllabusPct !== null) {
+          clauses.push(
+            syllabusSubject
+              ? `the ${syllabusSubject} syllabus stands at ${syllabusPct}% covered`
+              : `the syllabi stand at ${syllabusPct}% covered overall`,
+          )
+        }
+        if (clauses.length === 0) {
+          parts.push('Nothing awaits a report and nothing falls due, sir.')
+        } else {
+          const joined =
+            clauses.length === 1
+              ? clauses[0]
+              : `${clauses.slice(0, -1).join(', ')}, and ${clauses[clauses.length - 1]}`
+          parts.push(`${joined.charAt(0).toUpperCase()}${joined.slice(1)}.`)
+        }
+        if (nextSession) {
+          parts.push(`${nextSession.dayLabel}'s block belongs to ${nextSession.subject}.`)
+        }
+        return parts.join(' ')
+      },
+    },
   },
   kinds: {
     shift: 'THE WATCH',
@@ -349,8 +517,114 @@ export const majordomoPack: VoicePack = {
     note: 'Every watch posted here takes its place in the Manor at once, sir.',
     openManor: 'Open the Manor →',
     status: { logged: 'LOGGED', next: 'NEXT', ahead: 'AHEAD' },
+    aheadNone: 'Nothing beyond this week, sir.',
+    briefingPanel: {
+      chips: ({ doneH, expectedH, next, nights }) => [
+        {
+          label: 'STOOD',
+          value: expectedH > 0 ? `${doneH.toFixed(1)} / ${expectedH.toFixed(1)} h` : '—',
+        },
+        { label: 'NEXT', value: next ? untilLabel(next.h, next.m) : '—' },
+        { label: 'NIGHTS', value: String(nights) },
+      ],
+      headline: ({ doneH, expectedH, logged, remaining, next }) => {
+        if (expectedH <= 0) {
+          return next
+            ? `Nothing on the books this week, sir. The next watch is ${next.dayLabel}'s, in ${untilLabel(next.h, next.m)}.`
+            : 'No watches on the books, sir. The estate is entirely yours.'
+        }
+        const stood = sentence(
+          `${hoursWord(doneH)} ${plural(Math.round(doneH), 'hour', 'hours')} stood of ${hoursWord(expectedH)}, sir`,
+        )
+        const tally =
+          remaining > 0
+            ? `${lower(logged)} ${plural(logged, 'watch', 'watches')} logged, ${lower(remaining)} still to come`
+            : `all ${lower(logged)} ${plural(logged, 'watch', 'watches')} logged`
+        const upNext = next
+          ? ` ${next.dayLabel}'s ${next.night ? 'night' : 'day'} watch begins in ${untilLabel(next.h, next.m)}.`
+          : ''
+        return `${stood} — ${tally}.${upNext}`
+      },
+      detail: ({ nights, days, sleepH, weeklyH, expectedH, nextWeekCount, aheadCount }) => {
+        const parts: string[] = []
+        if (nights + days > 0) {
+          const shape = [
+            nights > 0 ? `${lower(nights)} ${plural(nights, 'night', 'nights')}` : '',
+            days > 0 ? `${lower(days)} ${plural(days, 'day', 'days')}` : '',
+          ]
+            .filter(Boolean)
+            .join(' and ')
+          const withSleep =
+            sleepH > 0
+              ? `, with ${hoursWord(sleepH)} ${plural(Math.round(sleepH), 'hour', 'hours')} of sleep pencilled after them`
+              : ''
+          parts.push(`${sentence(shape)} this week${withSleep}.`)
+        }
+        // only claim a record when there is enough history to have one
+        const prior = weeklyH.slice(0, -1).filter((h) => h > 0)
+        if (expectedH > 0 && prior.length >= 3 && expectedH > Math.max(...prior)) {
+          parts.push(
+            `${sentence(hoursWord(expectedH))} booked hours is your heaviest week since the estate started counting.`,
+          )
+        }
+        if (nextWeekCount > 0) {
+          parts.push(
+            `Next week carries ${lower(nextWeekCount)} ${plural(nextWeekCount, 'watch', 'watches')}.`,
+          )
+        } else if (aheadCount > 0) {
+          parts.push(
+            `${word(aheadCount)} ${plural(aheadCount, 'watch waits', 'watches wait')} further ahead.`,
+          )
+        } else {
+          parts.push('Nothing is posted beyond this week.')
+        }
+        return parts.join(' ')
+      },
+    },
   },
   capital: {
+    briefingPanel: {
+      chips: ({ netWorth, delta, left, over, hasBudget }) => [
+        { label: 'NET', value: netWorth },
+        {
+          label: 'SINCE',
+          value: delta ? `${delta.up ? '▲' : '▼'} ${delta.amount}` : '—',
+        },
+        { label: over ? 'OVER' : 'LEFT', value: hasBudget ? left : '—' },
+      ],
+      headline: ({ netWorth, delta, spent, budget, left, over, hasBudget, dayOfMonth, daysInMonth }) => {
+        const worth =
+          delta === null
+            ? `${netWorth} on the books, sir.`
+            : `${netWorth} on the books, sir — ${delta.up ? 'up' : 'down'} ${delta.amount} since ${delta.basis}.`
+        if (!hasBudget) return `${worth} ${spent} spent this month, against no set budget.`
+        const daysLeft = Math.max(0, daysInMonth - dayOfMonth)
+        const runway =
+          daysLeft === 0
+            ? 'with the month out'
+            : `with ${lower(daysLeft)} ${plural(daysLeft, 'day', 'days')} to run`
+        return over
+          ? `${worth} ${left} over the month's budget of ${budget}, ${runway}.`
+          : `${worth} ${left} of the month's budget remains, ${runway}.`
+      },
+      detail: ({ portfolio, perDay, underPace, hasBudget }) => {
+        const parts: string[] = []
+        if (portfolio) {
+          parts.push(
+            `The portfolio holds ${portfolio.value}, ${portfolio.dayUp ? 'up' : 'off'} ${portfolio.dayPL} today and ${portfolio.unrealUp ? 'ahead' : 'behind'} ${portfolio.unrealized} overall.`,
+          )
+        }
+        if (perDay) {
+          parts.push(
+            hasBudget
+              ? `Spending runs at ${perDay} a day, against a budget that allows ${underPace ? 'more' : 'less'}.`
+              : `Spending runs at ${perDay} a day.`,
+          )
+        }
+        if (parts.length === 0) parts.push('Nothing further to report on the books, sir.')
+        return parts.join(' ')
+      },
+    },
     vaultEmpty:
       "No balances yet. Add your accounts, then log a snapshot to start charting the estate's worth.",
     fxMissing: (currencies) =>
