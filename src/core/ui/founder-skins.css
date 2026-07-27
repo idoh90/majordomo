@@ -169,6 +169,9 @@ html[data-skin='tacops'] {
   --color-panel-2: #10140c;
   --color-panel-3: #1a2212;
   --color-line: #232b1b;
+  --color-trough: #0a0c09;
+  --color-trough-line: #1e2517;
+  --color-subcard: #0b0e09;
   --color-ink: #e6eedd;
   --color-ink-dim: #8a9a76;
   --color-ink-faint: #5f6d52;
@@ -234,6 +237,9 @@ html[data-skin='noir'] {
   --color-panel-2: #221d1a;
   --color-panel-3: #2b2521;
   --color-line: #3a332d;
+  --color-trough: #151110;
+  --color-trough-line: #322c27;
+  --color-subcard: #171411;
   --color-ink: #ece5da;
   --color-ink-dim: #a99f92;
   --color-ink-faint: #8a8178;
@@ -327,6 +333,9 @@ html[data-skin='ghost'] {
   --color-panel-2: #101318;
   --color-panel-3: #23272e;
   --color-line: rgb(255 255 255 / 0.08);
+  --color-trough: #000000;
+  --color-trough-line: rgb(255 255 255 / 0.06);
+  --color-subcard: #090a0c;
   --color-ink: #f2f3f5;
   --color-ink-dim: #7a828e;
   --color-ink-faint: #4a505a;
@@ -397,6 +406,9 @@ html[data-skin='ironworks'] {
   --color-panel-2: #14120f;
   --color-panel-3: #2c2620;
   --color-line: #3e362c;
+  --color-trough: #151310;
+  --color-trough-line: #352e26;
+  --color-subcard: #191714;
   --color-ink: #ede6dc;
   --color-ink-dim: #a89c8c;
   --color-ink-faint: #7d7264;
@@ -462,6 +474,9 @@ html[data-skin='gotham'] {
   --color-panel-2: #1a1d24;
   --color-panel-3: #232833;
   --color-line: #262b34;
+  --color-trough: #090a0d;
+  --color-trough-line: #21252d;
+  --color-subcard: #101217;
   --color-ink: #e8eaed;
   --color-ink-dim: #98a1ad;
   --color-ink-faint: #5c6470;
@@ -489,6 +504,11 @@ html[data-skin='gotham-day'] {
   --color-panel-2: #faf8f2;
   --color-panel-3: #f0ede4;
   --color-line: #e3dfd4;
+  /* light skins invert the idea: a recess in paper reads as a shade DARKER
+     than the page, not near-black */
+  --color-trough: #ece9e0;
+  --color-trough-line: #dbd6c9;
+  --color-subcard: #f7f5ef;
   --color-ink: #1d2129;
   --color-ink-dim: #5a6068;
   --color-ink-faint: #9aa0a8;
@@ -557,6 +577,9 @@ html[data-skin='ironworks-paper'] {
   --color-panel-2: #f9f6ee;
   --color-panel-3: #ddd8ca;
   --color-line: #b8ad96;
+  --color-trough: #e4dece;
+  --color-trough-line: #c9bfa8;
+  --color-subcard: #efeade;
   --color-ink: #211d18;
   --color-ink-dim: #4a4237;
   --color-ink-faint: #847767;

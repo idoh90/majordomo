@@ -48,7 +48,7 @@ const PRESET_SKINS: Record<PresetSkinId, SkinDef> = {
     tagline: 'Near-black blue-grey, steel-blue accent — a quiet house at night',
     themeColor: '#0c1017',
     heatRamp: 'standard',
-    swatches: ['#0c1017', '#131926', '#7da7d0', '#e6ebf2'],
+    swatches: ['#0c1017', '#111826', '#7da7d0', '#e6ebf2'],
   },
   terminal: {
     id: 'terminal',

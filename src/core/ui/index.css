@@ -10,10 +10,21 @@
 --------------------------------------------------------------------------- */
 @theme {
   --color-bg: #0c1017;
-  --color-panel: #131926;
+  --color-panel: #111826;
   --color-panel-2: #1a2232;
   --color-panel-3: #202940;
-  --color-line: #232d40;
+  --color-line: #1e2739;
+
+  /* Three depths, darkest first. A trough is a recess cut through a panel
+     down to roughly page level — it holds a screen's primary instrument
+     (the week grid, the duty band, the silhouettes, the trend chart). A
+     sub-card is a tile floating inside a panel or a trough, and sits
+     BETWEEN the two: darker than the panel, lighter than the trough.
+     panel-2/-3 stay lighter than the panel and keep their own consumers
+     (.card, inputs, menus) — they are a different hierarchy, not this one. */
+  --color-trough: #0b1017;
+  --color-trough-line: #1a2130;
+  --color-subcard: #0d131e;
   --color-ink: #e6ebf2;
   --color-ink-dim: #8b97a8;
   --color-ink-faint: #5e6a7d;
@@ -34,6 +45,7 @@
 
   /* pill radius collapses to 0 on the square-cornered skins */
   --radius-pill: 9999px;
+  --radius-subcard: 10px;
 
   --shadow-glow-accent: 0 0 18px 2px var(--glow-accent);
   --shadow-glow-accent-lg: 0 0 28px 6px var(--glow-accent-lg);
@@ -184,12 +196,55 @@ input[type='datetime-local'] {
     background-size: var(--hero-fx-over-size, auto);
   }
 
+  /* a panel that announces itself: 1px accent hairline along the top and a
+     soft bloom in one corner, both tinted by --lit-accent (default: the skin
+     accent; wings pass their own token). Deliberately NOT folded into
+     .panel-hero — that one's two pseudo-elements are spoken for by the
+     per-skin atmosphere vars above. */
+  .panel-lit {
+    position: relative;
+    overflow: hidden;
+  }
+  .panel-lit::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(
+          90deg,
+          transparent,
+          color-mix(in srgb, var(--lit-accent, var(--color-accent)) 80%, transparent),
+          transparent
+        )
+        top / 100% 1px no-repeat,
+      radial-gradient(
+        ellipse 40% 60% at 100% 0%,
+        color-mix(in srgb, var(--lit-accent, var(--color-accent)) 10%, transparent),
+        transparent 70%
+      );
+  }
+
   /* sub-surface: tiles, rows, option buttons, inputs */
   .card {
     background: var(--card-bg, var(--color-panel-2));
     border: var(--card-bw, 1px) solid var(--card-bc, var(--color-line));
     border-radius: var(--radius-xl);
     box-shadow: var(--card-shadow, none);
+  }
+
+  /* a recess cut into a panel, holding that screen's primary instrument */
+  .trough {
+    background: var(--trough-bg, var(--color-trough));
+    border: var(--card-bw, 1px) solid var(--trough-bc, var(--color-trough-line));
+    border-radius: var(--radius-xl);
+  }
+
+  /* a tile inside a panel or a trough — the third depth */
+  .subcard {
+    background: var(--subcard-bg, var(--color-subcard));
+    border: var(--card-bw, 1px) solid var(--subcard-bc, var(--color-trough-line));
+    border-radius: var(--radius-subcard);
   }
 
   /* section header label */
@@ -254,6 +309,15 @@ input[type='datetime-local'] {
   /* small pill chip (shape only — colors stay utilities) */
   .chip {
     border-radius: var(--radius-pill);
+  }
+
+  /* a chip that carries a figure, tinted by whatever it belongs to
+     (--chip-accent: a wing token on the briefing strips and the House rail) */
+  .chip-tint {
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--chip-accent, var(--color-accent)) 14%, transparent);
+    border: 1px solid
+      color-mix(in srgb, var(--chip-accent, var(--color-accent)) 40%, transparent);
   }
 
   /* segmented control */
@@ -333,6 +397,79 @@ input[type='datetime-local'] {
     background: var(--slider-handle-bg, var(--color-panel));
   }
 
+  /* ------------------------------------------------------------------ blocks
+     One material for every "this is on the books" rectangle in the estate:
+     week-grid events, the Watch's duty band, the Study's session tracks.
+     Consumers set --block-accent (a wing token, or KIND_META's colour) and
+     compose the modifiers. Glow is a STATE — live, current, selected — never
+     decoration, so the base class carries none.
+  ------------------------------------------------------------------------- */
+  .block {
+    --blk: var(--block-accent, var(--color-accent));
+    --blk-top: color-mix(in srgb, var(--blk) 60%, white);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--blk) 26%, transparent),
+      color-mix(in srgb, var(--blk) 13%, transparent)
+    );
+    border-left: 3px solid var(--blk);
+    border-top: 1px solid color-mix(in srgb, var(--blk-top) 75%, transparent);
+  }
+
+  /* live / current / selected */
+  .block-glow {
+    box-shadow: 0 0 17px color-mix(in srgb, var(--blk) 18%, transparent);
+  }
+
+  /* already happened, or the quieter half of a split block — the drop in
+     opacity IS the label, so nothing has to say "past" in words */
+  .block-dim {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--blk) 13%, transparent),
+      color-mix(in srgb, var(--blk) 7%, transparent)
+    );
+    border-left-color: color-mix(in srgb, var(--blk) 55%, transparent);
+    border-top-color: color-mix(in srgb, var(--blk-top) 38%, transparent);
+    box-shadow: none;
+  }
+
+  /* a block clipped by midnight: dotted on the seamed edge, solid elsewhere */
+  .block-cut-after {
+    border-bottom: 2px dotted color-mix(in srgb, var(--blk) 70%, transparent);
+  }
+  .block-cut-before {
+    border-top: 2px dotted color-mix(in srgb, var(--blk) 70%, transparent);
+  }
+
+  /* pencilled in on the estate's behalf, not by hand (recovery sleep) */
+  .block-hatch {
+    background:
+      repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--blk) 16%, transparent) 0 5px,
+        transparent 5px 10px
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--blk) 12%, transparent),
+        color-mix(in srgb, var(--blk) 6%, transparent)
+      );
+    border-left-style: dashed;
+  }
+
+  .block-interactive {
+    transition:
+      filter 170ms,
+      transform 170ms;
+  }
+  @media (hover: hover) {
+    .block-interactive:hover {
+      filter: brightness(1.2);
+      transform: translateY(-1px);
+    }
+  }
+
   /* hologram floor reflection under the body map (reflection-flagged skins) */
   .map-reflection {
     transform: scaleY(-1);
@@ -382,6 +519,12 @@ html[data-skin='terminal'] {
   --color-w-ledger: #d8c95f;
   --color-w-study: #9d8cff;
 
+  /* the page is already true black, so the recess can only be black too —
+     its border does the work of saying "this is cut in" */
+  --color-trough: #000000;
+  --color-trough-line: #18251c;
+  --color-subcard: #080c09;
+
   --sil-fill: #0d130f;
   --sil-stroke: #1c2b20;
   --plate-stroke: rgb(0 0 0 / 0.6);
@@ -406,6 +549,10 @@ html[data-skin='aurora'] {
   --color-w-grounds: #74c9a2;
   --color-w-ledger: #d8b46a;
   --color-w-study: #b294f5;
+
+  --color-trough: #120f21;
+  --color-trough-line: #282247;
+  --color-subcard: #141125;
 
   --sil-fill: #181430;
   --sil-stroke: #2e2752;
