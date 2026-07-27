@@ -577,37 +577,54 @@ async function desktopChecks(browser) {
  * same question — "is anything on the books before this exam, sir?" — and used
  * to compute it two different ways, so with past sessions done and nothing
  * booked ahead the estate said "nothing on the books" and "two hours on the
- * books" on one screen. Checked in all three states the fix has to survive.
+ * books" on one screen. Checked in both states the fix has to survive.
+ *
+ * The check BUILDS its own state. It used to lean on the ?demo fixture having
+ * "a PAST Linear Algebra session and none ahead", which is not a property the
+ * fixture actually has: its blocks are seeded at fixed offsets into the week,
+ * so which of them are past depends on the weekday the harness runs on, and
+ * one of them is marked done while still being in the future. Both checks were
+ * therefore red for months without anything being wrong.
+ *
+ * Note what is deliberately NOT collapsed: examProgress (hours already DONE)
+ * and bookedHoursBeforeExam (hours still SCHEDULED) are different questions,
+ * and the briefing prints both — "… hours behind you and … more on the books".
+ * Only the second is what M-03 is about.
  */
 async function briefingChecks(browser) {
   const { page } = await fresh(browser, { width: 1440, height: 1200 })
 
-  /** [headsUpClaimsNothing, briefingHours] as the page currently reads */
+  /** what each surface currently claims about the run-up to the exam */
   const readClaims = () =>
     page.evaluate(() => {
       const text = document.body.innerText
-      const nothing = /exam is in .* with nothing on the books/i.test(text)
-      const m = text.match(/exam (?:is )?(?:in [^,]*|today|tomorrow), sir — (\S+) hours? on the books/i)
-      return { nothing, hours: m?.[1] ?? null }
+      return {
+        // the Manor's heads-up appears ONLY when nothing is booked ahead
+        headsUpNothing: /exam is .* with nothing on the books/i.test(text),
+        // …and the Study briefing's own trailing clause must say the same
+        briefingNothing: /and nothing further on the books/i.test(text),
+        briefingAhead: text.match(/and ([^.]+?) more on the books/i)?.[1] ?? null,
+      }
     })
 
-  // state 1+2: the demo has a PAST Linear Algebra session and none ahead
-  const past = await readClaims()
-  past.nothing && (past.hours === 'no' || past.hours === null)
-    ? ok('B1 past sessions only: both lines say nothing is booked', `heads-up + "${past.hours}"`)
-    : bad(
-        'B1 past sessions only: both lines say nothing is booked',
-        `heads-up says nothing=${past.nothing}, briefing says "${past.hours}"`,
+  /* --- state 1: work done, nothing booked ahead -------------------------- */
+  await page.evaluate(() => {
+    const ev = window.__events.getState()
+    const now = Date.now()
+    // strip every maths session that has not already ended…
+    ev.events
+      .filter(
+        (e) =>
+          e.kind === 'study' &&
+          e.sourceRef === 'subj:demo-subj-math' &&
+          new Date(e.end).getTime() > now,
       )
-
-  // state 3: book two hours ahead of the exam — both lines must flip together
-  const booked = await page.evaluate(() => {
-    const s = window.__events.getState()
-    const exam = s.events.find((e) => e.allDay && /exam/i.test(e.title))
-    const start = new Date()
-    start.setDate(start.getDate() + 1)
+      .forEach((e) => ev.deleteEvent(e.id))
+    // …and log one that genuinely happened, so "hours behind you" is non-zero
+    // while "on the books" is empty — the exact shape M-03 got wrong
+    const start = new Date(now - 26 * 3600000)
     start.setHours(10, 0, 0, 0)
-    s.addEvent({
+    const logged = window.__events.getState().addEvent({
       source: 'study',
       kind: 'study',
       title: 'Linear Algebra',
@@ -615,15 +632,43 @@ async function briefingChecks(browser) {
       start: start.toISOString(),
       end: new Date(start.getTime() + 2 * 3600000).toISOString(),
     })
-    return !!exam
+    window.__study.getState().fulfill(logged.id, 'done')
+  })
+  await page.waitForTimeout(600)
+
+  const past = await readClaims()
+  past.headsUpNothing && past.briefingNothing
+    ? ok('B1 past sessions only: both lines say nothing is booked', 'heads-up and briefing agree')
+    : bad(
+        'B1 past sessions only: both lines say nothing is booked',
+        `heads-up nothing=${past.headsUpNothing}, briefing nothing=${past.briefingNothing}` +
+          (past.briefingAhead ? `, briefing claims "${past.briefingAhead}" ahead` : ''),
+      )
+
+  /* --- state 2: three hours booked ahead — both lines must flip together --
+     Three, not two: state 1 logged exactly two hours DONE, so a briefing that
+     went back to reporting fulfilled hours here would still read "two" and
+     slip past. The two figures have to differ for this to discriminate. */
+  await page.evaluate(() => {
+    // an hour from now, so it lands before the end of the exam's day even if
+    // the exam is today
+    const start = new Date(Date.now() + 3600000)
+    window.__events.getState().addEvent({
+      source: 'study',
+      kind: 'study',
+      title: 'Linear Algebra',
+      sourceRef: 'subj:demo-subj-math',
+      start: start.toISOString(),
+      end: new Date(start.getTime() + 3 * 3600000).toISOString(),
+    })
   })
   await page.waitForTimeout(600)
   const ahead = await readClaims()
-  !ahead.nothing && ahead.hours === 'two'
-    ? ok('B2 sessions booked ahead: both lines agree', `briefing "${ahead.hours} hours", heads-up gone`)
+  !ahead.headsUpNothing && !ahead.briefingNothing && ahead.briefingAhead === 'three'
+    ? ok('B2 sessions booked ahead: both lines agree', 'briefing "three more", heads-up gone')
     : bad(
         'B2 sessions booked ahead: both lines agree',
-        `exam marker=${booked}, heads-up says nothing=${ahead.nothing}, briefing says "${ahead.hours}"`,
+        `heads-up nothing=${ahead.headsUpNothing}, briefing nothing=${ahead.briefingNothing}, briefing ahead="${ahead.briefingAhead}"`,
       )
 
   /* --- B3: the now-relative block is labelled as such --------------------- */
