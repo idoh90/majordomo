@@ -67,18 +67,6 @@ const clampStart = (ts: number) => Math.max(0, Math.min(23.5, ts))
 /** the dotted seam edge, shared by clipped blocks and by crossing drag ghosts */
 const CUT_EDGE = '2px dotted color-mix(in srgb, var(--color-ink) 45%, transparent)'
 
-/**
- * Mobile puts each day's header INSIDE the horizontally-scrolled column, so
- * the column body starts this far below the top of the flex row that also
- * holds the hour rail — header height plus the grid box's 1 px border. The
- * rail is positioned from the top of that row, so without the same offset it
- * printed every label ~1.4 h above the blocks it describes.
- *
- * Desktop is unaffected: its DayHeaders sit outside the grid box, offset 0.
- */
-const MOBILE_HEADER_H = 32
-const MOBILE_RAIL_OFFSET = MOBILE_HEADER_H + 1
-
 /** stable identity for the "no ghosts" case — a fresh [] would defeat DayBody's memo */
 const EMPTY_CLIPS: ClippedEvent[] = []
 
@@ -857,17 +845,33 @@ const Rules = memo(function Rules() {
   )
 })
 
-/** `offset` = px between the top of the rail's flex row and the column body it
- *  describes (see MOBILE_RAIL_OFFSET); 0 on desktop, where they share a top. */
-const TickAxis = memo(function TickAxis({ offset = 0 }: { offset?: number }) {
+/**
+ * The hour rail. It takes no offset and never has: it is always a flex sibling
+ * of the box holding the column bodies, so the two share a top by construction
+ * and a label cannot drift from the block it describes.
+ *
+ * Mobile used to nest each day's header INSIDE its scrolled column, which put
+ * the bodies a header's height below the rail's own top and needed a constant
+ * to bridge the gap. Any change to that header's padding silently re-opened a
+ * ~1.4 h gap between every label and its block. The header now lives above the
+ * box on both layouts and the constant is gone.
+ */
+const TickAxis = memo(function TickAxis() {
   return (
-    <div className="relative w-12 flex-none" style={{ height: BODY_H + offset }}>
+    // The transparent top border is not decoration: the grid box beside it has
+    // a 1px border, so its column bodies begin one pixel lower than the flex
+    // row they share. Carrying the same border puts the rail in the columns'
+    // coordinate space instead of the row's, and is why no offset is needed.
+    <div
+      className="relative w-12 flex-none"
+      style={{ height: BODY_H, borderTop: '1px solid transparent' }}
+    >
       {TICKS.map((h) => (
         <div
           key={h}
           className="absolute right-2.5 -translate-y-1/2 text-[10px] tracking-[0.04em] [font-variant-numeric:tabular-nums]"
           style={{
-            top: h * PXH + offset,
+            top: h * PXH,
             color: isMidnight(h) ? 'var(--color-accent)' : 'var(--color-ink-faint)',
           }}
         >
@@ -1730,8 +1734,36 @@ function MobileWeek({
           )
         })}
       </div>
-      <div className="mt-3 flex">
-        <TickAxis offset={MOBILE_RAIL_OFFSET} />
+      {/* The viewed day, named ONCE above the box rather than once inside each
+          scrolled column. Keeping it out of the columns is what makes the rail
+          and the bodies share a top — see TickAxis. */}
+      <div className="mt-3 flex items-end">
+        <div className="w-12 flex-none" aria-hidden />
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-2 pb-1.5">
+          <span
+            className="font-display text-[13px] font-semibold tracking-[0.12em]"
+            style={{
+              color:
+                localDayKey(columns[active].day) === localDayKey(new Date(now))
+                  ? 'var(--color-accent)'
+                  : 'var(--color-ink)',
+            }}
+          >
+            {WD[columns[active].day.getDay()]} {columns[active].day.getDate()}
+          </span>
+          {markersByCol[active].map((m) => {
+            const mm = markerMeta(m)
+            return (
+              <span key={m.id} className="truncate text-[10px]" style={{ color: mm.color }}>
+                {mm.glyph ? `${mm.glyph} ` : ''}
+                {m.title}
+              </span>
+            )
+          })}
+        </div>
+      </div>
+      <div className="flex">
+        <TickAxis />
         <div ref={wrapRef} className="relative min-w-0 flex-1">
           {mDrag && (
             <div
@@ -1766,24 +1798,6 @@ function MobileWeek({
           >
             {columns.map((win, i) => (
               <div key={i} className="w-full flex-none snap-center">
-                {/* height is MOBILE_RAIL_OFFSET's source — keep them tied */}
-                <div
-                  className="flex items-center gap-2 px-2"
-                  style={{ height: MOBILE_HEADER_H }}
-                >
-                  <span className="font-display text-[13px] font-semibold tracking-[0.12em] text-ink">
-                    {WD[win.day.getDay()]} {win.day.getDate()}
-                  </span>
-                  {markersByCol[i].map((m) => {
-                    const mm = markerMeta(m)
-                    return (
-                      <span key={m.id} className="text-[10px]" style={{ color: mm.color }}>
-                        {mm.glyph ? `${mm.glyph} ` : ''}
-                        {m.title}
-                      </span>
-                    )
-                  })}
-                </div>
                 <div
                   ref={(el) => {
                     colBodyRefs.current[i] = el
