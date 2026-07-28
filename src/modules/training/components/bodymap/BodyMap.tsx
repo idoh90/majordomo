@@ -112,72 +112,114 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
         />
       </div>
 
-      <div className="flex items-center justify-center gap-8">
-        <BodySvg
-          view="front"
-          colorFor={colorFor}
-          glowFor={glowFor}
-          selected={selected}
-          onSelect={setSelected}
-          debugRainbow={debugRainbow}
-          className={`${view === 'front' ? '' : 'hidden'} lg:block ${svgClass}`}
+      {/* The stage: the figures stand in a recess rather than floating on the
+          panel, with a wash in the wing's own colour and a line to stand on. */}
+      <div className="trough relative overflow-hidden px-2 pb-2 pt-3">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(ellipse 68% 55% at 50% 45%, color-mix(in srgb, var(--color-w-grounds) 9%, transparent), transparent 72%)',
+          }}
         />
-        <BodySvg
-          view="back"
-          colorFor={colorFor}
-          glowFor={glowFor}
-          selected={selected}
-          onSelect={setSelected}
-          debugRainbow={debugRainbow}
-          className={`${view === 'back' ? '' : 'hidden'} lg:block ${svgClass}`}
-        />
-      </div>
 
-      {/* Ghost Protocol: hologram floor reflection + ground line */}
-      {skin.reflection && (
-        <>
-          <div
-            aria-hidden
-            className="map-reflection -mt-1 flex h-14 items-end justify-center gap-8 overflow-hidden"
+        {/* The readout floats ON the stage — pointer-events-none so it can
+            never intercept a tap meant for a plate underneath it.
+            Below sm it stays IN FLOW: at 320px a two-line readout ("Hamstrings
+            — strain 6.7 · trained Sun, Jul 26") reaches down over the trapezius
+            plate, dulling the very colour the map exists to show. Narrow
+            screens get the honest layout; wider ones get the floating card.
+            aria-hidden because the sr-only live region below carries it — a
+            screen reader should not meet the same sentence twice. */}
+        <div
+          aria-hidden
+          className="pointer-events-none static z-[2] mb-1 flex sm:absolute sm:inset-x-3 sm:top-3 sm:mb-0"
+        >
+          <span
+            className={`subcard max-w-full px-2.5 py-1.5 text-[12px] leading-snug ${
+              info.dim ? 'text-ink-faint' : 'text-ink-dim'
+            } ${skin.figCaption ? 'font-display italic' : ''}`}
+            style={{ background: 'color-mix(in srgb, var(--color-subcard) 78%, transparent)' }}
           >
-            <BodySvg
-              view="front"
-              colorFor={colorFor}
-              glowFor={() => 0}
-              selected={null}
-              onSelect={() => {}}
-              decorative
-              className={`${view === 'front' ? '' : 'hidden'} lg:block ${svgClass}`}
+            {skin.figCaption ? `fig. 1 — ${info.text}` : info.text}
+          </span>
+        </div>
+
+        <div className="relative flex items-center justify-center gap-8">
+          <BodySvg
+            view="front"
+            colorFor={colorFor}
+            glowFor={glowFor}
+            selected={selected}
+            onSelect={setSelected}
+            debugRainbow={debugRainbow}
+            className={`${view === 'front' ? '' : 'hidden'} lg:block ${svgClass}`}
+          />
+          <BodySvg
+            view="back"
+            colorFor={colorFor}
+            glowFor={glowFor}
+            selected={selected}
+            onSelect={setSelected}
+            debugRainbow={debugRainbow}
+            className={`${view === 'back' ? '' : 'hidden'} lg:block ${svgClass}`}
+          />
+        </div>
+
+        {/* Ghost Protocol: hologram floor reflection + its own ground line */}
+        {skin.reflection ? (
+          <>
+            <div
+              aria-hidden
+              className="map-reflection -mt-1 flex h-14 items-end justify-center gap-8 overflow-hidden"
+            >
+              <BodySvg
+                view="front"
+                colorFor={colorFor}
+                glowFor={() => 0}
+                selected={null}
+                onSelect={() => {}}
+                decorative
+                className={`${view === 'front' ? '' : 'hidden'} lg:block ${svgClass}`}
+              />
+              <BodySvg
+                view="back"
+                colorFor={colorFor}
+                glowFor={() => 0}
+                selected={null}
+                onSelect={() => {}}
+                decorative
+                className={`${view === 'back' ? '' : 'hidden'} lg:block ${svgClass}`}
+              />
+            </div>
+            <div
+              aria-hidden
+              className="mx-auto -mt-px h-px w-44"
+              style={{
+                background:
+                  'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-accent) 40%, transparent), transparent)',
+              }}
             />
-            <BodySvg
-              view="back"
-              colorFor={colorFor}
-              glowFor={() => 0}
-              selected={null}
-              onSelect={() => {}}
-              decorative
-              className={`${view === 'back' ? '' : 'hidden'} lg:block ${svgClass}`}
-            />
-          </div>
+          </>
+        ) : (
+          /* the figures need something to stand on, or they hang in the recess */
           <div
             aria-hidden
-            className="mx-auto -mt-px h-px w-44"
+            className="mx-auto mt-1 h-px w-2/3"
             style={{
               background:
-                'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-accent) 40%, transparent), transparent)',
+                'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-w-grounds) 34%, transparent), transparent)',
             }}
           />
-        </>
-      )}
+        )}
+      </div>
 
-      <p className="mt-2 min-h-5 text-center text-sm" aria-live="polite">
-        <span
-          className={`${info.dim ? 'text-ink-faint' : 'text-ink-dim'} ${
-            skin.figCaption ? 'font-display italic' : ''
-          }`}
-        >
-          {skin.figCaption ? `fig. 1 — ${info.text}` : info.text}
-        </span>
+      {/* the readout is announced from here — the visible copy floats on the
+          stage above, but a live region must not also be a positioned overlay
+          that screen readers reach out of document order */}
+      <p className="sr-only" aria-live="polite">
+        {info.text}
       </p>
 
       <div className="mt-3 flex justify-center">

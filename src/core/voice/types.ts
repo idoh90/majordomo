@@ -324,6 +324,22 @@ export interface VoicePack {
     }
   }
   grounds: {
+    /** THE MUSCLE LEDGER — the body map's data twin */
+    ledger: {
+      title: string
+      /** label on the how-many-are-hot tile, and its figure */
+      hotNow: string
+      hotNowValue: (v: { hot: number; total: number }) => string
+      /** column headings — the sets column MUST name its window, or a row
+       *  reading "strain 10.0" beside "—" looks like a contradiction */
+      colStrain: string
+      colSets: string
+      /** estimated hard sets for one muscle this week */
+      sets: (n: number) => string
+      /** the standing caveat: the app logs sessions, not sets, and runs feed
+       *  strain without counting toward lifting volume */
+      note: string
+    }
     briefingPanel: {
       chips: (v: GroundsBriefingFacts) => BriefingChip[]
       headline: (v: GroundsBriefingFacts) => string

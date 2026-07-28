@@ -198,6 +198,15 @@ export const majordomoPack: VoicePack = {
     },
   },
   grounds: {
+    ledger: {
+      title: 'The muscle ledger',
+      hotNow: 'HOT NOW',
+      hotNowValue: ({ hot, total }) => `${hot} of ${total}`,
+      colStrain: 'strain',
+      colSets: 'sets · this week',
+      sets: (n) => `~${n} ${plural(n, 'set', 'sets')}`,
+      note: 'Sets are an estimate, sir — the estate logs sessions, not sets, and a run feeds recovery without counting toward them.',
+    },
     briefingPanel: {
       chips: ({ done, goal, hot, muscles, readiness }) => [
         { label: 'WEEK', value: goal > 0 ? `${done} / ${goal}` : String(done) },

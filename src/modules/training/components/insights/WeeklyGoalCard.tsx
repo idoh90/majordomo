@@ -21,7 +21,6 @@ export function WeeklyGoalCard({ workouts, now }: WeeklyGoalCardProps) {
   const done = thisWeekCount(workouts, nowDate, weekStart)
   const slacking = slackingGroups(workouts, nowDate, weekStart)
   const hasGoal = goal > 0
-  const pct = hasGoal ? Math.min(1, done / goal) : 0
   const met = hasGoal && done >= goal
   const remaining = Math.max(0, goal - done)
 
@@ -53,11 +52,26 @@ export function WeeklyGoalCard({ workouts, now }: WeeklyGoalCardProps) {
 
       {hasGoal && (
         <>
-          <div className="chip mt-3 h-2 overflow-hidden bg-panel-2">
-            <div
-              className="chip h-full bg-gradient-to-r from-accent-deep to-accent transition-[width] duration-500"
-              style={{ width: `${pct * 100}%` }}
-            />
+          {/* One cell per session the week asks for, rather than a bar. A goal
+              of four is four countable things; a continuous bar made "three of
+              four" something you had to estimate off a length. Above the goal
+              the extras keep their own cells so an over-delivered week still
+              reads honestly instead of pinning at full. */}
+          <div className="mt-3 flex gap-1" aria-hidden>
+            {Array.from({ length: Math.max(goal, done) }, (_, i) => (
+              <span
+                key={i}
+                className="h-2 flex-1 rounded-pill transition-colors duration-300"
+                style={{
+                  background:
+                    i < done
+                      ? i < goal
+                        ? 'var(--color-accent)'
+                        : 'color-mix(in srgb, var(--color-positive) 70%, transparent)'
+                      : 'var(--color-panel-2)',
+                }}
+              />
+            ))}
           </div>
           <div className="mt-1.5 text-sm">
             {met ? (

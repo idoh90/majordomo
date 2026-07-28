@@ -8,6 +8,7 @@ import { WorkoutCalendar } from './components/history/WorkoutCalendar'
 import { WorkoutDetailSheet } from './components/history/WorkoutDetailSheet'
 import { WorkoutList } from './components/history/WorkoutList'
 import { NutritionCard } from './components/insights/NutritionCard'
+import { MuscleLedger } from './components/insights/MuscleLedger'
 import { RecoveryCard } from './components/insights/RecoveryCard'
 import { ScheduledCard } from './components/insights/ScheduledCard'
 import { StatTiles } from './components/insights/StatTiles'
@@ -70,6 +71,10 @@ export function TrainingScreen() {
           {/* mobile: the design's RECOVERY rows under the hero map (desktop
               reads the same truth off the map + detail sheets) */}
           <RecoveryCard workouts={workouts} now={now} />
+          {/* the map's data twin, sharing its strain map so the two cannot
+              disagree; it sits in the left column beside the figures it
+              describes, and on mobile it follows them directly */}
+          <MuscleLedger workouts={workouts} strains={strains} now={now} />
           <WorkoutCalendar workouts={workouts} now={now} onOpen={(w) => setDetailId(w.id)} />
         </div>
         <div className="flex flex-col gap-4">
