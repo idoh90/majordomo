@@ -35,12 +35,12 @@ export function SpendCard({ spent, budget, now, onEdit, onHistory }: SpendCardPr
             <button
               type="button"
               onClick={onHistory}
-              className="text-sm text-ink-dim transition-colors hover:text-ink"
+              className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] text-sm text-ink-dim transition-colors hover:text-ink"
             >
               {voice.capital.spend.history}
             </button>
           )}
-          <button type="button" onClick={onEdit} className="text-sm text-accent transition-opacity hover:opacity-80">
+          <button type="button" onClick={onEdit} className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] text-sm text-accent transition-opacity hover:opacity-80">
             Update
           </button>
         </div>

@@ -68,7 +68,7 @@ export function WorkoutCalendar({ workouts, now, onOpen }: WorkoutCalendarProps)
             type="button"
             aria-label="Previous month"
             onClick={() => moveMonth(-1)}
-            className="rounded-lg p-1.5 text-ink-dim transition-colors hover:bg-panel-2 hover:text-ink"
+            className="relative after:absolute after:-inset-2 after:content-[''] rounded-lg p-1.5 text-ink-dim transition-colors hover:bg-panel-2 hover:text-ink"
           >
             <Chevron dir="left" />
           </button>
@@ -80,7 +80,7 @@ export function WorkoutCalendar({ workouts, now, onOpen }: WorkoutCalendarProps)
             aria-label="Next month"
             onClick={() => moveMonth(1)}
             disabled={atCurrentMonth}
-            className="rounded-lg p-1.5 text-ink-dim transition-colors hover:bg-panel-2 hover:text-ink disabled:opacity-25 disabled:hover:bg-transparent"
+            className="relative after:absolute after:-inset-2 after:content-[''] rounded-lg p-1.5 text-ink-dim transition-colors hover:bg-panel-2 hover:text-ink disabled:opacity-25 disabled:hover:bg-transparent"
           >
             <Chevron dir="right" />
           </button>

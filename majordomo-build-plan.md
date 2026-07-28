@@ -116,8 +116,32 @@ that never ships.
 | ✅ M4 | The Watch | POST A WATCH strip · ON DUTY ring · NEXT WATCH · week list · sleep pencilled after nights · eslint zone · nav mailbox | posting a watch lands it on the Manor ✓ |
 | ✅ M5 | Interactions | quick-add popover · drag engine (desktop + mobile: 350ms long-press, day-chip drop targets, edge auto-scroll) · confirm/toast/undo | drag/quick-add exercised in browser ✓ |
 | ✅ M6 | What-if | draft fork in events store · ghosts · diff panel · APPLY/Discard bar | discard leaves base blob byte-identical ✓ |
-| M7 | The Grounds | full restyle, ALL old features kept · additive design cards · strain↔Manor bridge · log-fulfills-block | every pre-pivot training feature reachable |
-| M8 | The Ledger | token-restyle QA · payday markers · tab polish | all capital sheets legible ×3 presets |
+| ✅ M7 | The Grounds | full restyle, ALL old features kept · additive design cards · strain↔Manor bridge · log-fulfills-block | every pre-pivot training feature reachable ✓ *(absorbed into the Console revamp, C5)* |
+| ✅ M8 | The Ledger | token-restyle QA · payday markers · tab polish | all capital sheets legible ×3 presets ✓ *(absorbed into the Console revamp, C7)* |
+
+### The Console revamp (C1–C9)
+
+Design source: `Majordomo Revamp - Standalone.html` (repo root). One visual
+direction — Console — carried through all five wings. M7 and M8 were folded
+into it rather than run separately, since both were restyle milestones for
+wings the revamp rebuilds anyway.
+
+| # | Phase | Contents | Gate |
+|---|---|---|---|
+| ✅ C1 | Material system | three depths (`.panel` / `.trough` / `.subcard`) · `.panel-lit` · `.chip-tint` · the `.booked` block family · spec palette adopted as Midnight · Terminal/Aurora/founder re-declares | 5 wings × 3 presets legible ✓ |
+| ✅ C2 | The briefing, generalised | shared `BriefingPanel` · per-wing voice templates with zero cases · `weeklyHoursSeries` · the Watch gains its first briefing | every wing reports in ✓ |
+| ✅ C3 | The Manor | **P0-2** mobile hour rail restructured (offset constants deleted) · booked-hours day totals · **P2-10** legend on mobile · blocks onto `.booked` · **P2-13** · tap targets | harness 43/43 ✓ |
+| ✅ C4 | The Watch | fortnight duty band (render-only, reuses `clipToWindow`) · THE CYCLE · **P1-5** FURTHER AHEAD always present · ring on a trough | posting flow driven end-to-end ✓ |
+| ✅ C5 | The Grounds *(= M7)* | staged silhouettes · floating readout · THE MUSCLE LEDGER · segmented weekly goal | every pre-existing Grounds feature intact ✓ |
+| ✅ C6 | The Study | rings on a trough and selectable · THE SUBJECT LEDGER · `fulfilledHoursBetween` | ring drives the Dossier ✓ |
+| ✅ C7 | The Ledger *(= M8)* | Vault+trend fused · **P1-4** both mobile carousels removed · spend pace marker · portfolio row material | no hidden boards at any width ✓ |
+| ✅ C8 | THE HOUSE | cross-wing rail + folded stack · per-wing signal cards · THE PATTERN (navigate-only) | rail figures equal each wing's own ✓ |
+| ✅ C9 | Coherence sweep | out-of-scope surfaces checked ×3 presets · tap-target audit · offline reload · founder build | this section |
+
+**Deliberately not done** (from the design's own §6): empty/first-run
+ghost-structure states · the month view and what-if sandbox in Console
+treatment · the add-workout and capital sheets · settings-menu regrouping ·
+the PATTERN's auto-move mutation · `ASSET_CLASSES` tokenisation.
 
 ## §3 · LATER backlog (post-M8, order negotiable)
 

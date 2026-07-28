@@ -83,7 +83,7 @@ export function NetWorthChart({
             <button
               type="button"
               onClick={onHistory}
-              className="text-sm text-accent transition-opacity hover:opacity-80"
+              className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] text-sm text-accent transition-opacity hover:opacity-80"
             >
               History
             </button>

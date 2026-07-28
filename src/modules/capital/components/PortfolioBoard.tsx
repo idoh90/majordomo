@@ -55,7 +55,7 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
               <RefreshIcon spinning={loading} />
             </button>
           ) : (
-            <button type="button" onClick={onOpenSettings} className="text-accent hover:opacity-80">
+            <button type="button" onClick={onOpenSettings} className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] text-accent hover:opacity-80">
               + API key
             </button>
           )}
@@ -71,7 +71,7 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
           {!apiKey && (
             <p className="mt-2 text-[11px] text-ink-faint">
               Live prices need a free{' '}
-              <button type="button" onClick={onOpenSettings} className="text-accent hover:opacity-80">
+              <button type="button" onClick={onOpenSettings} className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] text-accent hover:opacity-80">
                 Twelve Data key
               </button>
               .
@@ -250,7 +250,7 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
             <button
               type="button"
               onClick={onAddHolding}
-              className="text-sm text-accent transition-opacity hover:opacity-80"
+              className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] text-sm text-accent transition-opacity hover:opacity-80"
             >
               + Add holding
             </button>

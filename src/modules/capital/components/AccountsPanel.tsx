@@ -23,7 +23,7 @@ export function AccountsPanel({ accounts, latest, holdings, prices, fx, onEdit, 
     <div className="panel p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="card-title">Accounts</h3>
-        <button type="button" onClick={onAdd} className="text-sm text-accent transition-opacity hover:opacity-80">
+        <button type="button" onClick={onAdd} className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] text-sm text-accent transition-opacity hover:opacity-80">
           + Add
         </button>
       </div>

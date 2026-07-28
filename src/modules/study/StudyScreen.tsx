@@ -302,7 +302,7 @@ function Dossier({
         <button
           type="button"
           onClick={onAddHw}
-          className="ml-auto font-display text-[10px] font-semibold tracking-[0.14em] text-accent hover:underline"
+          className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] ml-auto font-display text-[10px] font-semibold tracking-[0.14em] text-accent hover:underline"
         >
           {voice.study.add}
         </button>
@@ -319,7 +319,7 @@ function Dossier({
                   useStudyStore.getState().setHomeworkDone(h.id, !h.done)
                   butler(h.done ? voice.study.toast.hwUndone : voice.study.toast.hwDone)
                 }}
-                className="flex h-5 w-5 flex-none items-center justify-center rounded-md border text-xs leading-none"
+                className="relative after:absolute after:-inset-3 after:content-[''] flex h-5 w-5 flex-none items-center justify-center rounded-md border text-xs leading-none"
                 style={{
                   background: h.done ? 'var(--color-w-study)' : 'var(--color-panel-2)',
                   borderColor: h.done ? 'var(--color-w-study)' : 'var(--color-line)',
@@ -367,7 +367,7 @@ function Dossier({
               type="button"
               aria-label="Toggle covered"
               onClick={() => useStudyStore.getState().toggleTopic(t.id)}
-              className="flex h-5 w-5 flex-none items-center justify-center rounded-md border text-xs leading-none"
+              className="relative after:absolute after:-inset-3 after:content-[''] flex h-5 w-5 flex-none items-center justify-center rounded-md border text-xs leading-none"
               style={{
                 background: t.covered ? 'var(--color-w-study)' : 'var(--color-panel-2)',
                 borderColor: t.covered ? 'var(--color-w-study)' : 'var(--color-line)',
