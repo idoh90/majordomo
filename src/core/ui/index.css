@@ -413,12 +413,12 @@ input[type='datetime-local'] {
   /* ------------------------------------------------------------------ blocks
      One material for every "this is on the books" rectangle in the estate:
      week-grid events, the Watch's duty band, the Study's session tracks.
-     Consumers set --block-accent (a wing token, or KIND_META's colour) and
+     Consumers set --booked-accent (a wing token, or KIND_META's colour) and
      compose the modifiers. Glow is a STATE — live, current, selected — never
      decoration, so the base class carries none.
   ------------------------------------------------------------------------- */
-  .block {
-    --blk: var(--block-accent, var(--color-accent));
+  .booked {
+    --blk: var(--booked-accent, var(--color-accent));
     --blk-top: color-mix(in srgb, var(--blk) 60%, white);
     background: linear-gradient(
       180deg,
@@ -434,13 +434,13 @@ input[type='datetime-local'] {
   }
 
   /* live / current / selected */
-  .block-glow {
+  .booked-glow {
     box-shadow: 0 0 17px color-mix(in srgb, var(--blk) 18%, transparent);
   }
 
   /* already happened, or the quieter half of a split block — the drop in
      opacity IS the label, so nothing has to say "past" in words */
-  .block-dim {
+  .booked-dim {
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--blk) 13%, transparent),
@@ -454,15 +454,15 @@ input[type='datetime-local'] {
   }
 
   /* a block clipped by midnight: dotted on the seamed edge, solid elsewhere */
-  .block-cut-after {
+  .booked-cut-after {
     border-bottom: 2px dotted color-mix(in srgb, var(--blk) 70%, transparent);
   }
-  .block-cut-before {
+  .booked-cut-before {
     border-top: 2px dotted color-mix(in srgb, var(--blk) 70%, transparent);
   }
 
   /* pencilled in on the estate's behalf, not by hand (recovery sleep) */
-  .block-hatch {
+  .booked-hatch {
     background:
       repeating-linear-gradient(
         45deg,
@@ -477,13 +477,13 @@ input[type='datetime-local'] {
     border-left-style: dashed;
   }
 
-  .block-interactive {
+  .booked-interactive {
     transition:
       filter 170ms,
       transform 170ms;
   }
   @media (hover: hover) {
-    .block-interactive:hover {
+    .booked-interactive:hover {
       filter: brightness(1.2);
       transform: translateY(-1px);
     }

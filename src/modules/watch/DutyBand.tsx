@@ -115,17 +115,17 @@ export function DutyBand({
                     <span
                       key={`${clip.event.id}-${top}`}
                       className={[
-                        'block absolute left-px right-px rounded-[3px]',
-                        isRest && 'block-hatch',
+                        'booked absolute left-px right-px rounded-[3px]',
+                        isRest && 'booked-hatch',
                         // the morning half of a night watch is the quieter one
-                        clip.continuesBefore && 'block-cut-before block-dim',
-                        clip.continuesAfter && 'block-cut-after',
-                        isPast && !clip.continuesBefore && 'block-dim',
+                        clip.continuesBefore && 'booked-cut-before booked-dim',
+                        clip.continuesAfter && 'booked-cut-after',
+                        isPast && !clip.continuesBefore && 'booked-dim',
                       ]
                         .filter(Boolean)
                         .join(' ')}
                       style={{
-                        ['--block-accent' as string]: isRest
+                        ['--booked-accent' as string]: isRest
                           ? 'var(--color-ink-dim)'
                           : 'var(--color-w-watch)',
                         top: top * PXH,

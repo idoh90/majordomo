@@ -1086,18 +1086,18 @@ const EventBlock = memo(function EventBlock({
       onClick={(ev) => onClick(col, e, (ev.currentTarget as HTMLElement).offsetTop)}
       onPointerDown={onPointerDown ? (ev) => onPointerDown(e, ev) : undefined}
       className={[
-        'block block-interactive absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left',
-        isRest && 'block-hatch',
+        'booked booked-interactive absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left',
+        isRest && 'booked-hatch',
         // the second half of a block cut by midnight is the quieter one — it
         // already happened, and two equally loud halves read as two events
-        clip.continuesBefore && 'block-cut-before block-dim',
-        clip.continuesAfter && 'block-cut-after',
-        selected && 'block-glow',
+        clip.continuesBefore && 'booked-cut-before booked-dim',
+        clip.continuesAfter && 'booked-cut-after',
+        selected && 'booked-glow',
       ]
         .filter(Boolean)
         .join(' ')}
       style={{
-        ['--block-accent' as string]: meta.color,
+        ['--booked-accent' as string]: meta.color,
         top: topPx + 1,
         height: Math.max(heightPx - 2, 12),
         cursor: onPointerDown ? 'grab' : 'pointer',
