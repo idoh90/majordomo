@@ -578,6 +578,10 @@ export interface VoicePack {
     }
     /** the spending sheet, month by month */
     spend: {
+      /** the pace chip beside the bar: spend-so-far against month-so-far.
+       *  A comparison of two fractions — never a projection of month-end */
+      underPace: string
+      overPace: string
       /** the spend card's affordance onto the sheet's month pager */
       history: string
       /** month pager arrows */

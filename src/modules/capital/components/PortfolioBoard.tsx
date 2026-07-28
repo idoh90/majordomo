@@ -80,17 +80,28 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
         </div>
       ) : (
         <>
-          {/* Below 420 px the five columns need 288 px inside a 274 px card,
-              so Unreal. P/L was cut off and the numbers ran together. Same
-              rows, two lines each. (Whether the WIDE layout should stack or
-              paginate is a design decision, deferred to the revamp.) */}
-          <div className="flex flex-col min-[420px]:hidden">
+          {/* Two lines each below md, the five-column table above it. The
+              split used to sit at 420px while the board itself lived in a
+              carousel page until 768px — so between those widths a five-column
+              table rendered inside a horizontal scroller inside another
+              horizontal scroller. The carousel is gone; the breakpoints agree. */}
+          <div className="flex flex-col md:hidden">
             {rows.map((r) => (
               <button
                 key={r.holding.id}
                 type="button"
                 onClick={() => onEditHolding(r.holding)}
-                className="w-full border-t border-line py-2.5 text-left"
+                className="w-full border-t border-line py-2.5 pl-2.5 text-left"
+                style={
+                  r.priced
+                    ? {
+                        // the day's direction, stated as material rather than
+                        // asking the eye to find a sign among five figures
+                        borderLeft: `3px solid ${r.dayChange >= 0 ? 'var(--color-positive)' : 'var(--color-danger)'}`,
+                        background: `linear-gradient(90deg, color-mix(in srgb, ${r.dayChange >= 0 ? 'var(--color-positive)' : 'var(--color-danger)'} 9%, transparent), transparent 55%)`,
+                      }
+                    : undefined
+                }
               >
                 <span className="flex items-baseline gap-1.5">
                   <span className="text-sm font-semibold text-ink">
@@ -148,7 +159,7 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
             </div>
           </div>
 
-          <div className="hidden overflow-x-auto min-[420px]:block">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[10px] uppercase tracking-[0.12em] text-ink-faint">

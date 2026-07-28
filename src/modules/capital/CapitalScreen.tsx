@@ -147,60 +147,51 @@ export function CapitalScreen() {
         delta={derived.delta}
         hasData={hasData}
         degraded={derived.live.degraded}
+        chart={
+          <NetWorthChart
+            variant="bare"
+            series={derived.series}
+            liveValue={hasHoldings ? derived.live.netWorth : undefined}
+            onHistory={() => setHistoryOpen(true)}
+          />
+        }
       />
 
-      {/* below md the boards swipe horizontally (snap pages); md stacks; lg = 5:4 grid */}
-      <main className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:flex-col md:gap-4 md:overflow-visible md:pb-0 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:items-start">
-        <div className="contents lg:flex lg:flex-col lg:gap-4">
-          <Board>
-            <NetWorthChart
-              series={derived.series}
-              liveValue={hasHoldings ? derived.live.netWorth : undefined}
-              onHistory={() => setHistoryOpen(true)}
-            />
-          </Board>
-          <Board>
-            <Allocation slices={derived.live.slices} liabilities={derived.live.liabilities} />
-          </Board>
-        </div>
-        <div className="contents lg:flex lg:flex-col lg:gap-4">
-          <Board>
-            <SpendCard
-              spent={spent}
-              budget={monthlyBudget}
-              now={new Date(now)}
-              onEdit={() => setSpendOpen(true)}
-              onHistory={() => setSpendOpen(true)}
-            />
-          </Board>
-          <Board>
-            <AccountsPanel
-              accounts={accounts}
-              latest={derived.latest}
-              holdings={holdings}
-              prices={prices}
-              fx={fx}
-              onEdit={openEditAccount}
-              onAdd={openAddAccount}
-            />
-          </Board>
-        </div>
-      </main>
-
-      <RecentEntries items={spendItems} />
-
-      <div className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:flex-col md:gap-4 md:overflow-visible md:pb-0 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:items-start">
-        <Board>
+      {/* Everything below the hero simply stacks until there is room for two
+          columns. It used to swipe horizontally below md — snap pages with no
+          indicator and no affordance, so three of the four boards were
+          invisible unless you happened to drag the one you could see. */}
+      <main className="mt-4 flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Allocation slices={derived.live.slices} liabilities={derived.live.liabilities} />
           <PortfolioBoard
             onAddHolding={openAddHolding}
             onEditHolding={openEditHolding}
             onOpenSettings={() => setSettingsOpen(true)}
           />
-        </Board>
-        <Board>
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          <SpendCard
+            spent={spent}
+            budget={monthlyBudget}
+            now={new Date(now)}
+            onEdit={() => setSpendOpen(true)}
+            onHistory={() => setSpendOpen(true)}
+          />
+          <AccountsPanel
+            accounts={accounts}
+            latest={derived.latest}
+            holdings={holdings}
+            prices={prices}
+            fx={fx}
+            onEdit={openEditAccount}
+            onAdd={openAddAccount}
+          />
           <TenDayPL />
-        </Board>
-      </div>
+        </div>
+      </main>
+
+      <RecentEntries items={spendItems} />
 
       {/* the tab bar's + — two primary verbs, thumb-sized */}
       <Sheet open={addChooserOpen} onClose={() => setAddChooserOpen(false)}>
@@ -262,11 +253,6 @@ export function CapitalScreen() {
       <CapitalSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   )
-}
-
-/** a snap page below md, a plain stacked card at md+ */
-function Board({ children }: { children: React.ReactNode }) {
-  return <div className="w-[86%] flex-none snap-center md:w-auto">{children}</div>
 }
 
 /** the last few one-off spends — the mobile design's RECENT ENTRIES */

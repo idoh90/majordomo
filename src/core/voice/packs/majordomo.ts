@@ -694,6 +694,8 @@ export const majordomoPack: VoicePack = {
       showAll: 'Show all',
     },
     spend: {
+      underPace: 'UNDER PACE',
+      overPace: 'AHEAD OF PACE',
       history: 'History',
       prevMonth: 'Previous month',
       nextMonth: 'Next month',

@@ -14,25 +14,35 @@ interface VaultProps {
   /** currencies awaiting a quote/₪ rate — those accounts read from their last
    *  saved balance, and the Vault says so rather than showing a live-looking total */
   degraded?: string[]
+  /** the trend, hosted in the Vault's own recess */
+  chart?: React.ReactNode
 }
 
-/** The hero: total net worth, dramatic, with the move since last snapshot. */
-export function Vault({ netWorth, assets, liabilities, delta, hasData, degraded = [] }: VaultProps) {
+/**
+ * The hero: total net worth, dramatic, with the move since last snapshot — and
+ * the trend beneath it in a recess.
+ *
+ * The figure and its history used to be two panels that happened to sit near
+ * each other, so the number the Vault shouted and the line the chart drew were
+ * presented as separate facts. They are the same fact at two resolutions.
+ */
+export function Vault({
+  netWorth,
+  assets,
+  liabilities,
+  delta,
+  hasData,
+  degraded = [],
+  chart,
+}: VaultProps) {
   const up = (delta?.absolute ?? 0) >= 0
   const tone = up ? 'text-accent' : 'text-danger'
 
   return (
-    <div className="panel relative overflow-hidden p-6 sm:p-8">
-      {/* faint accent wash so the vault reads as the centerpiece */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent to-transparent opacity-70"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-accent/10 blur-3xl"
-      />
-
+    <div
+      className="panel panel-lit p-6 sm:p-8"
+      style={{ ['--lit-accent' as string]: 'var(--color-w-ledger)' }}
+    >
       <div className="card-title">The Vault · Net worth</div>
 
       {hasData ? (
@@ -61,6 +71,8 @@ export function Vault({ netWorth, assets, liabilities, delta, hasData, degraded 
               {voice.capital.liveDegraded(degraded)}
             </p>
           )}
+
+          {chart && <div className="trough mt-5 px-3 pb-2 pt-3 sm:px-4">{chart}</div>}
         </>
       ) : (
         <p className="mt-3 max-w-sm text-sm text-ink-dim">{voice.capital.vaultEmpty}</p>

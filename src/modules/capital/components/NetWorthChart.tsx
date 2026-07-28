@@ -16,10 +16,14 @@ export function NetWorthChart({
   series,
   liveValue,
   onHistory,
+  /** 'panel' stands alone; 'bare' is hosted by the Vault, which supplies the
+   *  recess it sits in and the panel around that */
+  variant = 'panel',
 }: {
   series: NetWorthPoint[]
   liveValue?: number
   onHistory?: () => void
+  variant?: 'panel' | 'bare'
 }) {
   const [range, setRange] = useState<Range>('all')
 
@@ -66,8 +70,10 @@ export function NetWorthChart({
     return `${d.toLocaleDateString('en-US', { month: 'short' })} '${String(d.getFullYear() % 100).padStart(2, '0')}`
   }
 
+  const Shell = variant === 'bare' ? BareShell : PanelShell
+
   return (
-    <div className="panel p-4">
+    <Shell>
       {/* below md the controls take their own row — 'NET WORTH · TREND' plus a
           4-pill control does not fit 390px and the title wraps a word per line */}
       <div className="mb-3 flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
@@ -177,6 +183,15 @@ export function NetWorthChart({
           Log at least two snapshots to see the trend.
         </p>
       )}
-    </div>
+    </Shell>
   )
+}
+
+function PanelShell({ children }: { children: React.ReactNode }) {
+  return <div className="panel p-4">{children}</div>
+}
+
+/** hosted inside another panel: no chrome of its own, just the content */
+function BareShell({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>
 }

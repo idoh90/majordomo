@@ -21,6 +21,10 @@ export function SpendCard({ spent, budget, now, onEdit, onHistory }: SpendCardPr
   const barColor = over ? 'var(--color-danger)' : 'var(--color-accent)'
   const dayOfMonth = now.getDate()
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  // how far through the month we are, against how far through the budget —
+  // a comparison of two fractions, not a forecast of where either ends up
+  const dayFraction = dayOfMonth / daysInMonth
+  const underPace = hasBudget && spent / budget <= dayFraction
 
   return (
     <div className="panel p-4">
@@ -51,13 +55,46 @@ export function SpendCard({ spent, budget, now, onEdit, onHistory }: SpendCardPr
             </span>
           </div>
 
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-pill bg-panel-3">
-            <div className="h-full rounded-pill transition-[width]" style={{ width: `${pct * 100}%`, background: barColor }} />
+          {/* The pace marker: where the month itself has got to. Comparing the
+              bar against the tick is the whole judgement — no projection is
+              made, and none should be. budgetPace() was retired precisely
+              because scaling fixed costs with the calendar told people they
+              were overspending on the 2nd of every month. */}
+          <div className="relative mt-3 h-2 w-full rounded-pill bg-panel-3">
+            <div className="h-full overflow-hidden rounded-pill">
+              <div
+                className="h-full rounded-pill transition-[width]"
+                style={{ width: `${pct * 100}%`, background: barColor }}
+              />
+            </div>
+            <span
+              aria-hidden
+              className="absolute -top-0.5 h-3 w-px"
+              style={{
+                left: `${dayFraction * 100}%`,
+                background: 'color-mix(in srgb, var(--color-ink) 55%, transparent)',
+              }}
+            />
           </div>
 
           <div className="mt-2 flex items-center justify-between text-xs">
-            <span className="text-ink-faint">
-              day {dayOfMonth}/{daysInMonth}
+            <span className="flex items-center gap-2">
+              <span className="text-ink-faint">
+                day {dayOfMonth}/{daysInMonth}
+              </span>
+              {!over && (
+                <span
+                  className="chip-tint px-2 py-0.5 text-[9.5px] tracking-[0.12em]"
+                  style={{
+                    ['--chip-accent' as string]: underPace
+                      ? 'var(--color-positive)'
+                      : 'var(--color-ember)',
+                    color: underPace ? 'var(--color-positive)' : 'var(--color-ember)',
+                  }}
+                >
+                  {underPace ? voice.capital.spend.underPace : voice.capital.spend.overPace}
+                </span>
+              )}
             </span>
             <span className={over ? 'text-danger' : 'text-ink-dim'}>
               <Amount value={over ? spent - budget : budget - spent} />
