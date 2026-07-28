@@ -603,7 +603,11 @@ async function briefingChecks(browser) {
         headsUpNothing: /exam is .* with nothing on the books/i.test(text),
         // …and the Study briefing's own trailing clause must say the same
         briefingNothing: /and nothing further on the books/i.test(text),
-        briefingAhead: text.match(/and ([^.]+?) more on the books/i)?.[1] ?? null,
+        // the greedy prefix forces the LAST "and": the sentence can contain an
+        // earlier one inside a spelled-out figure ("one and a half hours
+        // behind you and three more on the books"), and anchoring on the first
+        // captured half the clause
+        briefingAhead: text.match(/.*\band ([^.]+?) more on the books/i)?.[1] ?? null,
       }
     })
 

@@ -196,6 +196,16 @@ export function WeekGrid({
      be. Dismiss on a press outside the panel instead, and let the press reach
      whatever it landed on. */
   useEffect(() => {
+    // DESKTOP ONLY. On mobile these same two states drive Sheets, which own
+    // their own dismissal — and a Sheet's surface carries no popover marker,
+    // so this listener treated every tap inside it as "outside".
+    //
+    // What that did on a phone: tapping the scrim ran pointerdown first and
+    // closed the sheet, then the click landed on the column now underneath and
+    // opened it straight back up — the thing could not be dismissed. Tapping a
+    // template was worse: the sheet unmounted on pointerdown, so the click
+    // never reached the button and nothing was ever booked.
+    if (isMobile) return
     if (!popover && !quickAdd) return
     const onDown = (e: PointerEvent) => {
       if ((e.target as HTMLElement | null)?.closest('[data-manor-popover]')) return
@@ -204,7 +214,7 @@ export function WeekGrid({
     }
     window.addEventListener('pointerdown', onDown)
     return () => window.removeEventListener('pointerdown', onDown)
-  }, [popover, quickAdd])
+  }, [popover, quickAdd, isMobile])
 
   const butler = (msg: string, undo = false) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)

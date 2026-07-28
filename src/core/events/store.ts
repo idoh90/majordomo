@@ -116,6 +116,13 @@ if (import.meta.env.DEV) {
     useEventsStore.getState().events.length === 0
   ) {
     const week0 = startOfWeek(new Date())
+    /** today's column index within this week — negative offsets reach backwards */
+    const today = new Date()
+    const todayIdx = Math.round(
+      (new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() -
+        week0.getTime()) /
+        86_400_000,
+    )
     const at = (day: number, hour: number): string => {
       const d = addDays(week0, day)
       const h = Math.floor(hour)
@@ -152,8 +159,18 @@ if (import.meta.env.DEV) {
       ev(2, 17, 18.5, 'training', 'Strength — lower', 'grounds'),
       ev(5, 17, 18.5, 'training', 'Strength — upper', 'grounds'),
       ev(6, 10, 11.5, 'training', 'Intervals', 'grounds'),
-      // literal ids + subj: refs so the study-store demo can pin fulfillment metas
-      { ...ev(2, 15, 16.5, 'study', 'Linear Algebra', 'study'), id: 'demo-study-1', sourceRef: 'subj:demo-subj-math' },
+      // literal ids + subj: refs so the study-store demo can pin fulfillment metas.
+      // demo-study-1 is the one the study demo marks DONE, so it has to have
+      // actually happened: yesterday, not a fixed weekday. Pinned to day 2 it
+      // was a future block reported as done whenever the demo was opened early
+      // in the week, which let one session read as both "behind you" and "still
+      // on the books". On the week's first day this lands in the previous week
+      // and the ring reads nothing read yet — which is the truth.
+      {
+        ...ev(todayIdx - 1, 15, 16.5, 'study', 'Linear Algebra', 'study'),
+        id: 'demo-study-1',
+        sourceRef: 'subj:demo-subj-math',
+      },
       { ...ev(2, 20, 22, 'study', 'Physics', 'study'), id: 'demo-study-2', sourceRef: 'subj:demo-subj-physics' },
       { ...ev(6, 16, 18, 'study', 'Academic Writing', 'study'), id: 'demo-study-3', sourceRef: 'subj:demo-subj-writing' },
       ev(3, 0, 0, 'marker', 'Payday', 'capital', true),
