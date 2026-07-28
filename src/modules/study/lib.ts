@@ -106,6 +106,32 @@ export function studyStats(
 }
 
 /** past sessions still marked planned — the AWAITING REPORT queue (any week) */
+/**
+ * Fulfilled hours for a subject (or every subject) inside an arbitrary window.
+ *
+ * studyStats answers the same question but only ever for the week containing
+ * `now`, which is right for the rings and useless for anything that wants to
+ * look back. Composed from the same primitives it uses, so the two can never
+ * disagree about what a session was worth.
+ */
+export function fulfilledHoursBetween(
+  events: CalendarEvent[],
+  sessions: Record<string, SessionMeta>,
+  start: Date,
+  end: Date,
+  subjectId?: string,
+): number {
+  const s = start.getTime()
+  const e = end.getTime()
+  return sessionsOf(events)
+    .filter((ev) => {
+      if (subjectId && subjectOfEvent(ev) !== subjectId) return false
+      const t = new Date(ev.start).getTime()
+      return t >= s && t < e
+    })
+    .reduce((t, ev) => t + fulfilledHours(ev, metaOf(sessions, ev)), 0)
+}
+
 export function awaitingReport(
   events: CalendarEvent[],
   sessions: Record<string, SessionMeta>,

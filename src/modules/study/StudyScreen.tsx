@@ -78,7 +78,15 @@ export function StudyScreen() {
     <div className="mt-4 flex flex-col gap-4">
       {active.length > 0 && <StudyBriefing />}
 
-      <RingsPanel subjects={active} stats={stats} onEnrol={() => setSheet('enrol')} />
+      <RingsPanel
+        subjects={active}
+        stats={stats}
+        onEnrol={() => setSheet('enrol')}
+        selectedId={sel?.id ?? null}
+        onSelect={setSelSubjId}
+      />
+
+      <SubjectLedger subjects={active} stats={stats} />
 
       <ExamsPanel events={activeEvents} sessions={sessions} subjects={subjects} now={now} />
 
@@ -416,14 +424,21 @@ function RingsPanel({
   subjects,
   stats,
   onEnrol,
+  selectedId,
+  onSelect,
 }: {
   subjects: Subject[]
   stats: ReturnType<typeof studyStats>
   onEnrol: () => void
+  /** the subject the Dossier below is showing */
+  selectedId: string | null
+  onSelect: (id: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const shown = expanded ? subjects : subjects.slice(0, MAX_RINGS)
   const hidden = subjects.length - shown.length
+  const sel = subjects.find((s) => s.id === selectedId) ?? null
+  const selWeek = sel ? stats.perSubject[sel.id] : undefined
 
   return (
     <section className="panel px-5 py-5 sm:px-6">
@@ -438,9 +453,30 @@ function RingsPanel({
           })}
         </span>
       </div>
-      <div className="mt-4 flex flex-wrap items-stretch gap-x-6 gap-y-4">
+      {/* the rings stand in a recess, with the selected subject read off the
+          stage rather than only out of the Dossier far below */}
+      <div className="trough relative mt-4 overflow-hidden px-3 pb-4 pt-3">
+        {sel && (
+          <div className="pointer-events-none static z-[2] mb-2 flex sm:absolute sm:inset-x-3 sm:top-3 sm:mb-0">
+            <span className="subcard max-w-full px-2.5 py-1.5 text-[12px] leading-snug text-ink-dim">
+              <span className="text-ink">{sel.name}</span>{' '}
+              {voice.study.subjectLedger.row({
+                fulfilled: selWeek?.fulfilledH ?? 0,
+                booked: selWeek?.bookedH ?? 0,
+                goal: sel.goalH,
+              })}
+            </span>
+          </div>
+        )}
+        <div className="relative flex flex-wrap items-stretch gap-x-6 gap-y-4 sm:pt-8">
         {shown.map((s) => (
-          <SubjectRing key={s.id} subject={s} week={stats.perSubject[s.id]} />
+          <SubjectRing
+            key={s.id}
+            subject={s}
+            week={stats.perSubject[s.id]}
+            selected={s.id === selectedId}
+            onSelect={() => onSelect(s.id)}
+          />
         ))}
         {hidden > 0 && (
           <button
@@ -459,18 +495,40 @@ function RingsPanel({
           <span className="text-[22px] font-normal leading-none">+</span>
           {voice.study.enrol}
         </button>
+        </div>
       </div>
     </section>
   )
 }
 
-function SubjectRing({ subject, week }: { subject: Subject; week?: { fulfilledH: number } }) {
+function SubjectRing({
+  subject,
+  week,
+  selected,
+  onSelect,
+}: {
+  subject: Subject
+  week?: { fulfilledH: number }
+  selected: boolean
+  onSelect: () => void
+}) {
   const fh = week?.fulfilledH ?? 0
   const goal = subject.goalH
   const frac = goal > 0 ? Math.min(1, fh / goal) : 0
   const noGoal = goal <= 0
   return (
-    <div className="flex w-[130px] flex-col items-center gap-2">
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className="flex w-[130px] flex-col items-center gap-2 rounded-[12px] py-1 transition-colors"
+      style={{
+        background: selected
+          ? 'color-mix(in srgb, var(--color-w-study) 10%, transparent)'
+          : 'transparent',
+        outline: selected ? '1px solid color-mix(in srgb, var(--color-w-study) 55%, transparent)' : 'none',
+      }}
+    >
       <div className="relative h-[118px] w-[118px]">
         <svg width="118" height="118" viewBox="0 0 118 118" aria-hidden>
           <circle cx="59" cy="59" r="48" fill="none" stroke="var(--color-panel-2)" strokeWidth="9" />
@@ -497,10 +555,104 @@ function SubjectRing({ subject, week }: { subject: Subject; week?: { fulfilledH:
           </div>
         </div>
       </div>
-      <div className="text-center font-display text-[10.5px] font-semibold tracking-[0.14em] text-ink-dim">
+      <div
+        className="text-center font-display text-[10.5px] font-semibold tracking-[0.14em]"
+        style={{ color: selected ? 'var(--color-w-study)' : 'var(--color-ink-dim)' }}
+      >
         {subject.name.toUpperCase()}
       </div>
-    </div>
+    </button>
+  )
+}
+
+/**
+ * THE SUBJECT LEDGER — one track per subject, three states deep.
+ *
+ * The rings answer "how much have I read" one subject at a time and say
+ * nothing about what is still on the books. Here the full width IS the weekly
+ * goal, the hatched bar behind is what is booked against it, and the solid
+ * glowing bar in front is what has actually been filed — so "two hours filed
+ * of three and a half booked against a goal of four" is one glance instead of
+ * three numbers gathered from three places.
+ */
+function SubjectLedger({
+  subjects,
+  stats,
+}: {
+  subjects: Subject[]
+  stats: ReturnType<typeof studyStats>
+}) {
+  return (
+    <section className="panel px-5 py-5 sm:px-6">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="card-title">{voice.study.subjectLedger.title}</h2>
+        <span className="ml-auto flex items-center gap-3 text-[10px] tracking-[0.12em] text-ink-faint">
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="h-2 w-2 rounded-[2px]"
+              style={{ background: 'var(--color-w-study)' }}
+            />
+            {voice.study.subjectLedger.fulfilledTag}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="h-2 w-2 rounded-[2px]"
+              style={{
+                background:
+                  'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-w-study) 45%, transparent) 0 2px, transparent 2px 4px)',
+              }}
+            />
+            {voice.study.subjectLedger.bookedTag}
+          </span>
+        </span>
+      </div>
+
+      {subjects.length === 0 ? (
+        <p className="mt-3 text-sm text-ink-dim">{voice.study.subjectLedger.empty}</p>
+      ) : (
+        <ul className="mt-4 flex flex-col gap-3.5">
+          {subjects.map((s) => {
+            const w = stats.perSubject[s.id]
+            const filed = w?.fulfilledH ?? 0
+            const booked = w?.bookedH ?? 0
+            const goal = s.goalH
+            // the track is the goal; anything beyond it clamps rather than
+            // rescaling, so subjects stay comparable row to row
+            const pct = (h: number) => (goal > 0 ? Math.min(100, (h / goal) * 100) : 0)
+            return (
+              <li key={s.id}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="truncate text-[12.5px] text-ink">{s.name}</span>
+                  <span className="flex-none text-[11px] text-ink-dim [font-variant-numeric:tabular-nums]">
+                    {goal > 0
+                      ? voice.study.subjectLedger.row({ fulfilled: filed, booked, goal })
+                      : voice.study.subjectLedger.noGoal}
+                  </span>
+                </div>
+                <div className="relative mt-1.5 h-2.5 overflow-hidden rounded-pill bg-panel-2">
+                  <span
+                    className="absolute inset-y-0 left-0 rounded-pill"
+                    style={{
+                      width: `${pct(booked)}%`,
+                      background:
+                        'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-w-study) 34%, transparent) 0 4px, transparent 4px 8px)',
+                    }}
+                  />
+                  <span
+                    className="absolute inset-y-0 left-0 rounded-pill"
+                    style={{
+                      width: `${pct(filed)}%`,
+                      background: 'var(--color-w-study)',
+                      boxShadow: '0 0 10px var(--glow-study)',
+                    }}
+                  />
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }
 

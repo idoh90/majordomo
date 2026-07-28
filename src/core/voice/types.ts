@@ -515,6 +515,18 @@ export interface VoicePack {
     briefingExam: (v: { subject: string; days: number; hours: number }) => string
     briefingHomework: (n: number) => string
     briefingWeek: (v: { fulfilled: number; goal: number }) => string
+    /** THE SUBJECT LEDGER — fulfilled against booked against the goal */
+    subjectLedger: {
+      title: string
+      fulfilledTag: string
+      bookedTag: string
+      goalTag: string
+      /** one subject's week, stated so the three figures cannot be confused */
+      row: (v: { fulfilled: number; booked: number; goal: number }) => string
+      /** a subject carrying no weekly goal has no track to fill */
+      noGoal: string
+      empty: string
+    }
     briefingPanel: {
       chips: (v: StudyBriefingFacts) => BriefingChip[]
       headline: (v: StudyBriefingFacts) => string

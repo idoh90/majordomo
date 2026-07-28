@@ -425,6 +425,16 @@ export const majordomoPack: VoicePack = {
       goal > 0
         ? `${fulfilled.toFixed(1)} of ${goal.toFixed(1)} hours read this week, sir.`
         : `${fulfilled.toFixed(1)} hours read this week, sir.`,
+    subjectLedger: {
+      title: 'The subject ledger',
+      fulfilledTag: 'filed',
+      bookedTag: 'booked',
+      goalTag: 'goal',
+      row: ({ fulfilled, booked, goal }) =>
+        `${fulfilled.toFixed(1)} filed of ${booked.toFixed(1)} booked against ${goal.toFixed(1)}`,
+      noGoal: 'no goal set',
+      empty: 'No subjects enrolled, sir.',
+    },
     briefingPanel: {
       chips: ({ fulfilledH, bookedH, exam, awaiting }) => [
         { label: 'READ', value: `${fulfilledH.toFixed(1)} / ${bookedH.toFixed(1)} h` },
