@@ -1,0 +1,71 @@
+# Keep the registry awake.
+#
+# Supabase pauses a free-tier project after ~7 days without activity, and a
+# paused project's API hostname STOPS RESOLVING ALTOGETHER. That failure is
+# indistinguishable from "the project was deleted" — it cost an evening once
+# already, diagnosed as a missing backend when the data was sitting safely
+# behind a sleeping hostname.
+#
+# It is a particularly bad fit for this app: "offline is the point" means going
+# a week without opening it is a SUPPORTED use, not neglect. The very trip the
+# app is designed for is the one that puts the backend to sleep.
+#
+# So: one real database query a day. It must reach Postgres, not just the
+# gateway — a 401 at the edge may never touch the database and so may not count
+# as activity. `select=id&limit=1` on an RLS-guarded table returns [] for an
+# anonymous caller and is the cheapest thing that genuinely runs a query.
+#
+# CAVEAT worth knowing: GitHub disables scheduled workflows in repos with no
+# commits for 60 days. An actively-developed repo is fine; a dormant one could
+# still let the project slip under. If this repo ever goes quiet for months,
+# check the project rather than assuming this has it covered.
+
+name: Keep Supabase awake
+
+on:
+  schedule:
+    # 06:00 UTC daily. Daily rather than weekly on purpose — the job is free and
+    # takes seconds, and the margin matters more than the saving.
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the database
+        env:
+          # The project URL is public (it ships in the browser bundle). The anon
+          # key is public BY DESIGN too — row-level security is the guard, not
+          # secrecy — but it lives in a repo secret anyway so rotating it is one
+          # dashboard edit rather than a commit.
+          SUPABASE_URL: https://xigbgvuakguqmfulfaqe.supabase.co
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::error::SUPABASE_ANON_KEY is not set. Add it under Settings → Secrets and variables → Actions."
+            echo "Without it this job cannot run a query, and the project will pause."
+            exit 1
+          fi
+
+          status=$(curl -sS -o /tmp/body.txt -w '%{http_code}' \
+            --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            "${SUPABASE_URL}/rest/v1/records?select=id&limit=1")
+
+          echo "HTTP ${status}"
+          cat /tmp/body.txt
+
+          # 200 is the healthy answer: RLS returns [] to an anonymous caller,
+          # and the query still ran. Anything else means the registry is not
+          # answering the way it should — fail LOUDLY, because a keep-alive that
+          # quietly stops working is worse than not having one at all.
+          if [ "${status}" != "200" ]; then
+            echo "::error::The registry answered ${status}, not 200. It may be paused, or the key may be wrong."
+            exit 1
+          fi
+
+          echo "The registry is awake."

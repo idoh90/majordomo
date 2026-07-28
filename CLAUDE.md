@@ -72,11 +72,26 @@ project `ido-s-projects8/majordomo` (**note: two different accounts** — GitHub
 idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushing
 `main` auto-deploys to production; `vercel deploy --prod` still ships from disk.
 
-- **Offline is the point.** No backend, no accounts — the estate lives in
-  localStorage, so the shell being fetchable is the only thing between the app
-  and a flight. `vite-plugin-pwa` precaches everything (`autoUpdate`); quotes/FX
-  are `NetworkFirst` with a cached fallback. **Test offline by killing the server
-  and reloading** — not by trusting the config.
+- **Offline is the point.** The estate lives in localStorage and the app boots
+  from it **synchronously** — no async gate, no spinner, no session check between
+  the user and their own records — so the shell being fetchable is the only thing
+  between the app and a flight. Sign-in is a **door, never a wall**: opened from
+  the header, never imposed. `vite-plugin-pwa` precaches everything
+  (`autoUpdate`); quotes/FX are `NetworkFirst` with a cached fallback. **Test
+  offline by killing the server and reloading** — not by trusting the config.
+- **The registry (accounts) is a PAUSING free-tier Supabase project.** Project
+  `majordomo`, ref `xigbgvuakguqmfulfaqe`; schema lives in `supabase/migrations/`
+  (nothing runs it automatically — paste it into the SQL editor). Supabase pauses
+  a free project after ~7 days idle, and **a paused project's API hostname stops
+  resolving entirely** — `DNS name does not exist`, which is indistinguishable
+  from a deleted project and has already been misdiagnosed as one, at the cost of
+  an evening. **If sign-in fails with "server cannot be found", open the Supabase
+  dashboard before believing anything is gone**: the data is intact and the
+  project resumes in ~2 minutes. `.github/workflows/keep-supabase-awake.yml` runs
+  one real query a day to stop it happening (needs the `SUPABASE_ANON_KEY` repo
+  secret; it fails loudly rather than silently if that is unset). The anon key is
+  **public by design** — it ships in the bundle and RLS is the only guard, so
+  never put `service_role` anywhere near the client.
 - **`vercel.json` rationale** (the schema rejects `comment` keys, so it lives here):
   hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
   cached** or the app can't learn it's stale; `noindex` + frame/sniff headers
