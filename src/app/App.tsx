@@ -8,6 +8,8 @@ import { storageAvailable } from '../core/storage'
 import { useTrainingUi } from '../modules/training/uiStore'
 import { CONSOLES } from './consoles'
 import { ManorScreen } from './manor/ManorScreen'
+import { House } from './house/HouseRail'
+import type { WingId } from './house/house'
 import { SettingsMenu } from './SettingsMenu'
 import { TabBar } from './TabBar'
 
@@ -58,7 +60,9 @@ export default function App() {
           WebkitBackdropFilter: 'blur(10px)',
         }}
       />
-      <div className="mx-auto min-h-dvh w-full max-w-[1280px] px-4 pb-[calc(88px+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:pb-10 lg:px-8">
+      {/* wider at xl so the House rail ADDS a column rather than stealing 252px
+          from the wing it sits beside */}
+      <div className="mx-auto min-h-dvh w-full max-w-[1280px] px-4 pb-[calc(88px+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:pb-10 lg:px-8 xl:max-w-[1560px]">
         {!storageOk && (
           <div className="mt-3 rounded-xl border border-danger/40 bg-danger/10 px-4 py-2.5 text-sm text-ink">
             {voice.storageWarning}
@@ -76,12 +80,26 @@ export default function App() {
           }
         />
 
-        {active ? <active.Screen /> : <ManorScreen />}
+        {/* The House rides beside every wing at xl and folds into the flow
+            below it. min-w-0 on the screen column is load-bearing: without it
+            any wing containing its own horizontal scroller sets the flex
+            minimum and pushes the rail off the page. */}
+        <House wing={wingOf(view)} screen={active ? <active.Screen /> : <ManorScreen />} />
       </div>
 
       <TabBar view={view} onNav={setView} />
     </>
   )
+}
+
+/** the shell's view id is already a wing id for the four consoles; the menu
+ *  view is the Manor */
+function wingOf(view: string): WingId {
+  return view === 'watch' || view === 'training' || view === 'study' || view === 'capital'
+    ? view === 'training'
+      ? 'grounds'
+      : (view as WingId)
+    : 'manor'
 }
 
 /* ---------------------------------------------------------------- header */

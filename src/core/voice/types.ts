@@ -92,7 +92,45 @@ export interface CapitalBriefingFacts {
   } | null
 }
 
+export interface HouseRowFacts {
+  figure: string
+  delta: number | null
+}
+
 export interface VoicePack {
+  /** THE HOUSE — the cross-wing rail every wing carries */
+  house: {
+    title: string
+    /** load-bearing: it licenses each row to show its OWN headline metric
+     *  rather than one normalised number nobody would recognise */
+    subtitle: string
+    /** what each row's figure means, in that wing's own terms */
+    rowLabel: Record<'manor' | 'watch' | 'grounds' | 'study' | 'capital', string>
+    /** the wing's own signal card, shown only on that wing */
+    signal: {
+      dutyLoad: string
+      readiness: string
+      examRunway: string
+      burnRate: string
+      /** each signal's one composed line */
+      dutyLoadLine: (v: { thisWeek: number; avg: number }) => string
+      readinessLine: (v: { score: number; band: string; limiter: string | null }) => string
+      examRunwayLine: (v: { subject: string; days: number; bookedH: number }) => string
+      burnRateLine: (v: { perDay: string; prevPerDay: string | null }) => string
+      /** nothing to draw yet */
+      idle: string
+    }
+    pattern: {
+      title: string
+      lines: {
+        trainAfterWatch: (v: { title: string; mins: number; before: boolean }) => string
+        studyUntouched: (v: { subject: string }) => string
+        none: string
+      }
+      /** the single remedy the card offers */
+      action: string
+    }
+  }
   /** the briefing strip every wing renders */
   briefing: {
     /** scope label prefix: "THE BRIEFING · THE WATCH" */

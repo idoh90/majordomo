@@ -55,6 +55,69 @@ function untilLabel(h: number, m: number): string {
 
 /** The Majordomo — the commercial voice. Dry, composed, quietly satisfied. */
 export const majordomoPack: VoicePack = {
+  house: {
+    title: 'THE HOUSE',
+    subtitle: 'as each wing reports it',
+    rowLabel: {
+      manor: 'booked of 168',
+      watch: 'stood',
+      grounds: 'workouts',
+      study: 'read',
+      capital: 'budget left',
+    },
+    signal: {
+      dutyLoad: 'DUTY LOAD · 8 WEEKS',
+      readiness: 'READINESS',
+      examRunway: 'EXAM RUNWAY',
+      burnRate: 'BURN RATE',
+      dutyLoadLine: ({ thisWeek, avg }) => {
+        // a first counted week has a figure but nothing to measure it against;
+        // saying "nothing to draw on" beside a drawn line is a contradiction
+        if (avg <= 0) {
+          return thisWeek > 0
+            ? 'The first week the estate has counted, sir — no usual to compare it against yet.'
+            : 'No duty on the books, sir.'
+        }
+        const d = thisWeek - avg
+        if (Math.abs(d) < 1) return 'A week much like your usual, sir.'
+        return d > 0
+          ? `${hoursWord(d)} ${plural(Math.round(d), 'hour', 'hours')} heavier than your usual week, sir.`
+          : `${sentence(hoursWord(-d))} ${plural(Math.round(-d), 'hour', 'hours')} lighter than your usual week, sir.`
+      },
+      readinessLine: ({ band, limiter }) => {
+        if (!limiter) return 'Nothing is sore, sir. The body is yours to spend.'
+        const state =
+          { fresh: 'barely marked', ready: 'holding up', worn: 'worn', spent: 'spent' }[band] ??
+          'worn'
+        return `${limiter} costs you the most, sir — the body reads ${state}.`
+      },
+      examRunwayLine: ({ subject, days, bookedH }) => {
+        const when = days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${lower(days)} days`
+        return bookedH > 0
+          ? `${subject} ${when}, with ${hoursWord(bookedH)} ${plural(Math.round(bookedH), 'hour', 'hours')} still booked before it.`
+          : `${subject} ${when}, with nothing booked before it, sir.`
+      },
+      burnRateLine: ({ perDay, prevPerDay }) =>
+        prevPerDay
+          ? `${perDay} a day, against ${prevPerDay} a day last month.`
+          : `${perDay} a day so far this month.`,
+      idle: 'Nothing to draw on yet, sir.',
+    },
+    pattern: {
+      title: 'THE PATTERN',
+      lines: {
+        trainAfterWatch: ({ title, mins, before }) => {
+          const h = Math.round((mins / 60) * 10) / 10
+          return before
+            ? `${title} finishes ${hoursWord(h)} ${plural(Math.round(h), 'hour', 'hours')} before a watch begins, sir. You would stand it already spent.`
+            : `${title} begins ${hoursWord(h)} ${plural(Math.round(h), 'hour', 'hours')} after a watch ends, sir. You would train already worn.`
+        },
+        studyUntouched: ({ subject }) => `${subject} has a goal this week and nothing booked against it, sir.`,
+        none: 'The wings are not treading on one another this week, sir.',
+      },
+      action: 'MOVE IT FOR ME →',
+    },
+  },
   briefing: {
     label: 'THE BRIEFING',
     expand: 'Read the rest of the briefing',
