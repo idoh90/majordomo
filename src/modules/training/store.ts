@@ -5,6 +5,7 @@ import { DEFAULT_PROFILE, type Profile } from './lib/nutrition'
 import { DEFAULT_SKIN } from '../../core/ui/skins'
 import { makeId } from '../../core/ids'
 import { adoptLegacyKey } from '../../core/storage'
+import { noteDeleted, noteReplaced } from '../../core/sync/intent'
 
 // re-export so training components keep importing makeId from the store barrel
 export { makeId }
@@ -39,7 +40,7 @@ const byDateDesc = (a: Workout, b: Workout) => b.performedAt.localeCompare(a.per
 
 export const useWorkoutStore = create<WorkoutState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       workouts: [],
       weeklyGoal: DEFAULT_WEEKLY_GOAL,
       profile: DEFAULT_PROFILE,
@@ -51,9 +52,27 @@ export const useWorkoutStore = create<WorkoutState>()(
             .map((w) => (w.id === id ? { ...w, ...patch, id } : w))
             .sort(byDateDesc),
         })),
-      deleteWorkout: (id) => set((s) => ({ workouts: s.workouts.filter((w) => w.id !== id) })),
-      clearAll: () => set({ workouts: [] }),
-      replaceAll: (workouts) => set({ workouts: [...workouts].sort(byDateDesc) }),
+      deleteWorkout: (id) => {
+        set((s) => ({ workouts: s.workouts.filter((w) => w.id !== id) }))
+        noteDeleted('grounds', 'workout', [id])
+      },
+      clearAll: () => {
+        // signed in, this empties the log on every device — the confirm copy
+        // in the gear menu has to stop promising "on this device"
+        const ids = get().workouts.map((w) => w.id)
+        set({ workouts: [] })
+        noteDeleted('grounds', 'workout', ids)
+      },
+      replaceAll: (workouts) => {
+        const before = get().workouts.map((w) => w.id)
+        set({ workouts: [...workouts].sort(byDateDesc) })
+        noteReplaced(
+          'grounds',
+          'workout',
+          before,
+          workouts.map((w) => w.id),
+        )
+      },
       setWeeklyGoal: (goal) =>
         set({ weeklyGoal: Math.max(0, Math.min(MAX_WEEKLY_GOAL, Math.round(goal))) }),
       setProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),

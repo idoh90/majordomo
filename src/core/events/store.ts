@@ -2,7 +2,13 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { makeId } from '../ids'
 import { addDays, startOfWeek } from '../dates'
+import { noteDeleted, noteReplaced } from '../sync/intent'
+import { isProjection } from '../sync/projection'
 import type { CalendarEvent } from './types'
+
+/** projections are never carried, so their removal is never a deletion */
+const carried = (events: CalendarEvent[]): string[] =>
+  events.filter((e) => !isProjection(e)).map((e) => e.id)
 
 /**
  * The shared events store — every wing writes through these actions, the
@@ -39,11 +45,14 @@ const touched = (changed: string[], id: string) =>
 
 export const useEventsStore = create<EventsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       events: [],
       sandbox: null,
       // mutations route to the sandbox draft while a rehearsal is active —
-      // committed events are structurally unreachable until applySandbox
+      // committed events are structurally unreachable until applySandbox.
+      // That is also why the registry needs no sandbox guard when READING: a
+      // rehearsal never touches `events`, so the engine sees nothing to carry
+      // until it is applied. Do not "fix" that by syncing `sandbox`.
       addEvent: (e) => {
         const full: CalendarEvent = {
           ...e,
@@ -79,22 +88,45 @@ export const useEventsStore = create<EventsState>()(
               }
             : { events: apply(s.events) }
         }),
-      deleteEvent: (id) =>
-        set((s) =>
-          s.sandbox
-            ? {
-                sandbox: {
-                  events: s.sandbox.events.filter((e) => e.id !== id),
-                  changed: touched(s.sandbox.changed, id),
-                },
-              }
-            : { events: s.events.filter((e) => e.id !== id) },
-        ),
-      replaceAll: (events) => set({ events: [...events].sort(byStartAsc) }),
+      deleteEvent: (id) => {
+        const s = get()
+        if (s.sandbox) {
+          // a rehearsal is not a deletion until it is applied
+          set({
+            sandbox: {
+              events: s.sandbox.events.filter((e) => e.id !== id),
+              changed: touched(s.sandbox.changed, id),
+            },
+          })
+          return
+        }
+        const gone = s.events.find((e) => e.id === id)
+        set({ events: s.events.filter((e) => e.id !== id) })
+        // projections are redrawn locally and never carried, so their heal
+        // passes must not be able to bury a cloud record
+        if (gone && !isProjection(gone)) noteDeleted('manor', 'event', [id])
+      },
+      replaceAll: (events) => {
+        const before = carried(get().events)
+        set({ events: [...events].sort(byStartAsc) })
+        noteReplaced('manor', 'event', before, carried(events))
+      },
       enterSandbox: () =>
         set((s) => ({ sandbox: { events: s.events.map((e) => ({ ...e })), changed: [] } })),
-      applySandbox: () =>
-        set((s) => (s.sandbox ? { events: s.sandbox.events, sandbox: null } : {})),
+      applySandbox: () => {
+        const s = get()
+        if (!s.sandbox) return
+        const before = new Set(carried(s.events))
+        const next = s.sandbox.events
+        const survives = new Set(next.map((e) => e.id))
+        // only the ids the rehearsal actually touched can have been deleted by
+        // it — the store already tracks them, so this needs no extra bookkeeping
+        const removed = s.sandbox.changed.filter((id) => before.has(id) && !survives.has(id))
+        set({ events: next, sandbox: null })
+        noteDeleted('manor', 'event', removed)
+      },
+      // deliberately records NOTHING: discarding a rehearsal must leave the
+      // committed estate exactly as it was, here and in the cloud
       discardSandbox: () => set({ sandbox: null }),
     }),
     {

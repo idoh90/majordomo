@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { makeId } from '../../core/ids'
 import { localDayKey } from '../../core/dates'
 import { voice } from '../../core/voice'
+import { noteDeleted } from '../../core/sync/intent'
 import { effectiveHwDay, examRef, hwRef, syncMarker } from './lib'
 import type { Exam, Fulfillment, Homework, SessionMeta, Subject, SyllabusTopic } from './types'
 
@@ -84,6 +85,25 @@ export const useStudyStore = create<StudyState>()(
         for (const x of get().exams.filter((x) => x.subjectId === id)) {
           syncMarker(examRef(x.id), null, '')
         }
+        // the cascade has to be declared in full: a subject's topics, homework
+        // and exams go with it, and each is its own record
+        const before = get()
+        noteDeleted('study', 'subject', [id])
+        noteDeleted(
+          'study',
+          'topic',
+          before.topics.filter((t) => t.subjectId === id).map((t) => t.id),
+        )
+        noteDeleted(
+          'study',
+          'homework',
+          before.homework.filter((h) => h.subjectId === id).map((h) => h.id),
+        )
+        noteDeleted(
+          'study',
+          'exam',
+          before.exams.filter((x) => x.subjectId === id).map((x) => x.id),
+        )
         set((s) => ({
           subjects: s.subjects.filter((x) => x.id !== id),
           topics: s.topics.filter((t) => t.subjectId !== id),
@@ -109,7 +129,10 @@ export const useStudyStore = create<StudyState>()(
         set((s) => ({
           topics: s.topics.map((t) => (t.id === id ? { ...t, covered: !t.covered } : t)),
         })),
-      deleteTopic: (id) => set((s) => ({ topics: s.topics.filter((t) => t.id !== id) })),
+      deleteTopic: (id) => {
+        set((s) => ({ topics: s.topics.filter((t) => t.id !== id) }))
+        noteDeleted('study', 'topic', [id])
+      },
 
       addHomework: (subjectId, title, due) => {
         const hw: Homework = {
@@ -135,6 +158,7 @@ export const useStudyStore = create<StudyState>()(
       deleteHomework: (id) => {
         syncMarker(hwRef(id), null, '')
         set((s) => ({ homework: s.homework.filter((h) => h.id !== id) }))
+        noteDeleted('study', 'homework', [id])
       },
 
       addExam: (subjectId, title, on) => {
@@ -156,6 +180,7 @@ export const useStudyStore = create<StudyState>()(
       deleteExam: (id) => {
         syncMarker(examRef(id), null, '')
         set((s) => ({ exams: s.exams.filter((x) => x.id !== id) }))
+        noteDeleted('study', 'exam', [id])
       },
 
       setSessionMeta: (eventId, meta) =>
@@ -167,6 +192,15 @@ export const useStudyStore = create<StudyState>()(
             [eventId]: { ...(s.sessions[eventId] ?? {}), fulfillment, doneH },
           },
         })),
+      /**
+       * MUST NEVER record a deletion. This is local garbage collection, not
+       * intent: once records arrive from other devices, a session's metadata
+       * can land before the event it belongs to, and burying it here would
+       * destroy real fulfillment ("done, 1h") that nobody asked to delete.
+       * Orphans are provably inert — metaOf only ever looks up by event id, and
+       * studyStats walks events rather than sessions — so they cost a few bytes
+       * and nothing else. Deleting the failure mode beats guarding it.
+       */
       pruneSessions: (liveEventIds) =>
         set((s) => {
           const live = new Set(liveEventIds)

@@ -14,6 +14,7 @@ import App from './app/App'
 import { applySkin } from './core/ui/skins'
 import { voice } from './core/voice'
 import { initAuth } from './core/auth/store'
+import { initSync } from './app/sync/init'
 import { useShellStore } from './core/store/shell'
 
 // Founder-only assets (the seven original skins + their typefaces) load
@@ -33,6 +34,9 @@ document.title = voice.appName
 // as it always has, and the session — like the estate it will later carry —
 // simply arrives afterwards.
 initAuth()
+// takes the estate as its baseline and watches for edits. Records nothing as
+// deleted, ever — only the actions that delete may say that (core/sync/intent).
+initSync()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

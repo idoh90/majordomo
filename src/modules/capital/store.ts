@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { makeId } from '../../core/ids'
 import { adoptLegacyKey } from '../../core/storage'
+import { noteDeleted, noteReplaced } from '../../core/sync/intent'
 import { localDayKey } from '../../core/dates'
 import type { Account, Holding, Quote, RecurringExpense, Snapshot, SpendItem } from './types'
 import { monthKey } from './lib/budget'
@@ -96,7 +97,19 @@ export const useCapitalStore = create<CapitalState>()(
         set((s) => ({
           accounts: s.accounts.map((a) => (a.id === id ? { ...a, ...patch, id } : a)),
         })),
-      deleteAccount: (id) =>
+      deleteAccount: (id) => {
+        // the cascade: the account and its holdings. Every snapshot's balances
+        // map is also rewritten below — those are UPDATES, and the engine
+        // catches them by itself, which is exactly why upserts stay inferred
+        // and only deletions are declared.
+        noteDeleted('ledger', 'account', [id])
+        noteDeleted(
+          'ledger',
+          'holding',
+          get()
+            .holdings.filter((h) => h.accountId === id)
+            .map((h) => h.id),
+        )
         set((s) => ({
           accounts: s.accounts.filter((a) => a.id !== id),
           holdings: s.holdings.filter((h) => h.accountId !== id),
@@ -106,30 +119,60 @@ export const useCapitalStore = create<CapitalState>()(
             const { [id]: _drop, ...rest } = snap.balances
             return { ...snap, balances: rest }
           }),
-        })),
+        }))
+      },
       addHolding: (h) => set((s) => ({ holdings: [...s.holdings, { ...h, id: makeId() }] })),
       updateHolding: (id, patch) =>
         set((s) => ({
           holdings: s.holdings.map((h) => (h.id === id ? { ...h, ...patch, id } : h)),
         })),
-      deleteHolding: (id) => set((s) => ({ holdings: s.holdings.filter((h) => h.id !== id) })),
+      deleteHolding: (id) => {
+        set((s) => ({ holdings: s.holdings.filter((h) => h.id !== id) }))
+        noteDeleted('ledger', 'holding', [id])
+      },
       saveSnapshot: (snapshot) =>
         set((s) => {
           const rest = s.snapshots.filter((x) => x.id !== snapshot.id)
           return { snapshots: [...rest, snapshot].sort(byDateAsc) }
         }),
-      deleteSnapshot: (id) => set((s) => ({ snapshots: s.snapshots.filter((x) => x.id !== id) })),
+      deleteSnapshot: (id) => {
+        set((s) => ({ snapshots: s.snapshots.filter((x) => x.id !== id) }))
+        noteDeleted('ledger', 'snapshot', [id])
+      },
       setMonthlyBudget: (amount) => set({ monthlyBudget: Math.max(0, Math.round(amount)) }),
       setSpend: (month, amount) =>
         set((s) => ({ spends: { ...s.spends, [month]: Math.max(0, Math.round(amount)) } })),
-      setRecurring: (list) => set({ recurring: list }),
-      setMonthItems: (month, items) =>
+      // the sheet commits its whole draft, so a row the user removed never gets
+      // a delete call of its own — the removal is only visible as a difference
+      setRecurring: (list) => {
+        const before = get().recurring.map((r) => r.id)
+        set({ recurring: list })
+        noteReplaced(
+          'ledger',
+          'recurring',
+          before,
+          list.map((r) => r.id),
+        )
+      },
+      setMonthItems: (month, items) => {
+        // scoped to the VIEWED month: rows in other months are untouched and
+        // must not read as deleted
+        const before = get()
+          .spendItems.filter((i) => monthKey(new Date(i.date)) === month)
+          .map((i) => i.id)
+        noteReplaced(
+          'ledger',
+          'spend-item',
+          before,
+          items.map((i) => i.id),
+        )
         set((s) => ({
           spendItems: [
             ...s.spendItems.filter((i) => monthKey(new Date(i.date)) !== month),
             ...items,
           ],
-        })),
+        }))
+      },
       toggleBlur: () => set((s) => ({ blurAmounts: !s.blurAmounts })),
       setPaydayDay: (day) => set({ paydayDay: Math.max(0, Math.min(31, Math.round(day))) }),
       setAutoRefreshPrices: (on) => set({ autoRefreshPrices: on }),
