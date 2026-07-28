@@ -708,6 +708,17 @@ export interface VoicePack {
      *  Reads as the tail of `failed()`, which supplies the lead clause. */
     unreachable: string
     failed: (why: string) => string
+    /* --- carrying --- */
+    /** the header button and its label */
+    syncNow: string
+    carrying: string
+    /** n records queued but not yet carried — the honest number */
+    waiting: (n: number) => string
+    upToDate: string
+    lastCarried: (when: string) => string
+    neverCarried: string
+    /** a different account signed in on a device that already had an owner */
+    otherOwner: string
   }
   settings: {
     /** gear-menu headings: the estate's own settings vs the Grounds' own, which
@@ -719,6 +730,8 @@ export interface VoicePack {
     clearWorkoutsTitle: string
     /** confirm body — must say the other wings keep their records */
     clearWorkoutsBody: (n: number) => string
+    /** the same, signed in: "on this device" stops being true */
+    clearWorkoutsBodySynced: (n: number) => string
     clearWorkoutsYes: string
   }
 }

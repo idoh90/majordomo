@@ -12,6 +12,7 @@ import { House } from './house/HouseRail'
 import type { WingId } from './house/house'
 import { SettingsMenu } from './SettingsMenu'
 import { AccountIcon, LoginScreen } from './LoginScreen'
+import { SyncButton } from './SyncButton'
 import { useAuthUi } from './authUi'
 import { offReason } from '../core/sync/gate'
 import { TabBar } from './TabBar'
@@ -224,6 +225,8 @@ function AppHeader({
           ))}
         </div>
         {logButton}
+        {/* renders only while signed in — see SyncButton */}
+        <SyncButton />
         {/* the way in on a phone: the gear menu's row is easy to miss, and the
             iPhone is where the redirect actually has to be proven. Hidden only
             when there is no registry to sign in to. */}

@@ -2,6 +2,7 @@ import { allRecords, pending, snapshotSize, start } from '../../core/sync/engine
 import { armed, offReason } from '../../core/sync/gate'
 import { useSyncStore } from '../../core/sync/store'
 import { SYNC_SOURCES } from './registry'
+import { startService, syncNow } from './service'
 
 /**
  * Wire the engine to the wings. Called at module scope from main.tsx, beside
@@ -15,7 +16,10 @@ import { SYNC_SOURCES } from './registry'
  */
 export function initSync(): void {
   if (!armed()) return
+  // baseline first, THEN the loop — the service pushes what the engine has
+  // noticed, and it must not start noticing halfway through its own baseline
   start(SYNC_SOURCES)
+  startService()
 }
 
 if (import.meta.env.DEV) {
@@ -34,5 +38,7 @@ if (import.meta.env.DEV) {
     state: () => useSyncStore.getState(),
     /** null when the registry is open */
     off: offReason,
+    /** force a cycle; `repair` re-pulls the whole registry from scratch */
+    now: syncNow,
   }
 }

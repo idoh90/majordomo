@@ -34,6 +34,15 @@ interface SyncState {
   /** key → when this device was TOLD to delete it (never inferred) */
   tombstones: Record<RecordKey, number>
 
+  /** when the registry last accepted everything this device was carrying */
+  lastCarriedAt: string | null
+
+  /* --- transient: never persisted, because a stale "carrying…" across a
+     reload would be a lie the app tells about work it is not doing --- */
+  busy: boolean
+  /** last transport failure, in the user's words; cleared on the next attempt */
+  lastError: string | null
+
   markDirty: (keys: RecordKey[], at: number) => void
   markDeleted: (keys: RecordKey[], at: number) => void
   /** the registry accepted these — stop carrying them */
@@ -41,6 +50,9 @@ interface SyncState {
   setOwner: (ownerId: string | null) => void
   setCursor: (cursor: string | null) => void
   setAdopted: (adopted: boolean) => void
+  setBusy: (busy: boolean) => void
+  setError: (lastError: string | null) => void
+  setCarried: (at: string) => void
   /** sign-out: forget the bookkeeping, keep the estate */
   reset: () => void
 }
@@ -66,6 +78,9 @@ export const useSyncStore = create<SyncState>()(
       adopted: false,
       dirty: {},
       tombstones: {},
+      lastCarriedAt: null,
+      busy: false,
+      lastError: null,
 
       markDirty: (keys, at) =>
         set((s) => {
@@ -96,18 +111,33 @@ export const useSyncStore = create<SyncState>()(
       setOwner: (ownerId) => set({ ownerId }),
       setCursor: (cursor) => set({ cursor }),
       setAdopted: (adopted) => set({ adopted }),
-      reset: () => set({ ownerId: null, cursor: null, adopted: false, dirty: {}, tombstones: {} }),
+      setBusy: (busy) => set({ busy }),
+      setError: (lastError) => set({ lastError }),
+      setCarried: (at) => set({ lastCarriedAt: at }),
+      reset: () =>
+        set({
+          ownerId: null,
+          cursor: null,
+          adopted: false,
+          dirty: {},
+          tombstones: {},
+          lastCarriedAt: null,
+          lastError: null,
+        }),
     }),
     {
       name: 'majordomo-sync',
       version: 1,
       storage: createJSONStorage(() => localStorage),
+      // `busy` and `lastError` are deliberately absent — they describe this
+      // moment, not this device
       partialize: (s) => ({
         ownerId: s.ownerId,
         cursor: s.cursor,
         adopted: s.adopted,
         dirty: s.dirty,
         tombstones: s.tombstones,
+        lastCarriedAt: s.lastCarriedAt,
       }),
     },
   ),

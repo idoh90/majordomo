@@ -187,7 +187,12 @@ export function SettingsMenu() {
       <ConfirmDialog
         open={confirmClear}
         title={voice.settings.clearWorkoutsTitle}
-        message={voice.settings.clearWorkoutsBody(workouts.length)}
+        message={
+          // signed in, this is no longer a local act — say so
+          authStatus === 'signedIn'
+            ? voice.settings.clearWorkoutsBodySynced(workouts.length)
+            : voice.settings.clearWorkoutsBody(workouts.length)
+        }
         confirmLabel={voice.settings.clearWorkoutsYes}
         onCancel={() => setConfirmClear(false)}
         onConfirm={() => {

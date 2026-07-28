@@ -35,6 +35,30 @@ export const DEMO =
   import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo')
 
 /**
+ * ...and once is enough, forever.
+ *
+ * Checking the URL alone is not sufficient, and the gap is dangerous: `?demo`
+ * seeds fixtures into localStorage and they STAY there. Load the same origin
+ * again without the parameter and the gate re-arms over an estate that is now
+ * part invention — sign in from there and eight imaginary bank accounts go up,
+ * never to wash out again, because adoption is insert-only.
+ *
+ * So an origin that has ever been demoed is disarmed permanently. `?demo` is
+ * DEV-only, so this can never touch the deployed app; it only means a dev
+ * origin used for screenshots is not also a device that can carry records.
+ */
+const DEMO_TOUCHED = 'majordomo-demo-origin'
+
+function demoOrigin(): boolean {
+  try {
+    if (DEMO) localStorage.setItem(DEMO_TOUCHED, '1')
+    return localStorage.getItem(DEMO_TOUCHED) !== null
+  } catch {
+    return DEMO
+  }
+}
+
+/**
  * Supabase keeps its session in localStorage, and the sync queue has to be
  * durable to survive a reload. With storage refused, every boot would look like
  * a brand-new device — so the door stays shut rather than half-working.
@@ -46,7 +70,7 @@ export type OffReason = 'unconfigured' | 'demo' | 'storage'
 /** why the registry is shut, or null when it is open */
 export function offReason(): OffReason | null {
   if (!CONFIGURED) return 'unconfigured'
-  if (DEMO) return 'demo'
+  if (demoOrigin()) return 'demo'
   if (!STORAGE_OK) return 'storage'
   return null
 }

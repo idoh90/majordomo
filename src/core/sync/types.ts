@@ -53,4 +53,21 @@ export interface SyncSource {
   toRecords: () => SyncRecord[]
   /** attach to the store's own change notification; returns an unsubscribe */
   subscribe: (onChange: () => void) => () => void
+  /**
+   * Fold pulled records into this wing's store.
+   *
+   * MUST be synchronous. An await between wings opens a window for a component
+   * to mount and run a heal pass against a half-applied estate — which is how
+   * a marker gets deleted for having no homework that simply had not landed yet.
+   */
+  apply: (records: IncomingRecord[]) => void
+}
+
+/** a record as it came back from the registry */
+export interface IncomingRecord {
+  wing: string
+  kind: string
+  id: string
+  payload: unknown
+  deleted: boolean
 }

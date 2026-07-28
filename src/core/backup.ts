@@ -123,6 +123,16 @@ export function applyEstate(file: EstateFile): void {
   for (const [key, value] of Object.entries(file.blobs)) {
     localStorage.setItem(key, value)
   }
+  // The registry's bookkeeping now describes an estate that is gone: its queue
+  // points at records this device no longer has, and its cursor claims to have
+  // seen things this estate never did. Dropping it makes the device COLD, so
+  // the next sign-in re-adopts insert-only — a union, in which nothing is
+  // overwritten and nothing is deleted anywhere.
+  try {
+    localStorage.removeItem('majordomo-sync')
+  } catch {
+    // blocked storage — the registry is off anyway
+  }
 }
 
 /** human-readable store names for the import confirm */

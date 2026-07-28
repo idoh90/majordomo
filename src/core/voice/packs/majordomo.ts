@@ -826,6 +826,14 @@ export const majordomoPack: VoicePack = {
     offUnconfigured: 'No registry is configured for this build.',
     unreachable: 'this device is offline, or the address it was given no longer answers.',
     failed: (why) => `The registry did not answer: ${why}`,
+    syncNow: 'Carry now',
+    carrying: 'Carrying…',
+    waiting: (n) => `${n} record${n === 1 ? '' : 's'} waiting`,
+    upToDate: 'Everything is carried, sir.',
+    lastCarried: (when) => `Last carried ${when}`,
+    neverCarried: 'Nothing carried yet.',
+    otherOwner:
+      'This device answered to another account. Its records stay here and were not handed over.',
   },
   settings: {
     groupEstate: 'THE ESTATE',
@@ -834,6 +842,8 @@ export const majordomoPack: VoicePack = {
     clearWorkoutsTitle: 'Clear the workout log, sir?',
     clearWorkoutsBody: (n) =>
       `All ${n} workout${n === 1 ? '' : 's'} on this device are struck. The other wings keep their records.`,
+    clearWorkoutsBodySynced: (n) =>
+      `All ${n} workout${n === 1 ? '' : 's'} are struck — on this device and on every other, sir. The other wings keep their records.`,
     clearWorkoutsYes: 'Clear the log',
   },
 }

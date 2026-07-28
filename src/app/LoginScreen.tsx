@@ -1,7 +1,9 @@
 import { useAuthStore } from '../core/auth/store'
 import { offReason } from '../core/sync/gate'
+import { useSyncStore } from '../core/sync/store'
 import { voice } from '../core/voice'
 import { useAuthUi } from './authUi'
+import { syncNow } from './sync/service'
 
 /**
  * The registry door, as a full screen.
@@ -52,6 +54,7 @@ export function LoginScreen() {
           ) : status === 'signedIn' ? (
             <>
               <p className="card p-4 text-sm text-ink">{voice.sync.signedInAs(email ?? '')}</p>
+              <CarryState />
               <p className="mt-2 text-xs text-ink-dim">{voice.sync.signOutBlurb}</p>
               <button
                 type="button"
@@ -75,8 +78,6 @@ export function LoginScreen() {
 
         {error && <p className="mt-4 text-sm text-danger">{voice.sync.failed(error)}</p>}
 
-        {!shut && <p className="mt-6 text-xs italic text-ink-dim">{voice.sync.notYet}</p>}
-
         <button
           type="button"
           onClick={() => setOpen(false)}
@@ -85,6 +86,43 @@ export function LoginScreen() {
           {voice.sync.close}
         </button>
       </div>
+    </div>
+  )
+}
+
+/** what the registry is holding, and when it last took delivery */
+function CarryState() {
+  const busy = useSyncStore((s) => s.busy)
+  const dirty = useSyncStore((s) => s.dirty)
+  const tombstones = useSyncStore((s) => s.tombstones)
+  const lastCarriedAt = useSyncStore((s) => s.lastCarriedAt)
+  const syncError = useSyncStore((s) => s.lastError)
+
+  const waiting = Object.keys(dirty).length + Object.keys(tombstones).length
+
+  return (
+    <div className="mt-3">
+      <p className="text-sm text-ink-dim">
+        {busy
+          ? voice.sync.carrying
+          : waiting > 0
+            ? voice.sync.waiting(waiting)
+            : voice.sync.upToDate}
+      </p>
+      <p className="mt-1 text-xs text-ink-faint">
+        {lastCarriedAt
+          ? voice.sync.lastCarried(new Date(lastCarriedAt).toLocaleString())
+          : voice.sync.neverCarried}
+      </p>
+      {syncError && <p className="mt-2 text-xs text-danger">{voice.sync.failed(syncError)}</p>}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => syncNow()}
+        className="btn-soft mt-3 w-full py-2.5 text-sm disabled:opacity-40"
+      >
+        {voice.sync.syncNow}
+      </button>
     </div>
   )
 }
