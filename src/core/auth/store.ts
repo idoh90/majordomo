@@ -104,6 +104,10 @@ export const useAuthStore = create<AuthState>()((set) => ({
   },
 }))
 
+if (import.meta.env.DEV) {
+  ;(window as unknown as Record<string, unknown>).__auth = useAuthStore
+}
+
 let started = false
 
 /**

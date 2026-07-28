@@ -1,9 +1,16 @@
+import { useState } from 'react'
 import { useAuthStore } from '../core/auth/store'
 import { offReason } from '../core/sync/gate'
 import { useSyncStore } from '../core/sync/store'
+import { ConfirmDialog } from '../core/ui/ConfirmDialog'
 import { voice } from '../core/voice'
 import { useAuthUi } from './authUi'
-import { syncNow } from './sync/service'
+import {
+  replaceLocalFromRegistry,
+  replaceRegistryFromLocal,
+  resolveFirstSync,
+  syncNow,
+} from './sync/service'
 
 /**
  * The registry door, as a full screen.
@@ -90,24 +97,67 @@ export function LoginScreen() {
   )
 }
 
-/** what the registry is holding, and when it last took delivery */
+/**
+ * The carrying section: what is happening automatically, and the two ways to
+ * overrule it.
+ *
+ * The replacements are deliberately plain buttons rather than anything that
+ * could be tapped by accident, and each states which side loses before it is
+ * asked to confirm. They are the only place in the app that generates deletions
+ * from a comparison instead of from intent — legitimate only because the user
+ * declares that intent here, for the whole estate, in as many words.
+ */
 function CarryState() {
   const busy = useSyncStore((s) => s.busy)
   const dirty = useSyncStore((s) => s.dirty)
   const tombstones = useSyncStore((s) => s.tombstones)
   const lastCarriedAt = useSyncStore((s) => s.lastCarriedAt)
   const syncError = useSyncStore((s) => s.lastError)
+  const choice = useSyncStore((s) => s.pendingChoice)
+
+  const [confirmTakeCloud, setConfirmTakeCloud] = useState(false)
+  const [confirmTakeLocal, setConfirmTakeLocal] = useState(false)
 
   const waiting = Object.keys(dirty).length + Object.keys(tombstones).length
 
+  // the two estates have not met — nothing else matters until this is answered
+  if (choice) {
+    return (
+      <div className="mt-4">
+        <h3 className="font-display text-sm font-bold uppercase tracking-[0.16em] text-accent">
+          {voice.sync.choiceTitle}
+        </h3>
+        <p className="mt-1 text-sm text-ink-dim">
+          {voice.sync.choiceBody(choice.local, choice.cloud)}
+        </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <ChoiceButton
+            label={voice.sync.choiceMerge}
+            hint={voice.sync.choiceMergeHint}
+            onClick={() => resolveFirstSync('merge')}
+          />
+          <ChoiceButton
+            label={voice.sync.takeCloud}
+            hint={voice.sync.takeCloudHint}
+            onClick={() => resolveFirstSync('takeCloud')}
+          />
+          <ChoiceButton
+            label={voice.sync.takeLocal}
+            hint={voice.sync.takeLocalHint}
+            onClick={() => resolveFirstSync('takeLocal')}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="mt-3">
-      <p className="text-sm text-ink-dim">
-        {busy
-          ? voice.sync.carrying
-          : waiting > 0
-            ? voice.sync.waiting(waiting)
-            : voice.sync.upToDate}
+    <div className="mt-4">
+      <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
+        {voice.sync.section}
+      </h3>
+      <p className="mt-2 text-sm text-ink-dim">
+        {busy ? voice.sync.carrying : waiting > 0 ? voice.sync.waiting(waiting) : voice.sync.upToDate}
       </p>
       <p className="mt-1 text-xs text-ink-faint">
         {lastCarriedAt
@@ -115,6 +165,7 @@ function CarryState() {
           : voice.sync.neverCarried}
       </p>
       {syncError && <p className="mt-2 text-xs text-danger">{voice.sync.failed(syncError)}</p>}
+
       <button
         type="button"
         disabled={busy}
@@ -123,7 +174,71 @@ function CarryState() {
       >
         {voice.sync.syncNow}
       </button>
+
+      <p className="mt-5 text-xs text-ink-faint">{voice.sync.autoOn}</p>
+      <div className="mt-2 flex flex-col gap-2">
+        <ChoiceButton
+          label={voice.sync.takeCloud}
+          hint={voice.sync.takeCloudHint}
+          disabled={busy}
+          onClick={() => setConfirmTakeCloud(true)}
+        />
+        <ChoiceButton
+          label={voice.sync.takeLocal}
+          hint={voice.sync.takeLocalHint}
+          disabled={busy}
+          onClick={() => setConfirmTakeLocal(true)}
+        />
+      </div>
+
+      <ConfirmDialog
+        open={confirmTakeCloud}
+        title={voice.sync.takeCloudTitle}
+        message={voice.sync.takeCloudBody}
+        confirmLabel={voice.sync.takeCloudYes}
+        onCancel={() => setConfirmTakeCloud(false)}
+        onConfirm={() => {
+          setConfirmTakeCloud(false)
+          replaceLocalFromRegistry()
+        }}
+      />
+      <ConfirmDialog
+        open={confirmTakeLocal}
+        title={voice.sync.takeLocalTitle}
+        message={voice.sync.takeLocalBody}
+        confirmLabel={voice.sync.takeLocalYes}
+        onCancel={() => setConfirmTakeLocal(false)}
+        onConfirm={() => {
+          setConfirmTakeLocal(false)
+          replaceRegistryFromLocal()
+        }}
+      />
     </div>
+  )
+}
+
+/** a labelled choice with its consequence underneath — never a bare verb */
+function ChoiceButton({
+  label,
+  hint,
+  onClick,
+  disabled,
+}: {
+  label: string
+  hint: string
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="card p-3 text-left transition-colors hover:border-accent/40 disabled:opacity-40"
+    >
+      <span className="block text-sm text-ink">{label}</span>
+      <span className="mt-0.5 block text-xs leading-snug text-ink-dim">{hint}</span>
+    </button>
   )
 }
 

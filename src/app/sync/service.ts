@@ -135,7 +135,86 @@ async function takeDown(fromScratch: boolean): Promise<void> {
   if (cursor) useSyncStore.getState().setCursor(cursor)
 }
 
+/* ------------------------------------------- the two one-way replacements */
+
+const asIncoming = (r: { wing: string; kind: string; id: string; payload: unknown; deleted: boolean }): IncomingRecord => ({
+  wing: r.wing,
+  kind: r.kind,
+  id: r.id,
+  payload: r.payload,
+  deleted: r.deleted,
+})
+
+/** forget everything queued — after a wholesale replacement it describes an
+ *  estate that no longer exists on either side */
+function dropQueue(): void {
+  const s = useSyncStore.getState()
+  s.clearPending([...Object.keys(s.dirty), ...Object.keys(s.tombstones)])
+}
+
+/**
+ * The registry wins. This device is replaced by what the registry holds, and
+ * anything here the registry does not have is struck.
+ *
+ * That second half is what makes it a REPLACEMENT rather than a pull. A plain
+ * pull only ever adds and updates, so a record this device holds alone would
+ * quietly survive and the two would still disagree — which is not what the user
+ * asked for when they said take the other version.
+ */
+async function takeCloud(): Promise<void> {
+  const { rows, cursor } = await pull(null)
+  const cloudKeys = new Set(
+    rows.filter((r) => !r.deleted).map((r) => recordKey(r.wing, r.kind, r.id)),
+  )
+  const localOnly: IncomingRecord[] = allRecords()
+    .filter((r) => !cloudKeys.has(recordKey(r.wing, r.kind, r.id)))
+    .map((r) => ({ wing: r.wing, kind: r.kind, id: r.id, payload: null, deleted: true }))
+
+  foldIn([...rows.map(asIncoming), ...localOnly])
+  dropQueue()
+  if (cursor) useSyncStore.getState().setCursor(cursor)
+  useSyncStore.getState().setAdopted(true)
+}
+
+/**
+ * This device wins. The registry is replaced by what is here, on every device.
+ *
+ * Everything local goes up stamped NOW so it beats whatever the registry held,
+ * and every record the registry has that this device does not is buried — the
+ * one place in the app where deletions are generated from a comparison rather
+ * than from intent. That is only legitimate because the user just declared the
+ * intent themselves, for the whole estate at once, behind a confirm that says
+ * exactly this.
+ */
+async function takeLocal(): Promise<void> {
+  const now = Date.now()
+  const local = allRecords()
+  const localKeys = new Set(local.map((r) => recordKey(r.wing, r.kind, r.id)))
+
+  const { rows } = await pull(null)
+  const doomed = rows
+    .filter((r) => !r.deleted && !localKeys.has(recordKey(r.wing, r.kind, r.id)))
+    .map((r) => wire(r.wing, r.kind, r.id, null, true, now))
+
+  await pushHot([
+    ...local.map((r) => wire(r.wing, r.kind, r.id, r.payload, false, now)),
+    ...doomed,
+  ])
+
+  dropQueue()
+  useSyncStore.getState().setAdopted(true)
+  // re-read so the cursor sits past our own writes rather than replaying them
+  await takeDown(true)
+}
+
 /* ------------------------------------------------------------------ cycle */
+
+/**
+ * How two estates should meet the first time. Held in memory only: an
+ * unanswered question is re-asked from a known state, never half-restored.
+ */
+export type FirstSyncChoice = 'merge' | 'takeCloud' | 'takeLocal'
+let chosen: FirstSyncChoice | null = null
 
 let running = false
 let again = false
@@ -155,10 +234,31 @@ async function cycle(opts: { repair?: boolean } = {}): Promise<void> {
 
   try {
     if (!useSyncStore.getState().adopted) {
-      // pull BEFORE adopting: insert-only cannot overwrite what we just took
-      // down, so a second device's first sign-in ends as a union
-      await takeDown(true)
-      await adopt()
+      const remote = (await countRecords()) ?? 0
+      const local = allRecords().length
+
+      // Two populated estates meeting for the first time. Merging is usually
+      // right, but it is not obviously right — and it cannot be undone once the
+      // records are mingled. So the loop stops and asks, exactly once.
+      if (remote > 0 && local > 0 && chosen === null) {
+        useSyncStore.getState().setPendingChoice({ local, cloud: remote })
+        return
+      }
+
+      const strategy = chosen ?? 'merge'
+      chosen = null
+      useSyncStore.getState().setPendingChoice(null)
+
+      if (strategy === 'takeCloud') {
+        await takeCloud()
+      } else if (strategy === 'takeLocal') {
+        await takeLocal()
+      } else {
+        // pull BEFORE adopting: insert-only cannot overwrite what we just took
+        // down, so a second device's first sign-in ends as a union
+        await takeDown(true)
+        await adopt()
+      }
     }
 
     await drain()
@@ -213,6 +313,43 @@ function pullSoon(): void {
 /** the button, and anything else that means "now, please" */
 export function syncNow(opts: { repair?: boolean } = {}): void {
   void cycle(opts)
+}
+
+/** the answer to "two estates, how should they meet" */
+export function resolveFirstSync(choice: FirstSyncChoice): void {
+  chosen = choice
+  useSyncStore.getState().setPendingChoice(null)
+  void cycle()
+}
+
+/**
+ * The deliberate, one-way replacements. Available at any time, not just at
+ * first sign-in — the user may decide at any point that one side is simply
+ * right. Both are destructive by design and both sit behind a confirm that
+ * says which side loses.
+ */
+function runReplacement(fn: () => Promise<void>): void {
+  if (!armed() || useAuthStore.getState().status !== 'signedIn') return
+  if (running) return
+  running = true
+  const sync = useSyncStore.getState()
+  sync.setBusy(true)
+  sync.setError(null)
+  void fn()
+    .then(() => useSyncStore.getState().setCarried(new Date().toISOString()))
+    .catch((e: unknown) => useSyncStore.getState().setError(message(e)))
+    .finally(() => {
+      useSyncStore.getState().setBusy(false)
+      running = false
+    })
+}
+
+export function replaceLocalFromRegistry(): void {
+  runReplacement(takeCloud)
+}
+
+export function replaceRegistryFromLocal(): void {
+  runReplacement(takeLocal)
 }
 
 let stopRealtime: (() => void) | null = null

@@ -42,6 +42,12 @@ interface SyncState {
   busy: boolean
   /** last transport failure, in the user's words; cleared on the next attempt */
   lastError: string | null
+  /**
+   * Set when a device signs in and BOTH it and the registry already hold
+   * records. Two estates meeting for the first time is the one moment where
+   * merging silently could be the wrong answer, so the loop stops and asks.
+   */
+  pendingChoice: { local: number; cloud: number } | null
 
   markDirty: (keys: RecordKey[], at: number) => void
   markDeleted: (keys: RecordKey[], at: number) => void
@@ -53,6 +59,7 @@ interface SyncState {
   setBusy: (busy: boolean) => void
   setError: (lastError: string | null) => void
   setCarried: (at: string) => void
+  setPendingChoice: (pendingChoice: { local: number; cloud: number } | null) => void
   /** sign-out: forget the bookkeeping, keep the estate */
   reset: () => void
 }
@@ -81,6 +88,7 @@ export const useSyncStore = create<SyncState>()(
       lastCarriedAt: null,
       busy: false,
       lastError: null,
+      pendingChoice: null,
 
       markDirty: (keys, at) =>
         set((s) => {
@@ -114,6 +122,7 @@ export const useSyncStore = create<SyncState>()(
       setBusy: (busy) => set({ busy }),
       setError: (lastError) => set({ lastError }),
       setCarried: (at) => set({ lastCarriedAt: at }),
+      setPendingChoice: (pendingChoice) => set({ pendingChoice }),
       reset: () =>
         set({
           ownerId: null,
@@ -123,14 +132,16 @@ export const useSyncStore = create<SyncState>()(
           tombstones: {},
           lastCarriedAt: null,
           lastError: null,
+          pendingChoice: null,
         }),
     }),
     {
       name: 'majordomo-sync',
       version: 1,
       storage: createJSONStorage(() => localStorage),
-      // `busy` and `lastError` are deliberately absent — they describe this
-      // moment, not this device
+      // `busy`, `lastError` and `pendingChoice` are deliberately absent — they
+      // describe this moment, not this device. A question left unanswered must
+      // be asked again from a known state, never restored half-asked.
       partialize: (s) => ({
         ownerId: s.ownerId,
         cursor: s.cursor,

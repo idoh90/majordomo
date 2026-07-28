@@ -834,6 +834,26 @@ export const majordomoPack: VoicePack = {
     neverCarried: 'Nothing carried yet.',
     otherOwner:
       'This device answered to another account. Its records stay here and were not handed over.',
+    section: 'CARRYING',
+    autoOn: 'Records are carried the moment they change. These are for when you want to decide instead.',
+    choiceTitle: 'Two estates, sir.',
+    choiceBody: (local, cloud) =>
+      `This device holds ${local} record${local === 1 ? '' : 's'}; the registry holds ${cloud}. They have not met before.`,
+    choiceMerge: 'Keep both',
+    choiceMergeHint:
+      'Nothing is struck. Where the two hold the same record, the registry’s copy stands.',
+    takeCloud: 'Take the registry’s version',
+    takeCloudHint: 'This device is replaced. Anything here the registry lacks is struck.',
+    takeCloudTitle: 'Replace this device, sir?',
+    takeCloudBody:
+      'Every record on this device is replaced by the registry’s copy, and anything here the registry does not hold is struck. This cannot be undone.',
+    takeCloudYes: 'Replace this device',
+    takeLocal: 'Make this the only version',
+    takeLocalHint: 'The registry is replaced. Anything it holds that this device lacks is struck, on every device.',
+    takeLocalTitle: 'Replace the registry, sir?',
+    takeLocalBody:
+      'The registry is replaced by this device, on every device you own. Anything the registry holds that this device does not is struck. This cannot be undone.',
+    takeLocalYes: 'Replace the registry',
   },
   settings: {
     groupEstate: 'THE ESTATE',

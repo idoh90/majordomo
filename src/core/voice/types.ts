@@ -719,6 +719,26 @@ export interface VoicePack {
     neverCarried: string
     /** a different account signed in on a device that already had an owner */
     otherOwner: string
+    /* --- the carrying section, and the two one-way replacements --- */
+    section: string
+    autoOn: string
+    /** two populated estates meeting for the first time */
+    choiceTitle: string
+    choiceBody: (local: number, cloud: number) => string
+    choiceMerge: string
+    choiceMergeHint: string
+    /** the registry wins; this device is replaced */
+    takeCloud: string
+    takeCloudHint: string
+    takeCloudTitle: string
+    takeCloudBody: string
+    takeCloudYes: string
+    /** this device wins; the registry is replaced, everywhere */
+    takeLocal: string
+    takeLocalHint: string
+    takeLocalTitle: string
+    takeLocalBody: string
+    takeLocalYes: string
   }
   settings: {
     /** gear-menu headings: the estate's own settings vs the Grounds' own, which
