@@ -4,6 +4,7 @@ import { useNow } from '../../core/useNow'
 import { useEventsStore } from '../../core/events/store'
 import { eventsInRange, hoursByKind, seamStart, weekColumns } from '../../core/events/lib'
 import { addDays, localDayKey } from '../../core/dates'
+import { CollapseChevron } from '../../core/ui/CollapseToggle'
 import { SegmentedControl } from '../../core/ui/SegmentedControl'
 import { voice } from '../../core/voice'
 import type { CalendarEvent, EventKind } from '../../core/events/types'
@@ -428,22 +429,23 @@ function MobileDiffDrawer({
           type="button"
           onClick={() => setExpanded((x) => !x)}
           aria-expanded={expanded}
-          className="flex w-full flex-col items-center gap-1 pb-2"
+          className="group flex w-full flex-col items-center gap-1 pb-2"
         >
           <span
             className="h-1 w-9 rounded-full"
             style={{ background: 'color-mix(in srgb, var(--color-ink) 25%, transparent)' }}
           />
-          <span className="flex w-full items-baseline gap-2">
+          <span className="flex w-full items-center gap-2">
             <span className="font-display text-[12px] font-semibold tracking-[0.22em] text-accent">
               {voice.manor.whatIf.panelTitle}
             </span>
             <span className="ml-auto text-[10.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
               {voice.manor.whatIf.changes(changeCount)}
             </span>
-            <span aria-hidden className="text-[10px] text-ink-dim">
-              {expanded ? '⌄' : '⌃'}
-            </span>
+            {/* the panel is pinned to the bottom, so its detail opens UPWARD —
+                the closed chevron has to point that way or it promises the
+                opposite of what it does */}
+            <CollapseChevron expanded={expanded} upward />
           </span>
         </button>
         {expanded && (

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { CalendarEvent } from '../../core/events/types'
 import { hoursByKind } from '../../core/events/lib'
+import { CollapseChevron } from '../../core/ui/CollapseToggle'
 import { voice } from '../../core/voice'
 import { useHeadsUps } from './useHeadsUps'
 
@@ -43,7 +44,7 @@ export function BriefingStrip({
         type="button"
         onClick={() => setExpanded((x) => !x)}
         aria-expanded={expanded}
-        className="flex min-h-11 w-full items-center gap-3 py-1 text-left md:pointer-events-none md:min-h-0 md:py-0"
+        className="group flex min-h-11 w-full items-center gap-3 py-1 text-left md:pointer-events-none md:min-h-0 md:py-0"
       >
         <span
           className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-full border font-display text-xs font-bold"
@@ -73,11 +74,7 @@ export function BriefingStrip({
             {stat}
           </span>
         )}
-        {hasMore && (
-          <span aria-hidden className="flex-none text-[10px] text-ink-dim md:hidden">
-            {expanded ? '⌃' : '⌄'}
-          </span>
-        )}
+        {hasMore && <CollapseChevron expanded={expanded} className="md:hidden" />}
       </button>
       {/* the heads-ups: prose lines on desktop, folded on mobile. Tagged
           TODAY because they are now-relative whatever week is on the grid. */}

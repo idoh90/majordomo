@@ -268,6 +268,12 @@ export const majordomoPack: VoicePack = {
       colStrain: 'strain',
       colSets: 'sets · this week',
       sets: (n) => `~${n} ${plural(n, 'set', 'sets')}`,
+      peak: 'Burning most',
+      expandLabel: (total) => `All ${total}`,
+      collapseLabel: 'Fewer',
+      expandHint: 'Show every muscle in the ledger',
+      collapseHint: 'Show only the four burning most',
+      allCold: 'Nothing is burning just now, sir — the ledger is at rest.',
       note: 'Sets are an estimate, sir — the estate logs sessions, not sets, and a run feeds recovery without counting toward them.',
     },
     briefingPanel: {

@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useShellStore } from '../../../../core/store/shell'
+import { CollapseToggle } from '../../../../core/ui/CollapseToggle'
 import { SKINS } from '../../../../core/ui/skins'
 import { voice } from '../../../../core/voice'
 import { ALL_MUSCLE_IDS, GROUP_LABELS, PICKER_GROUPS, muscleLabel } from '../../data/muscles'
@@ -28,6 +29,13 @@ import {
  * run it sixteen times for one screen. The screen computes it once and the
  * map and the ledger read the same map, so the two can never disagree about
  * how hot a muscle is.
+ *
+ * Sixteen rows in five groups is a fair page on a desktop column and most of
+ * a phone screen, so on mobile it folds down to the four muscles burning
+ * hardest — the only question the panel gets asked in a hurry. Which list is
+ * on screen is decided in CSS, not by reading the viewport: desktop always
+ * gets all sixteen, and a rotate can never strand the panel in the state it
+ * picked for the other width.
  */
 export function MuscleLedger({
   workouts,
@@ -40,6 +48,7 @@ export function MuscleLedger({
 }) {
   const skin = SKINS[useShellStore((s) => s.skin)]
   const weekStart = useShellStore((s) => s.weekStart)
+  const [expanded, setExpanded] = useState(false)
 
   // weekly volume only changes at a week boundary, so key the memo to the hour
   // rather than to the minute-ticking clock — the house idiom for anything
@@ -51,30 +60,81 @@ export function MuscleLedger({
   )
   const hot = ALL_MUSCLE_IDS.filter((m) => strains[m] >= HOT_THRESHOLD).length
 
+  // the folded list: the four hottest, ranked. Sorting the ids rather than the
+  // rows keeps ties in the canonical head-to-toe order, so a week of identical
+  // zeroes doesn't reshuffle itself every render.
+  const peak = useMemo(
+    () => [...ALL_MUSCLE_IDS].sort((a, b) => strains[b] - strains[a]).slice(0, 4),
+    [strains],
+  )
+  // ranking nothing is worse than saying nothing: four rows of 0.0 beside '—'
+  // look like a broken panel rather than a rested body
+  const allCold = peak.length === 0 || strains[peak[0]] <= 0
+
   return (
     <section className="panel px-4 pb-4 pt-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="card-title">{voice.grounds.ledger.title}</h2>
-        <span className="chip-tint px-2.5 py-1 text-[10px] tracking-[0.12em] text-ink-dim">
+      <div className="flex items-center gap-2">
+        <h2 className="card-title min-w-0 flex-1 truncate">{voice.grounds.ledger.title}</h2>
+        <span className="chip-tint flex-none px-2.5 py-1 text-[10px] tracking-[0.12em] text-ink-dim">
           <span className="text-ink-faint">{voice.grounds.ledger.hotNow} </span>
           <span className="stat-num text-ink">
             {voice.grounds.ledger.hotNowValue({ hot, total: ALL_MUSCLE_IDS.length })}
           </span>
         </span>
+        <CollapseToggle
+          expanded={expanded}
+          onToggle={() => setExpanded((x) => !x)}
+          label={
+            expanded
+              ? voice.grounds.ledger.collapseLabel
+              : voice.grounds.ledger.expandLabel(ALL_MUSCLE_IDS.length)
+          }
+          hint={expanded ? voice.grounds.ledger.collapseHint : voice.grounds.ledger.expandHint}
+          className="md:hidden"
+        />
       </div>
 
       {/* Strain decays from every session ever logged; sets count only this
           calendar week's lifting. Without the window spelled out, a muscle
           worked last Saturday reads "10.0" beside "—" and looks like the
-          panel arguing with itself. */}
-      <div className="mt-3 flex items-center gap-2.5 border-b border-line pb-1 text-[9px] uppercase tracking-[0.14em] text-ink-faint">
+          panel arguing with itself.
+
+          Folded over a rested body there are no columns to head, so on mobile
+          the headings go with the rows; desktop always has the full list under
+          them and always keeps them. */}
+      <div
+        className={`mt-3 items-center gap-2.5 border-b border-line pb-1 text-[9px] uppercase tracking-[0.14em] text-ink-faint ${
+          allCold && !expanded ? 'hidden md:flex' : 'flex'
+        }`}
+      >
         <span className="w-[74px] flex-none" />
         <span className="min-w-0 flex-1" />
         <span className="w-8 flex-none text-right">{voice.grounds.ledger.colStrain}</span>
         <span className="w-[68px] flex-none text-right">{voice.grounds.ledger.colSets}</span>
       </div>
 
-      <div className="mt-2 flex flex-col gap-3">
+      {/* folded (mobile only, and only while closed): the four burning most */}
+      <div className={`mt-2 ${expanded ? 'hidden' : 'md:hidden'}`}>
+        {allCold ? (
+          <p className="text-[12px] leading-relaxed text-ink-dim">
+            {voice.grounds.ledger.allCold}
+          </p>
+        ) : (
+          <>
+            <div className="text-[9px] uppercase tracking-[0.18em] text-ink-faint">
+              {voice.grounds.ledger.peak}
+            </div>
+            <ul className="mt-1 flex flex-col">
+              {peak.map((m) => (
+                <Row key={m} id={m} strain={strains[m]} sets={vol[m]} ramp={skin.heatRamp} />
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+
+      {/* the full ledger: always on desktop, on mobile once opened */}
+      <div className={`mt-2 flex-col gap-3 ${expanded ? 'flex' : 'hidden md:flex'}`}>
         {PICKER_GROUPS.map(({ group, muscles }) => (
           <div key={group}>
             <div className="text-[9px] uppercase tracking-[0.18em] text-ink-faint">

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { CollapseToggle } from './CollapseToggle'
 import { voice } from '../voice'
 import type { BriefingChip } from '../voice/types'
 
@@ -78,22 +79,17 @@ export function BriefingPanel({
             >
               {voice.briefing.label} · {scope}
             </span>
+            {/* Desktop used to render a second, inert '⌃' here to balance the
+                row. It looked exactly like the control beside it and did
+                nothing when pressed, so it is gone rather than enlarged. */}
             {hasMore && (
-              <button
-                type="button"
-                onClick={() => setExpanded((x) => !x)}
-                aria-expanded={expanded}
-                aria-label={expanded ? voice.briefing.collapse : voice.briefing.expand}
-                /* the affordance is small but the target is not: it reaches the
-                   full height of the header row and the panel's right padding */
-                className="-my-2 ml-auto flex h-11 w-11 flex-none items-center justify-center text-[11px] text-ink-dim transition-[color] duration-150 hover:text-ink md:hidden"
-              >
-                <span aria-hidden>{expanded ? '⌃' : '⌄'}</span>
-              </button>
+              <CollapseToggle
+                expanded={expanded}
+                onToggle={() => setExpanded((x) => !x)}
+                hint={expanded ? voice.briefing.collapse : voice.briefing.expand}
+                className="ml-auto md:hidden"
+              />
             )}
-            <span aria-hidden className="ml-auto hidden text-[11px] text-ink-faint md:inline">
-              ⌃
-            </span>
           </div>
 
           {chips.length > 0 && (

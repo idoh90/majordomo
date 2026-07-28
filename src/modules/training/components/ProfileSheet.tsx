@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_PROFILE, bmr, restMaintenance, type Profile } from '../lib/nutrition'
 import { useWorkoutStore } from '../store'
+import { CollapseChevron } from '../../../core/ui/CollapseToggle'
 import { Sheet } from '../../../core/ui/Sheet'
 
 interface ProfileSheetProps {
@@ -69,12 +70,13 @@ export function ProfileSheet({ open, onClose }: ProfileSheetProps) {
       <button
         type="button"
         onClick={() => setAdvanced((a) => !a)}
-        className="mt-4 flex w-full items-center justify-between text-sm text-ink-dim transition-colors hover:text-ink"
+        aria-expanded={advanced}
+        className="group mt-4 flex min-h-11 w-full items-center justify-between text-sm text-ink-dim transition-colors hover:text-ink"
       >
         <span className="font-display text-xs font-bold uppercase tracking-[0.16em]">
           Advanced flex tuning
         </span>
-        <span className={`text-ink-faint transition-transform ${advanced ? 'rotate-180' : ''}`}>▾</span>
+        <CollapseChevron expanded={advanced} />
       </button>
       {advanced && (
         <div className="mt-2 grid grid-cols-2 gap-3">

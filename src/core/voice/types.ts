@@ -374,6 +374,15 @@ export interface VoicePack {
       colSets: string
       /** estimated hard sets for one muscle this week */
       sets: (n: number) => string
+      /** heading over the short list the panel folds down to on a phone */
+      peak: string
+      /** the fold control: word on the button, then what pressing it does */
+      expandLabel: (total: number) => string
+      collapseLabel: string
+      expandHint: string
+      collapseHint: string
+      /** the short list has nothing to rank — every muscle reads cold */
+      allCold: string
       /** the standing caveat: the app logs sessions, not sets, and runs feed
        *  strain without counting toward lifting volume */
       note: string
