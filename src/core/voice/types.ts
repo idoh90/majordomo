@@ -679,6 +679,32 @@ export interface VoicePack {
       restored: string
     }
   }
+  /** the registry — one account, and the estate follows between devices */
+  sync: {
+    /** gear menu: the door, signed out vs signed in */
+    connectItem: string
+    accountItem: string
+    /** gear menu, in place of the door, when ?demo has disarmed the registry */
+    demoNote: string
+    /** the sheet */
+    title: string
+    blurb: string
+    /** while the door works but the carrying does not — retire when push lands */
+    notYet: string
+    google: string
+    working: string
+    signedInAs: (email: string) => string
+    signOut: string
+    /** sign-out must say plainly what it does NOT take away */
+    signOutBlurb: string
+    /** leave the login screen — it is a door, not a wall */
+    close: string
+    /** the door is shut, and the reason is the user's to see */
+    offDemo: string
+    offStorage: string
+    offUnconfigured: string
+    failed: (why: string) => string
+  }
   settings: {
     /** gear-menu headings: the estate's own settings vs the Grounds' own, which
      *  sat in one flat list where a workout export read as an estate concern */

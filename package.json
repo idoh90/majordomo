@@ -19,6 +19,7 @@
     "@fontsource/rajdhani": "^5.2.0",
     "@fontsource/saira": "^5.2.11",
     "@fontsource/source-sans-3": "^5.2.9",
+    "@supabase/supabase-js": "^2.110.9",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zustand": "^5.0.5"

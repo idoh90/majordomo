@@ -13,6 +13,7 @@ import './core/ui/index.css'
 import App from './app/App'
 import { applySkin } from './core/ui/skins'
 import { voice } from './core/voice'
+import { initAuth } from './core/auth/store'
 import { useShellStore } from './core/store/shell'
 
 // Founder-only assets (the seven original skins + their typefaces) load
@@ -26,6 +27,12 @@ if (import.meta.env.VITE_FOUNDER_SKIN === '1') {
 // don't flash Midnight on load
 applySkin(useShellStore.getState().skin)
 document.title = voice.appName
+
+// The registry, wired at module scope (an effect would double-invoke under
+// StrictMode). Nothing waits on it: the app renders from localStorage exactly
+// as it always has, and the session — like the estate it will later carry —
+// simply arrives afterwards.
+initAuth()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

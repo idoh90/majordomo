@@ -11,6 +11,9 @@ import { ManorScreen } from './manor/ManorScreen'
 import { House } from './house/HouseRail'
 import type { WingId } from './house/house'
 import { SettingsMenu } from './SettingsMenu'
+import { AccountIcon, LoginScreen } from './LoginScreen'
+import { useAuthUi } from './authUi'
+import { offReason } from '../core/sync/gate'
 import { TabBar } from './TabBar'
 
 export default function App() {
@@ -88,6 +91,9 @@ export default function App() {
       </div>
 
       <TabBar view={view} onNav={setView} />
+
+      {/* a door, not a wall — renders nothing until asked for */}
+      <LoginScreen />
     </>
   )
 }
@@ -218,6 +224,19 @@ function AppHeader({
           ))}
         </div>
         {logButton}
+        {/* the way in on a phone: the gear menu's row is easy to miss, and the
+            iPhone is where the redirect actually has to be proven. Hidden only
+            when there is no registry to sign in to. */}
+        {offReason() !== 'unconfigured' && offReason() !== 'storage' && (
+          <button
+            type="button"
+            aria-label={voice.sync.title}
+            onClick={() => useAuthUi.getState().setOpen(true)}
+            className="chip flex h-11 w-11 items-center justify-center border border-line bg-panel text-ink-dim transition-colors hover:text-ink md:h-10 md:w-10"
+          >
+            <AccountIcon />
+          </button>
+        )}
         <SettingsMenu />
       </div>
     </header>

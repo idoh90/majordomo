@@ -12,6 +12,9 @@ import {
 import { localDayKey } from '../core/dates'
 import { SKINS, SKIN_IDS } from '../core/ui/skins'
 import { voice } from '../core/voice'
+import { useAuthStore } from '../core/auth/store'
+import { offReason } from '../core/sync/gate'
+import { useAuthUi } from './authUi'
 import { useShellStore } from '../core/store/shell'
 import { useWorkoutStore } from '../modules/training/store'
 import { ConfirmDialog } from '../core/ui/ConfirmDialog'
@@ -36,6 +39,13 @@ export function SettingsMenu() {
   const [estateOpen, setEstateOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // the registry's door sits with the estate items — same concern, moving the
+  // household between devices. A shut registry says why (?demo) or says
+  // nothing at all (no storage, or a build with no registry configured):
+  // an inert control is worse than an absent one.
+  const authStatus = useAuthStore((s) => s.status)
+  const registryShut = offReason()
 
   const exportFile = () => {
     downloadJson(`majordomo-training-${localDayKey(new Date())}.json`, serializeExport(workouts))
@@ -111,6 +121,18 @@ export function SettingsMenu() {
               </div>
             </div>
             {/* the estate: every wing, for moving between devices/origins */}
+            {registryShut === 'demo' ? (
+              <MenuNote>{voice.sync.demoNote}</MenuNote>
+            ) : registryShut ? null : (
+              <MenuItem
+                onClick={() => {
+                  setMenuOpen(false)
+                  useAuthUi.getState().setOpen(true)
+                }}
+              >
+                {authStatus === 'signedIn' ? voice.sync.accountItem : voice.sync.connectItem}
+              </MenuItem>
+            )}
             <MenuItem onClick={exportEstate}>{voice.backup.estate.exportItem}</MenuItem>
             <MenuItem
               onClick={() => {
@@ -175,6 +197,11 @@ export function SettingsMenu() {
       />
     </div>
   )
+}
+
+/** a statement, not a control — for a door that is shut on purpose */
+function MenuNote({ children }: { children: React.ReactNode }) {
+  return <div className="px-3.5 py-2.5 text-xs leading-snug text-ink-faint">{children}</div>
 }
 
 /** a quiet heading over a run of related menu items */
