@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { getClient } from './client'
-import { armed } from '../sync/gate'
+import { SUPABASE_URL, armed } from '../sync/gate'
+import { voice } from '../voice'
 
 /**
  * Who the estate belongs to.
@@ -29,6 +30,34 @@ interface AuthState {
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
+/**
+ * Is the registry actually there?
+ *
+ * `signInWithOAuth` does not ask — it just assigns `window.location`, so a
+ * registry that is misconfigured, deleted or simply unreachable throws the user
+ * out of the app and into a browser error page ("Safari cannot open the page
+ * because the server cannot be found"), with the app left behind and nothing
+ * said. That is the worst possible failure: it looks like the app is broken,
+ * and on a phone there is not even a console to disagree with.
+ *
+ * `no-cors` on purpose — the answer is never read, only whether a connection
+ * happened at all, which sidesteps CORS entirely and is exactly the question.
+ * Offline gives the same verdict as a dead host, which is correct: in both
+ * cases there is nothing to sign in to.
+ */
+async function reachable(): Promise<boolean> {
+  try {
+    await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      mode: 'no-cors',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export const useAuthStore = create<AuthState>()((set) => ({
   status: armed() ? 'loading' : 'off',
   email: null,
@@ -38,8 +67,13 @@ export const useAuthStore = create<AuthState>()((set) => ({
   signIn: async () => {
     const client = getClient()
     if (!client) return
-    set({ error: null })
+    set({ error: null, status: 'loading' })
     try {
+      // ask before leaving — see `reachable` above
+      if (!(await reachable())) {
+        set({ status: 'signedOut', error: voice.sync.unreachable })
+        return
+      }
       const sb = await client
       const { error } = await sb.auth.signInWithOAuth({
         provider: 'google',
@@ -47,10 +81,10 @@ export const useAuthStore = create<AuthState>()((set) => ({
         // localhost:5173/** and the deployed origin
         options: { redirectTo: window.location.origin },
       })
-      if (error) set({ error: error.message })
+      if (error) set({ status: 'signedOut', error: error.message })
       // on success the browser navigates away — nothing after this runs
     } catch (e) {
-      set({ error: message(e) })
+      set({ status: 'signedOut', error: message(e) })
     }
   },
 

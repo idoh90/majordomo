@@ -824,6 +824,7 @@ export const majordomoPack: VoicePack = {
       'Demonstration fixtures are loaded, sir. The registry stays shut so invented records never reach your account.',
     offStorage: 'This browser refuses storage, so an account cannot be kept.',
     offUnconfigured: 'No registry is configured for this build.',
+    unreachable: 'this device is offline, or the address it was given no longer answers.',
     failed: (why) => `The registry did not answer: ${why}`,
   },
   settings: {

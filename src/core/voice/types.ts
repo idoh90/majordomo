@@ -703,6 +703,10 @@ export interface VoicePack {
     offDemo: string
     offStorage: string
     offUnconfigured: string
+    /** the registry did not answer at all — dead host, or no connection. Said
+     *  BEFORE the redirect, so the user never lands on a browser error page.
+     *  Reads as the tail of `failed()`, which supplies the lead clause. */
+    unreachable: string
     failed: (why: string) => string
   }
   settings: {
