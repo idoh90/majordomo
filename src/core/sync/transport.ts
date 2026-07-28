@@ -62,12 +62,23 @@ export async function pushHot(rows: WireRecord[]): Promise<Set<string>> {
  * account can only ever ADD, so nothing already in the cloud can be trampled by
  * a device that just woke up believing it knew better.
  */
-export async function pushCold(rows: WireRecord[]): Promise<void> {
+export async function pushCold(rows: WireRecord[], userId: string): Promise<void> {
   const client = getClient()
   if (!client || rows.length === 0) return
   const sb = await client
 
-  for (const batch of chunk(dedupe(rows), 400)) {
+  // `user_id` HAS to be stamped here. The hot path never needs it because the
+  // RPC fills in auth.uid() server-side, but this talks to the table directly —
+  // and the column is NOT NULL with no default, so an unstamped row is rejected
+  // outright. That failure took down the entire first sign-in: adoption threw,
+  // `adopted` stayed false, the drain that clears the queue was never reached,
+  // and so the waiting count sat there while nothing ever left the device.
+  //
+  // Forging someone else's id is not a risk: row-level security checks
+  // auth.uid() = user_id on the way in and refuses anything else.
+  const stamped = dedupe(rows).map((r) => ({ ...r, user_id: userId }))
+
+  for (const batch of chunk(stamped, 400)) {
     const { error } = await sb
       .from('records')
       .upsert(batch, { onConflict: 'user_id,wing,kind,id', ignoreDuplicates: true })

@@ -53,9 +53,12 @@ const wire = (
  * makes first sign-in a union rather than a fight.
  */
 async function adopt(): Promise<void> {
+  const userId = useAuthStore.getState().userId
+  if (!userId) return
   const now = Date.now()
   await pushCold(
     allRecords().map((r) => wire(r.wing, r.kind, r.id, r.payload, false, now)),
+    userId,
   )
   useSyncStore.getState().setAdopted(true)
 }

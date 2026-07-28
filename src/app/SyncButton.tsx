@@ -2,6 +2,7 @@ import { useAuthStore } from '../core/auth/store'
 import { offReason } from '../core/sync/gate'
 import { useSyncStore } from '../core/sync/store'
 import { voice } from '../core/voice'
+import { useAuthUi } from './authUi'
 import { syncNow } from './sync/service'
 
 /**
@@ -39,7 +40,13 @@ export function SyncButton() {
       type="button"
       aria-label={`${voice.sync.syncNow} — ${label}`}
       title={label}
-      onClick={() => syncNow()}
+      onClick={() => {
+        // A failure used to be effectively invisible: the button turned red,
+        // but a phone has no hover text, so tapping it looked like nothing
+        // happening. If something is wrong, open the place that explains it.
+        if (error) useAuthUi.getState().setOpen(true)
+        syncNow()
+      }}
       disabled={busy}
       className={`chip relative flex h-11 w-11 items-center justify-center border border-line bg-panel transition-colors md:h-10 md:w-10 ${
         error ? 'text-danger' : busy ? 'text-accent' : 'text-ink-dim hover:text-ink'
@@ -51,7 +58,9 @@ export function SyncButton() {
       {!busy && waiting > 0 && (
         <span
           aria-hidden
-          className="absolute -right-0.5 -top-0.5 min-w-[15px] rounded-full border border-bg bg-accent px-1 text-[9px] font-bold leading-[14px] text-bg"
+          className={`absolute -right-0.5 -top-0.5 min-w-[15px] rounded-full border border-bg px-1 text-[9px] font-bold leading-[14px] text-bg ${
+            error ? 'bg-danger' : 'bg-accent'
+          }`}
         >
           {waiting > 99 ? '99+' : waiting}
         </span>
