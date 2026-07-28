@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useShellStore } from '../../../../core/store/shell'
+import { Collapsible } from '../../../../core/ui/Collapsible'
 import { CollapseToggle } from '../../../../core/ui/CollapseToggle'
 import { SKINS } from '../../../../core/ui/skins'
 import { voice } from '../../../../core/voice'
@@ -113,8 +114,13 @@ export function MuscleLedger({
         <span className="w-[68px] flex-none text-right">{voice.grounds.ledger.colSets}</span>
       </div>
 
-      {/* folded (mobile only, and only while closed): the four burning most */}
-      <div className={`mt-2 ${expanded ? 'hidden' : 'md:hidden'}`}>
+      {/* Two folds moving in opposite directions at once, which is only safe
+          because the short list is a strict subset of the long one: the four
+          rows shrink while sixteen grow, so the panel's height changes in one
+          direction throughout and never bounces past where it lands. */}
+
+      {/* the four burning most — mobile only, and only while closed */}
+      <Collapsible open={!expanded} swap className="md:hidden" innerClassName="pt-2">
         {allCold ? (
           <p className="text-[12px] leading-relaxed text-ink-dim">
             {voice.grounds.ledger.allCold}
@@ -131,10 +137,10 @@ export function MuscleLedger({
             </ul>
           </>
         )}
-      </div>
+      </Collapsible>
 
       {/* the full ledger: always on desktop, on mobile once opened */}
-      <div className={`mt-2 flex-col gap-3 ${expanded ? 'flex' : 'hidden md:flex'}`}>
+      <Collapsible open={expanded} mobileOnly swap innerClassName="flex flex-col gap-3 pt-2">
         {PICKER_GROUPS.map(({ group, muscles }) => (
           <div key={group}>
             <div className="text-[9px] uppercase tracking-[0.18em] text-ink-faint">
@@ -147,7 +153,7 @@ export function MuscleLedger({
             </ul>
           </div>
         ))}
-      </div>
+      </Collapsible>
 
       <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
         {voice.grounds.ledger.note}

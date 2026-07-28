@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { Collapsible } from './Collapsible'
 import { CollapseToggle } from './CollapseToggle'
 import { voice } from '../voice'
 import type { BriefingChip } from '../voice/types'
@@ -113,24 +114,20 @@ export function BriefingPanel({
 
           <p className={`mt-2.5 text-[15px] leading-snug text-ink ${blur}`}>{headline}</p>
 
-          {detail && (
-            <p
-              className={`mt-1.5 hidden text-[12.5px] leading-relaxed text-ink-dim md:block ${blur}`}
-            >
-              {detail}
-            </p>
-          )}
-          {extra && <div className="mt-2 hidden md:block">{extra}</div>}
-
-          {expanded && (
-            <div className="md:hidden">
+          {/* One copy of the detail, not two. It used to be written out twice
+              — a desktop-only block and a mobile-only block behind `expanded`
+              — because a mounted-and-unmounted branch was the only way to
+              fold it. The fold keeps it mounted, so the same markup can serve
+              both widths and can animate on the way out as well as in. */}
+          {hasMore && (
+            <Collapsible open={expanded} mobileOnly>
               {detail && (
                 <p className={`mt-1.5 text-[12.5px] leading-relaxed text-ink-dim ${blur}`}>
                   {detail}
                 </p>
               )}
               {extra && <div className="mt-2">{extra}</div>}
-            </div>
+            </Collapsible>
           )}
         </div>
       </div>

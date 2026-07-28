@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { CalendarEvent } from '../../core/events/types'
 import { hoursByKind } from '../../core/events/lib'
+import { Collapsible } from '../../core/ui/Collapsible'
 import { CollapseChevron } from '../../core/ui/CollapseToggle'
 import { voice } from '../../core/voice'
 import { useHeadsUps } from './useHeadsUps'
@@ -86,21 +87,25 @@ export function BriefingStrip({
           </div>
         </div>
       )}
-      {expanded && (
-        <div className="mt-1.5 flex flex-col gap-1 pl-9 md:hidden">
-          {headsUps.length > 0 && <NowTag />}
-          {headsUps.map((h) => (
-            <div key={h.id} className="text-[12.5px] leading-relaxed text-ink-dim">
-              {h.text}
-            </div>
-          ))}
-          {stat && (
-            <div className="text-[11.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
-              {stat}
-            </div>
-          )}
-        </div>
-      )}
+      {/* mobile's copy stacks what desktop lays out in a row, so the two stay
+          separate markup; the fold is the mobile one, hidden outright above it */}
+      <Collapsible
+        open={expanded}
+        className="md:hidden"
+        innerClassName="flex flex-col gap-1 pl-9 pt-1.5"
+      >
+        {headsUps.length > 0 && <NowTag />}
+        {headsUps.map((h) => (
+          <div key={h.id} className="text-[12.5px] leading-relaxed text-ink-dim">
+            {h.text}
+          </div>
+        ))}
+        {stat && (
+          <div className="text-[11.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
+            {stat}
+          </div>
+        )}
+      </Collapsible>
     </div>
   )
 }

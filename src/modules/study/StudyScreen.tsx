@@ -469,13 +469,18 @@ function RingsPanel({
           </div>
         )}
         <div className="relative flex flex-wrap items-stretch gap-x-6 gap-y-4 sm:pt-8">
-        {shown.map((s) => (
+        {/* The rings sit in a wrapping row, so the extras arrive INTO the flow
+            rather than out of a fold — there is no single box to grow. They
+            stagger in instead, 40 ms apart, which reads as the row extending
+            itself rather than a block of cards appearing at once. */}
+        {shown.map((s, i) => (
           <SubjectRing
             key={s.id}
             subject={s}
             week={stats.perSubject[s.id]}
             selected={s.id === selectedId}
             onSelect={() => onSelect(s.id)}
+            enterDelayMs={expanded && i >= MAX_RINGS ? (i - MAX_RINGS) * 40 : undefined}
           />
         ))}
         {hidden > 0 && (
@@ -506,11 +511,14 @@ function SubjectRing({
   week,
   selected,
   onSelect,
+  enterDelayMs,
 }: {
   subject: Subject
   week?: { fulfilledH: number }
   selected: boolean
   onSelect: () => void
+  /** set only on a ring revealed by "+N more" — its place in the stagger */
+  enterDelayMs?: number
 }) {
   const fh = week?.fulfilledH ?? 0
   const goal = subject.goalH
@@ -527,6 +535,13 @@ function SubjectRing({
           ? 'color-mix(in srgb, var(--color-w-study) 10%, transparent)'
           : 'transparent',
         outline: selected ? '1px solid color-mix(in srgb, var(--color-w-study) 55%, transparent)' : 'none',
+        /* `both` so the ring holds step-in's opening frame through its delay —
+           and step-in opens from 0.3, not 0, per the house rule that a frozen
+           animation must never leave content invisible */
+        animation:
+          enterDelayMs === undefined
+            ? undefined
+            : `step-in 220ms ${enterDelayMs}ms ease-out both`,
       }}
     >
       <div className="relative h-[118px] w-[118px]">

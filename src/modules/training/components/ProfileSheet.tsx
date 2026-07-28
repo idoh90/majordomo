@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_PROFILE, bmr, restMaintenance, type Profile } from '../lib/nutrition'
 import { useWorkoutStore } from '../store'
+import { Collapsible } from '../../../core/ui/Collapsible'
 import { CollapseChevron } from '../../../core/ui/CollapseToggle'
 import { Sheet } from '../../../core/ui/Sheet'
 
@@ -78,14 +79,12 @@ export function ProfileSheet({ open, onClose }: ProfileSheetProps) {
         </span>
         <CollapseChevron expanded={advanced} />
       </button>
-      {advanced && (
-        <div className="mt-2 grid grid-cols-2 gap-3">
-          <NumField label="Carb floor" unit="g/kg" value={draft.carbFloorGkg} onChange={(v) => set('carbFloorGkg', v)} step={0.5} />
-          <NumField label="Fat floor" unit="g/kg" value={draft.fatFloorGkg} onChange={(v) => set('fatFloorGkg', v)} step={0.1} />
-          <NumField label="kcal / hard set" unit="kcal" value={draft.kcalPerSet} onChange={(v) => set('kcalPerSet', v)} />
-          <NumField label="carbs / hard set" unit="g" value={draft.carbPerSet} onChange={(v) => set('carbPerSet', v)} />
-        </div>
-      )}
+      <Collapsible open={advanced} innerClassName="grid grid-cols-2 gap-3 pt-2">
+        <NumField label="Carb floor" unit="g/kg" value={draft.carbFloorGkg} onChange={(v) => set('carbFloorGkg', v)} step={0.5} />
+        <NumField label="Fat floor" unit="g/kg" value={draft.fatFloorGkg} onChange={(v) => set('fatFloorGkg', v)} step={0.1} />
+        <NumField label="kcal / hard set" unit="kcal" value={draft.kcalPerSet} onChange={(v) => set('kcalPerSet', v)} />
+        <NumField label="carbs / hard set" unit="g" value={draft.carbPerSet} onChange={(v) => set('carbPerSet', v)} />
+      </Collapsible>
 
       <div className="mt-5 flex gap-2">
         <button

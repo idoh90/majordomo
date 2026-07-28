@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { MUSCLES } from '../../data/muscles'
 import type { MuscleId, RepStyle, Workout } from '../../types'
 import { relativeDayLabel, timeLabel } from '../../../../core/dates'
+import { Collapsible } from '../../../../core/ui/Collapsible'
+import { CollapseChevron } from '../../../../core/ui/CollapseToggle'
 import { REP_STYLES } from '../../lib/strain'
 import { CalendarPicker } from '../ui/CalendarPicker'
 import { Slider } from '../ui/Slider'
@@ -129,7 +131,7 @@ export function EffortStep({
           type="button"
           onClick={() => setWhenOpen((v) => !v)}
           aria-expanded={whenOpen}
-          className="card flex w-full items-center justify-between px-3.5 py-3 transition-colors hover:border-accent/40"
+          className="group card flex w-full items-center justify-between px-3.5 py-3 transition-colors hover:border-accent/40"
         >
           <span className="flex items-center gap-2.5 text-sm text-ink-dim">
             <CalendarIcon />
@@ -137,29 +139,12 @@ export function EffortStep({
           </span>
           <span className="flex items-center gap-2 text-sm font-medium text-ink">
             {whenLabel}
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 20 20"
-              fill="none"
-              aria-hidden
-              className={`text-ink-faint transition-transform ${whenOpen ? 'rotate-180' : ''}`}
-            >
-              <path
-                d="m5 7.5 5 5 5-5"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <CollapseChevron expanded={whenOpen} />
           </span>
         </button>
-        {whenOpen && (
-          <div className="mt-2 animate-[step-in_180ms_ease-out]">
-            <CalendarPicker value={performedAt} onChange={onPerformedAt} workouts={workouts} />
-          </div>
-        )}
+        <Collapsible open={whenOpen} innerClassName="pt-2">
+          <CalendarPicker value={performedAt} onChange={onPerformedAt} workouts={workouts} />
+        </Collapsible>
       </div>
 
       {blockLink && <BlockLinkNote {...blockLink} />}

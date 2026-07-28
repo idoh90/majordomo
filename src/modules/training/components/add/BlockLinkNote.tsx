@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Collapsible } from '../../../../core/ui/Collapsible'
 import { voice } from '../../../../core/voice'
 
 export interface BlockLinkOption {
@@ -55,11 +56,13 @@ export function BlockLinkNote({ line, options, selectedId, onSelect }: BlockLink
           {voice.grounds.fulfilsChange}
         </span>
       </button>
-      {open && (
+      {/* it used to slide in and then vanish on the way out — picking a block
+          closes this, and that was the half nobody saw animate */}
+      <Collapsible open={open}>
         <div
           role="radiogroup"
           aria-label="Which block this fulfils"
-          className="card mt-2 animate-[step-in_180ms_ease-out] overflow-hidden p-0"
+          className="card mt-2 overflow-hidden p-0"
         >
           {options.map((o) => (
             <button
@@ -88,7 +91,7 @@ export function BlockLinkNote({ line, options, selectedId, onSelect }: BlockLink
             <span className="flex-1 text-sm text-ink-dim">{voice.grounds.fulfilsNoBlock}</span>
           </button>
         </div>
-      )}
+      </Collapsible>
     </div>
   )
 }

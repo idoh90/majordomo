@@ -86,9 +86,8 @@ export function CollapseChevron({
         strokeWidth={2.4}
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={`h-[15px] w-[15px] transition-transform duration-200 ${
-          rotated ? 'rotate-180' : ''
-        }`}
+        data-open={expanded}
+        className={`chev h-[15px] w-[15px] ${rotated ? 'rotate-180' : ''}`}
       >
         <path d="M5 7.5 10 13l5-5.5" />
       </svg>

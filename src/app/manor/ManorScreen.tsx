@@ -4,6 +4,7 @@ import { useNow } from '../../core/useNow'
 import { useEventsStore } from '../../core/events/store'
 import { eventsInRange, hoursByKind, seamStart, weekColumns } from '../../core/events/lib'
 import { addDays, localDayKey } from '../../core/dates'
+import { Collapsible } from '../../core/ui/Collapsible'
 import { CollapseChevron } from '../../core/ui/CollapseToggle'
 import { SegmentedControl } from '../../core/ui/SegmentedControl'
 import { voice } from '../../core/voice'
@@ -448,19 +449,17 @@ function MobileDiffDrawer({
             <CollapseChevron expanded={expanded} upward />
           </span>
         </button>
-        {expanded && (
-          <div className="pb-2.5">
-            <div className="text-[10.5px] text-ink-dim">{voice.manor.whatIf.panelSub}</div>
-            <div className="mt-2">
-              <DiffRows committed={committed} draft={draft} />
-            </div>
-            {conflict && (
-              <div className="mt-2 text-[10.5px] italic" style={{ color: 'var(--color-danger)' }}>
-                ▲ {conflict}
-              </div>
-            )}
+        <Collapsible open={expanded} innerClassName="pb-2.5">
+          <div className="text-[10.5px] text-ink-dim">{voice.manor.whatIf.panelSub}</div>
+          <div className="mt-2">
+            <DiffRows committed={committed} draft={draft} />
           </div>
-        )}
+          {conflict && (
+            <div className="mt-2 text-[10.5px] italic" style={{ color: 'var(--color-danger)' }}>
+              ▲ {conflict}
+            </div>
+          )}
+        </Collapsible>
         <div className="flex gap-2">
           <button
             type="button"

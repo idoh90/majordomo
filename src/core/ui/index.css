@@ -49,6 +49,17 @@
 
   --shadow-glow-accent: 0 0 18px 2px var(--glow-accent);
   --shadow-glow-accent-lg: 0 0 28px 6px var(--glow-accent-lg);
+
+  /* One rhythm for every fold in the house, so a briefing and a ledger open
+     with the same hand. Opening is slower and eases OUT — the content is
+     arriving and should settle. Closing is ~65% of that and eases IN — a fold
+     that lingers on the way out reads as lag rather than polish. Both sit
+     inside the 150–300 ms micro-interaction window; the global
+     prefers-reduced-motion rule below flattens them to nothing. */
+  --fold-in: 240ms;
+  --fold-out: 160ms;
+  --ease-fold-in: cubic-bezier(0.22, 0.9, 0.3, 1);
+  --ease-fold-out: cubic-bezier(0.55, 0, 0.85, 0.45);
 }
 
 :root {
@@ -318,6 +329,109 @@ input[type='datetime-local'] {
     background: color-mix(in srgb, var(--chip-accent, var(--color-accent)) 14%, transparent);
     border: 1px solid
       color-mix(in srgb, var(--chip-accent, var(--color-accent)) 40%, transparent);
+  }
+
+  /* ── The fold ─────────────────────────────────────────────────────────────
+     Every collapsible in the house opens through this.
+
+     It animates a GRID TRACK (0fr ↔ 1fr), not a height. A height transition
+     needs a pixel number, and a pixel number is a promise to re-measure —
+     every time the content changes, the viewport rotates, or a font loads
+     late. The track resolves itself, so a row appearing inside an open fold
+     costs nothing and a fold can never be caught holding a stale height.
+
+     The inner element is the clip: `min-height: 0` is what actually lets the
+     track shrink below its content (a grid item's automatic minimum size is
+     its content, so without it the fold simply refuses to close), and
+     `overflow: hidden` also makes it a block formatting context, so the
+     content's own top margin is measured INSIDE the track rather than
+     escaping above it.
+
+     Visibility flips only AFTER the collapse finishes, which takes closed
+     content out of the tab order and the accessibility tree — an
+     aria-expanded="false" panel whose text a screen reader still reads is
+     worse than no fold at all. Opening restores it instantly (0s, no delay).
+
+     The fold is closed by `data-open="false"` rather than by unmounting,
+     because a React branch has nothing left to animate on the way out. */
+  .fold {
+    display: grid;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+    transition: grid-template-rows var(--fold-in) var(--ease-fold-in);
+  }
+  .fold > * {
+    min-height: 0;
+    overflow: hidden;
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+      opacity var(--fold-in) var(--ease-fold-in),
+      transform var(--fold-in) var(--ease-fold-in),
+      visibility 0s;
+  }
+  .fold[data-open='false'] {
+    grid-template-rows: 0fr;
+    transition-duration: var(--fold-out);
+    transition-timing-function: var(--ease-fold-out);
+  }
+  /* the content leaves upward, into the seam it is folding behind — the slide
+     is only ever seen mid-transition, which is exactly where the fold would
+     otherwise look like a window blind being cropped */
+  .fold[data-open='false'] > * {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(-5px);
+    transition:
+      opacity var(--fold-out) var(--ease-fold-out),
+      transform var(--fold-out) var(--ease-fold-out),
+      visibility 0s linear var(--fold-out);
+  }
+  /* Two folds that TRADE PLACES — the muscle ledger's short list and its long
+     one. They must share one beat in both directions. Left on the house
+     default the opening fold rides a hard ease-out while the closing one
+     rides an ease-in, so for a moment both are tall at once and the panel
+     visibly bulges ~50 px past where it lands before settling back. Matched,
+     the two heights sum to a straight line and the panel only ever grows or
+     only ever shrinks. Must sit after the base rules — same specificity, so
+     order is what decides. */
+  .fold-swap[data-open='false'] {
+    transition-duration: var(--fold-in);
+    transition-timing-function: var(--ease-fold-in);
+  }
+  .fold-swap[data-open='false'] > * {
+    transition:
+      opacity var(--fold-in) var(--ease-fold-in),
+      transform var(--fold-in) var(--ease-fold-in),
+      visibility 0s linear var(--fold-in);
+  }
+
+  /* A fold that only exists on a phone. Desktop shows the content
+     unconditionally, so it must never inherit the closed track from a state
+     the phone chose — and it must not animate on a rotate either. */
+  @media (min-width: 768px) {
+    .fold-mobile[data-open='false'] {
+      grid-template-rows: 1fr;
+    }
+    .fold-mobile[data-open='false'] > * {
+      visibility: visible;
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+
+  /* the fold's chevron, turning on the fold's own clock. It carries no
+     `transition-*` utility: a utility would sit in a later layer and win, and
+     then the chevron would turn to one rhythm while the panel opened to
+     another. Keyed on the fold's state, not on which way it happens to point,
+     so the upward-opening panels still close on the shorter beat. */
+  .chev {
+    transition: rotate var(--fold-in) var(--ease-fold-in);
+  }
+  .chev[data-open='false'] {
+    transition: rotate var(--fold-out) var(--ease-fold-out);
   }
 
   /* segmented control */
