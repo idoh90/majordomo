@@ -10,10 +10,13 @@
 # a week without opening it is a SUPPORTED use, not neglect. The very trip the
 # app is designed for is the one that puts the backend to sleep.
 #
-# So: one real database query a day. It must reach Postgres, not just the
-# gateway — a 401 at the edge may never touch the database and so may not count
-# as activity. `select=id&limit=1` on an RLS-guarded table returns [] for an
-# anonymous caller and is the cheapest thing that genuinely runs a query.
+# So: two real database queries a day, one per front door the project now
+# serves. It is the same Supabase project either way — one probe would be
+# enough to keep the hostname resolving — but see the note on the second probe
+# below for why both are here anyway.
+#
+# Each must reach Postgres, not just the gateway — a 401 at the edge may never
+# touch the database and so may not count as activity.
 #
 # CAVEAT worth knowing: GitHub disables scheduled workflows in repos with no
 # commits for 60 days. An actively-developed repo is fine; a dormant one could
@@ -50,22 +53,52 @@ jobs:
             exit 1
           fi
 
-          status=$(curl -sS -o /tmp/body.txt -w '%{http_code}' \
-            --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors \
-            -H "apikey: ${SUPABASE_ANON_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
-            "${SUPABASE_URL}/rest/v1/records?select=id&limit=1")
+          # 200 is the healthy answer to both probes below: RLS returns an empty
+          # result to an anonymous caller, and the query still ran. Anything else
+          # means the registry is not answering the way it should — fail LOUDLY,
+          # because a keep-alive that quietly stops working is worse than not
+          # having one at all.
+          probe() {
+            local label="$1" method="$2" url="$3"
+            shift 3
 
-          echo "HTTP ${status}"
-          cat /tmp/body.txt
+            local status
+            status=$(curl -sS -o /tmp/body.txt -w '%{http_code}' \
+              --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors \
+              -X "${method}" \
+              -H "apikey: ${SUPABASE_ANON_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+              "$@" \
+              "${url}")
 
-          # 200 is the healthy answer: RLS returns [] to an anonymous caller,
-          # and the query still ran. Anything else means the registry is not
-          # answering the way it should — fail LOUDLY, because a keep-alive that
-          # quietly stops working is worse than not having one at all.
-          if [ "${status}" != "200" ]; then
-            echo "::error::The registry answered ${status}, not 200. It may be paused, or the key may be wrong."
-            exit 1
-          fi
+            echo "${label}: HTTP ${status}"
+            cat /tmp/body.txt
+            echo
 
-          echo "The registry is awake."
+            if [ "${status}" != "200" ]; then
+              echo "::error::${label} answered ${status}, not 200. The project may be paused, the key may be wrong, or the thing being queried may be gone."
+              exit 1
+            fi
+          }
+
+          # The app's path. `select=id&limit=1` on an RLS-guarded table returns
+          # [] for an anonymous caller and is the cheapest thing that genuinely
+          # runs a query.
+          probe "the app" GET "${SUPABASE_URL}/rest/v1/records?select=id&limit=1"
+
+          # The landing page's path — the exact call src/lib/waitlist.ts makes
+          # for its counter, in the landing repo.
+          #
+          # The hostname is shared, so this is not really a second keep-alive.
+          # It is a CANARY, and that is the point: it is the only daily check
+          # that the waitlist table, its SECURITY DEFINER counter, and anon's
+          # execute grant all still exist. Without it, dropping any one of them
+          # surfaces as a public signup form answering 404 to strangers, with
+          # an error message no visitor could act on, discovered whenever
+          # somebody happens to look. With it, this job goes red the next
+          # morning and says which door stopped answering.
+          probe "the waitlist" POST "${SUPABASE_URL}/rest/v1/rpc/waitlist_count" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+
+          echo "The registry is awake, and both doors answer."
