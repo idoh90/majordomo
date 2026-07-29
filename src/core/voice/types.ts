@@ -321,11 +321,46 @@ export interface VoicePack {
     aheadList: string
     /** their one-line summary beside THIS WEEK'S WATCHES */
     aheadSummary: (v: { count: number; hours: number }) => string
-    dayShift: string
-    nightShift: string
-    duplicate: string
+    /** the shapes seeded on a first run — data once written, not live copy */
+    starters: { day: string; night: string; nineToFive: string; evening: string }
+    /** the flyout's escape hatch into a one-off watch */
+    customChip: string
+    /** the affordance onto the shape list */
+    manage: string
+    /** title of a custom watch the user chose not to keep as a shape */
+    customEventTitle: string
+    /** title of the recovery block pencilled after a cross-midnight watch */
+    sleepTitle: string
     posted: string
     postedWithSleep: string
+    /** posted, but lying over sleep the estate had pencilled in */
+    postedOverSleep: string
+    /** refused: it would lie over a watch already on the books */
+    overlap: string
+    /** the shape editor — custom posts and the shape list share these */
+    sheet: {
+      customTitle: string
+      manageTitle: string
+      startLabel: string
+      endLabel: string
+      hoursLine: (h: number) => string
+      /** shown when the end time wraps past midnight — never left implied */
+      nextDay: string
+      /** end equals start: no watch at all, and a 24 h one can't be typed */
+      invalid: string
+      keep: string
+      nameLabel: string
+      namePlaceholder: string
+      post: string
+      newTemplate: string
+      save: string
+      cancel: string
+      empty: string
+      deleteTitle: string
+      deleteBody: (name: string) => string
+      deleteYes: string
+    }
+    toast: { kept: string; amended: string; retired: string; nameFirst: string }
     note: string
     openManor: string
     status: { logged: string; next: string; ahead: string }

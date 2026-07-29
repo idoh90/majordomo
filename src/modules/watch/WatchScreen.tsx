@@ -7,17 +7,21 @@ import { useShellStore } from '../../core/store/shell'
 import { useNow } from '../../core/useNow'
 import { voice } from '../../core/voice'
 import {
-  SHIFT_PRESETS,
-  atHour,
+  DAY_MIN,
+  atMinutes,
   countdownLabel,
   cycleStats,
-  hasShiftOnDay,
+  hhmmOfMin,
   rangeFree,
+  recoveryWindow,
+  shiftOverlaps,
+  sleepOverlaps,
   watchStats,
-  type ShiftKey,
 } from './lib'
 import { useWatchUi } from './uiStore'
+import { useWatchStore } from './store'
 import { WatchBriefing } from './Briefing'
+import { CustomPostSheet, TemplatesSheet } from './ShiftSheets'
 import { CycleCard } from './CycleCard'
 import { DutyBand } from './DutyBand'
 
@@ -35,7 +39,9 @@ export function WatchScreen() {
   const stats = watchStats(events, now, weekStart)
   const cycle = cycleStats(events, now, weekStart)
 
+  const templates = useWatchStore((s) => s.templates)
   const [pickedDay, setPickedDay] = useState<number | null>(null)
+  const [sheet, setSheet] = useState<'custom' | 'shapes' | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -68,40 +74,54 @@ export function WatchScreen() {
     useWatchUi.getState().clearPostRequest()
   }, [postRequested])
 
-  const post = (key: ShiftKey) => {
-    if (pickedDay === null) return
+  /** false when the watch was refused — the caller keeps whatever it holds */
+  const post = (shape: { startMin: number; endMin: number }, title: string): boolean => {
+    if (pickedDay === null) return false
     const day = stripDays[pickedDay]
-    if (hasShiftOnDay(events, day)) {
-      butler(voice.watch.duplicate)
-      setPickedDay(null)
-      return
+    const start = atMinutes(day, shape.startMin)
+    const end = atMinutes(day, shape.endMin)
+    // the day stays picked on a refusal: the answer is usually another shape,
+    // and clearing the selection makes the user find the column again
+    if (shiftOverlaps(events, start, end)) {
+      butler(voice.watch.overlap)
+      return false
     }
-    const preset = SHIFT_PRESETS[key]
+    // pencilled sleep is a suggestion, not a booking — a watch may lie over it,
+    // and the estate says so rather than quietly trimming what it drew
+    const overSleep = sleepOverlaps(events, start, end)
     addEvent({
       source: 'watch',
       kind: 'shift',
-      title: key === 'day' ? `${voice.watch.dayShift} Watch` : `${voice.watch.nightShift} Watch`,
-      start: atHour(day, preset.startHour).toISOString(),
-      end: atHour(day, preset.endHour).toISOString(),
+      title,
+      start: start.toISOString(),
+      end: end.toISOString(),
     })
-    // sleep after nights is first-class: pencil the recovery block when free
+    // sleep after a watch that ran through the night is first-class: pencil the
+    // recovery block when free. Derived from the SHAPE, so a 21:00 → 05:00 gets
+    // the same courtesy the old 19:00 → 08:00 preset used to get by name.
     let pencilled = false
-    if (key === 'night') {
-      const sleepStart = atHour(addDays(day, 1), 9)
-      const sleepEnd = atHour(addDays(day, 1), 15)
-      if (rangeFree(events, sleepStart, sleepEnd)) {
+    if (shape.endMin > DAY_MIN) {
+      const rest = recoveryWindow(end)
+      if (rangeFree(events, rest.start, rest.end)) {
         addEvent({
           source: 'watch',
           kind: 'sleep',
-          title: 'Sleep',
-          start: sleepStart.toISOString(),
-          end: sleepEnd.toISOString(),
+          title: voice.watch.sleepTitle,
+          start: rest.start.toISOString(),
+          end: rest.end.toISOString(),
         })
         pencilled = true
       }
     }
-    butler(pencilled ? voice.watch.postedWithSleep : voice.watch.posted)
+    butler(
+      pencilled
+        ? voice.watch.postedWithSleep
+        : overSleep
+          ? voice.watch.postedOverSleep
+          : voice.watch.posted,
+    )
     setPickedDay(null)
+    return true
   }
 
   const ringC = 2 * Math.PI * 72
@@ -216,7 +236,16 @@ export function WatchScreen() {
           this grid column's minimum width and pushes the whole page sideways */}
       <div className="flex min-w-0 flex-col gap-4">
         <div ref={rosterRef} className="panel scroll-mt-4 p-5">
-          <div className="card-title">{voice.watch.post}</div>
+          <div className="flex items-baseline gap-3">
+            <div className="card-title">{voice.watch.post}</div>
+            <button
+              type="button"
+              onClick={() => setSheet('shapes')}
+              className="ml-auto text-[11px] text-accent transition-colors hover:underline"
+            >
+              {voice.watch.manage}
+            </button>
+          </div>
           <p className="mt-1 text-[12px] text-ink-dim">{voice.watch.bandNote}</p>
           <DutyBand
             events={events}
@@ -230,19 +259,22 @@ export function WatchScreen() {
               <span className="text-[12.5px] text-ink-dim">
                 {WD[stripDays[pickedDay].getDay()]} {stripDays[pickedDay].getDate()} —
               </span>
+              {templates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => post({ startMin: t.startMin, endMin: t.endMin }, t.name)}
+                  className="card px-4 py-2.5 text-[12.5px] [font-variant-numeric:tabular-nums] transition-colors hover:border-accent"
+                >
+                  <b>{t.name}</b> · {hhmmOfMin(t.startMin)} → {hhmmOfMin(t.endMin)}
+                </button>
+              ))}
               <button
                 type="button"
-                onClick={() => post('day')}
-                className="card px-4 py-2.5 text-[12.5px] [font-variant-numeric:tabular-nums] transition-colors hover:border-accent"
+                onClick={() => setSheet('custom')}
+                className="rounded-[10px] border border-dashed border-line px-4 py-2.5 text-[12.5px] text-ink-dim transition-colors hover:border-accent hover:text-ink"
               >
-                <b>{voice.watch.dayShift}</b> · 07:00 → 20:00
-              </button>
-              <button
-                type="button"
-                onClick={() => post('night')}
-                className="card px-4 py-2.5 text-[12.5px] [font-variant-numeric:tabular-nums] transition-colors hover:border-accent"
-              >
-                <b>{voice.watch.nightShift}</b> · 19:00 → 08:00
+                {voice.watch.customChip}
               </button>
               <button
                 type="button"
@@ -352,6 +384,23 @@ export function WatchScreen() {
           )}
         </div>
       </div>
+
+      <CustomPostSheet
+        open={sheet === 'custom' && pickedDay !== null}
+        onClose={() => setSheet(null)}
+        dayLabel={
+          pickedDay !== null
+            ? `${WD[stripDays[pickedDay].getDay()]} ${stripDays[pickedDay].getDate()}`
+            : ''
+        }
+        onPost={post}
+        butler={butler}
+      />
+      <TemplatesSheet
+        open={sheet === 'shapes'}
+        onClose={() => setSheet(null)}
+        butler={butler}
+      />
 
       {toast && (
         <div className="menu-panel fixed bottom-[calc(84px+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 px-4 py-2.5 text-[13px] animate-[fade-in_200ms_ease-out] md:bottom-6">

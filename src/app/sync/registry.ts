@@ -14,6 +14,8 @@ import type { Exam, Homework, SessionMeta, Subject, SyllabusTopic } from '../../
 import type { Profile } from '../../modules/training/lib/nutrition'
 import { useWorkoutStore } from '../../modules/training/store'
 import type { Workout } from '../../modules/training/types'
+import { useWatchStore } from '../../modules/watch/store'
+import type { ShiftTemplate } from '../../modules/watch/types'
 
 /**
  * What each wing contributes to the registry, and how it takes records back.
@@ -282,10 +284,31 @@ const ledgerSource: SyncSource = {
   },
 }
 
+/* ---------------------------------------------------------------- the Watch */
+
+const byCreatedAt = (a: ShiftTemplate, b: ShiftTemplate) => a.createdAt.localeCompare(b.createdAt)
+
+/**
+ * Shift SHAPES only. The watches themselves are calendar events and travel
+ * with the Manor; what lives here is the handful of shapes a person actually
+ * works, which is the part a second device would otherwise have to retype.
+ */
+const watchSource: SyncSource = {
+  wing: 'watch',
+  toRecords: () =>
+    useWatchStore.getState().templates.map((x) => rec('watch', 'template', x.id, x)),
+  subscribe: (onChange) => useWatchStore.subscribe(onChange),
+  apply: (records) =>
+    useWatchStore.setState((s) => ({
+      templates: mergeList<ShiftTemplate>(s.templates, of(records, 'template'), byCreatedAt),
+    })),
+}
+
 export const SYNC_SOURCES: SyncSource[] = [
   shellSource,
   manorSource,
   groundsSource,
   studySource,
   ledgerSource,
+  watchSource,
 ]

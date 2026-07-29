@@ -6,7 +6,7 @@
  */
 
 export interface SyncRecord {
-  /** 'shell' | 'manor' | 'grounds' | 'study' | 'ledger' */
+  /** 'shell' | 'manor' | 'grounds' | 'study' | 'ledger' | 'watch' */
   wing: string
   /** 'event' | 'workout' | 'pref' | … — a wing's own record types */
   kind: string

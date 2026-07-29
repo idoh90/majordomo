@@ -19,6 +19,7 @@ export const ESTATE_KEYS = [
   'majordomo-training',
   'majordomo-study',
   'majordomo-capital',
+  'majordomo-watch',
 ] as const
 
 /** pre-pivot keys: still adopted on first boot, so a backup carries them too */
@@ -142,6 +143,7 @@ export const STORE_LABEL: Record<string, string> = {
   'majordomo-training': 'The Grounds',
   'majordomo-study': 'The Study',
   'majordomo-capital': 'The Ledger',
+  'majordomo-watch': 'The Watch',
   'batman-shell': 'Settings (legacy)',
   'batman-workouts': 'The Grounds (legacy)',
   'batman-capital': 'The Ledger (legacy)',

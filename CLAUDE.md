@@ -124,8 +124,10 @@ src/
     ui/           index.css (skin bundles) + skins.ts (SKINS flags) +
                   Sheet / ConfirmDialog / SegmentedControl (shared primitives)
   modules/
-    watch/        'THE WATCH' — shifts: post day/night watches (writes core/events;
-                  night watches pencil a recovery-sleep block), duty ring, countdown
+    watch/        'THE WATCH' — shifts: post a watch of any shape from the user's
+                  own shift templates or a custom one (writes core/events; a
+                  cross-midnight watch pencils a recovery-sleep block), duty ring,
+                  countdown
     training/     the whole workout tracker (see below)
     study/        'THE STUDY' (founder: THE ACADEMY) — subjects w/ weekly-hour rings,
                   plan-then-fulfill sessions (kind 'study' events, sourceRef
@@ -207,9 +209,15 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   event id (sessions themselves are `majordomo-events` entries). Homework/exam actions
   write their Manor marker through the events store; `reconcileMarkers` heals drift
   (and trails overdue homework chips to today), never while a what-if sandbox is open.
+- **`majordomo-watch` v1** (`modules/watch/store.ts`) — shift *shapes* only
+  (`ShiftTemplate { name, startMin, endMin }`, minutes since local midnight,
+  `endMin > 1440` = ends next day). The watches themselves are events. Four starters
+  ARE the initial state (a rehydrated blob always wins, including an empty list);
+  they carry **fixed ids and a constant `createdAt`** so two devices seeding
+  independently produce identical records instead of eight shapes.
 
 **Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
-`majordomo-events` / `majordomo-study`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+`majordomo-events` / `majordomo-study` / `majordomo-watch`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
 boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
 still applies; the old keys are left in place as insurance and never read again.
 
@@ -418,6 +426,7 @@ auto-enter Training so they land on the right screen.
 - `window.__store` / `window.__strains` — training store handle + live strain map in dev
 - `window.__capital` — the Wayne Fund store handle in dev
 - `window.__study` — the Study store handle in dev
+- `window.__watch` — the Watch's shift-shape store handle in dev
 - `window.__engine` — the strain module (sample `recoveryEnvelope(t, style, muscleFactor, nf)`
   to plot recovery curves without React round-trips)
 - `window.__nutrition` — the nutrition module (`dailyTargets`, `bmr`, … for macro checks)

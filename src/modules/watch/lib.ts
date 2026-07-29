@@ -1,25 +1,72 @@
-import { addDays, atHour, localDayKey, startOfWeek, type WeekStart } from '../../core/dates'
-import { hoursOf, rangeFree } from '../../core/events/lib'
+import { addDays, atHour, startOfWeek, type WeekStart } from '../../core/dates'
+import { hoursOf, overlaps, rangeFree } from '../../core/events/lib'
 import type { CalendarEvent } from '../../core/events/types'
 
 // atHour / rangeFree moved to core when the Study became their second
 // consumer (extract-on-contact); re-exported so existing imports hold.
 export { atHour, rangeFree }
 
-/** the two shift shapes of the beachhead schedule; rotations are backlog */
-export const SHIFT_PRESETS = {
-  day: { startHour: 7, endHour: 20 },
-  night: { startHour: 19, endHour: 32 }, // 19:00 → 08:00 the next day
-} as const
-export type ShiftKey = keyof typeof SHIFT_PRESETS
+/** minutes in a day — the wrap point for a shift that runs past midnight */
+export const DAY_MIN = 1440
+
+/**
+ * The local instant `min` minutes after midnight of `day`. `min` may exceed
+ * DAY_MIN, which is how a shift ending on the following calendar date is
+ * expressed (the minutes form of the old endHour-32 convention).
+ *
+ * Integer minutes on purpose — do NOT route this through atHour(min / 60).
+ * atHour derives its minutes as (h - floor(h)) * 60, and 17:50 comes back as
+ * (17.8333… - 17) * 60 = 49.99999…, which the Date constructor truncates to
+ * 49. The half-hour grid atHour was written for is float-exact; arbitrary
+ * user-typed minutes are not.
+ */
+export function atMinutes(day: Date, min: number): Date {
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, min)
+}
+
+/** 'HH:MM' of a minutes-since-midnight value, wrapped past midnight */
+export function hhmmOfMin(min: number): string {
+  const m = ((min % DAY_MIN) + DAY_MIN) % DAY_MIN
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+}
+
+/**
+ * The recovery block a cross-midnight shift earns: an hour to get home, then
+ * six hours down. Anchored to the shift's own end rather than a fixed morning,
+ * so a watch ending at 05:00 sleeps 06:00–12:00 and the old 19:00 → 08:00
+ * shape still pencils exactly 09:00–15:00.
+ */
+export const SLEEP_GAP_MIN = 60
+export const SLEEP_LEN_MIN = 360
+
+export function recoveryWindow(shiftEnd: Date): { start: Date; end: Date } {
+  const start = new Date(shiftEnd.getTime() + SLEEP_GAP_MIN * 60_000)
+  return { start, end: new Date(start.getTime() + SLEEP_LEN_MIN * 60_000) }
+}
 
 export function shiftsOf(events: CalendarEvent[]): CalendarEvent[] {
   return events.filter((e) => e.kind === 'shift' && !e.allDay)
 }
 
-export function hasShiftOnDay(events: CalendarEvent[], day: Date): boolean {
-  const key = localDayKey(day)
-  return shiftsOf(events).some((e) => localDayKey(e.start) === key)
+/**
+ * Would a watch over [start,end) lie on one already posted?
+ *
+ * This replaced a one-shift-per-day guard, which was two wrongs at once: it
+ * refused a legitimate double (lunch and dinner are one day and two watches)
+ * while allowing a real collision, since yesterday's night watch runs into
+ * today and was never that day's shift. Ends are exclusive, so back-to-back
+ * watches touching at 17:00 are not an overlap.
+ */
+export function shiftOverlaps(events: CalendarEvent[], start: Date, end: Date): boolean {
+  return shiftsOf(events).some((e) => overlaps(new Date(e.start), new Date(e.end), start, end))
+}
+
+/** does [start,end) lie over sleep the estate pencilled in? */
+export function sleepOverlaps(events: CalendarEvent[], start: Date, end: Date): boolean {
+  return events.some(
+    (e) =>
+      e.kind === 'sleep' && !e.allDay && overlaps(new Date(e.start), new Date(e.end), start, end),
+  )
 }
 
 export interface WatchStats {
