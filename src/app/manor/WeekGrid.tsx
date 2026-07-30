@@ -142,6 +142,21 @@ interface DragState {
   colW: number
 }
 
+/** a live drag on a block's end edge — the block itself is the preview */
+interface ResizeState {
+  id: string
+  /** the event's own start, so the preview needs no lookup per frame */
+  startMs: number
+  /** the end under the pointer, snapped to the half hour */
+  endMs: number
+  valid: boolean
+}
+
+/** the drag/resize snap, and the bounds a resize may not cross */
+const SNAP_MS = HOUR_MS / 2
+const MIN_DUR_H = 0.5
+const MAX_DUR_H = 24
+
 interface MoveConfirm {
   id: string
   start: Date
@@ -197,6 +212,8 @@ export function WeekGrid({
   const [popover, setPopover] = useState<Popover | null>(null)
   const [quickAdd, setQuickAdd] = useState<QuickAdd | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
+  /** desktop: a live drag on a block's end edge */
+  const [resize, setResize] = useState<ResizeState | null>(null)
   const [confirm, setConfirm] = useState<MoveConfirm | null>(null)
   const [toast, setToast] = useState<{ msg: string; undo: boolean } | null>(null)
   const [lastAction, setLastAction] = useState<LastAction | null>(null)
@@ -212,6 +229,7 @@ export function WeekGrid({
    *  mailbox can target it without lifting its scroll state into the shell */
   const mobileColRef = useRef(0)
   const dragRef = useRef<DragState | null>(null)
+  const resizeRef = useRef<ResizeState | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suppressClickUntil = useRef(0)
 
@@ -281,6 +299,26 @@ export function WeekGrid({
       ),
     [columns, events],
   )
+  /* A resize in flight, re-clipped through the very same pipeline as committed
+     events — so the block being stretched crosses the seam, grows its dotted
+     tail into tomorrow and re-rounds its corners live, instead of a separate
+     preview rectangle that would have to reimplement all of that. Columns the
+     resized event does not touch keep their ARRAY IDENTITY, so their DayBody
+     stays memoized and only the one or two columns that changed re-render. */
+  const liveClipsByCol = useMemo(() => {
+    if (!resize) return clipsByCol
+    const src = events.find((e) => e.id === resize.id)
+    if (!src) return clipsByCol
+    const draft: CalendarEvent = { ...src, end: new Date(resize.endMs).toISOString() }
+    return columns.map((win, i) => {
+      const before = clipsByCol[i]
+      const rest = before.filter((c) => c.event.id !== resize.id)
+      const next = clipToWindow(draft, win.start, win.end)
+      if (rest.length === before.length && !next) return before
+      return next ? [...rest, next] : rest
+    })
+  }, [clipsByCol, columns, events, resize])
+
   const ghostsByCol = useMemo(
     () =>
       columns.map((win) =>
@@ -314,16 +352,19 @@ export function WeekGrid({
     setPopover((p) => (p?.event.id === event.id ? null : { event, col, y }))
   }
 
-  /** is a [tc, ts, ts+durH) slot free of every other timed event? */
-  const slotFree = (ignoreId: string | null, tc: number, ts: number, durH: number): boolean => {
-    const start = new Date(columns[tc].start.getTime() + ts * HOUR_MS)
-    const end = new Date(start.getTime() + durH * HOUR_MS)
-    return !events.some(
+  /** is [start, end) free of every timed event but `ignoreId`? */
+  const rangeFree = (ignoreId: string | null, start: Date, end: Date): boolean =>
+    !events.some(
       (e) =>
         !e.allDay &&
         e.id !== ignoreId &&
         overlaps(new Date(e.start), new Date(e.end), start, end),
     )
+
+  /** is a [tc, ts, ts+durH) slot free of every other timed event? */
+  const slotFree = (ignoreId: string | null, tc: number, ts: number, durH: number): boolean => {
+    const start = new Date(columns[tc].start.getTime() + ts * HOUR_MS)
+    return rangeFree(ignoreId, start, new Date(start.getTime() + durH * HOUR_MS))
   }
 
   /* ------------------------------------------------------------ mutations */
@@ -412,7 +453,7 @@ export function WeekGrid({
 
   /* ----------------------------------------------------------- drag start */
 
-  const onBlockPointerDown = (e: CalendarEvent, ev: React.PointerEvent) => {
+  const onBlockPointerDown = (e: CalendarEvent, ev: React.PointerEvent, grabCol: number) => {
     if (ev.button !== 0 && ev.pointerType === 'mouse') return
     const box = boxRef.current
     if (!box) return
@@ -426,8 +467,17 @@ export function WeekGrid({
       butler(voice.manor.anchoredEarlier)
       return
     }
-    const startOffsetH = (s.getTime() - columns[fromCol].start.getTime()) / HOUR_MS
-    const grabH = (ev.clientY - rect.top) / PXH - startOffsetH
+    /* How far into the EVENT the grab landed, measured against the column the
+       pointer is actually in — not against the column the event starts in.
+       Those differ for the second half of a night watch: grabbing its 02:00
+       tail is 7 h into a 19:00 event, and the old sum called it −17 h, which
+       the start clamp then pinned at midnight. That is why a watch grabbed by
+       its tail refused to move while the same watch grabbed by its head moved
+       fine — the gesture was computing a start it could never reach. */
+    const grabMs =
+      columns[grabCol].start.getTime() +
+      ((ev.clientY - rect.top) / PXH) * HOUR_MS -
+      s.getTime()
     const durH = hoursOf(e)
     const startX = ev.clientX
     const startY = ev.clientY
@@ -445,9 +495,21 @@ export function WeekGrid({
       raf = 0
       const x = pendingX - rect.left
       const y = pendingY - rect.top
-      const tc = Math.max(0, Math.min(6, Math.floor(x / colW)))
-      let ts = Math.round((y / PXH - grabH) * 2) / 2
-      ts = clampStart(ts)
+      const hoverCol = Math.max(0, Math.min(6, Math.floor(x / colW)))
+      // the instant under the pointer, less where inside the block it was held
+      const raw = columns[hoverCol].start.getTime() + (y / PXH) * HOUR_MS - grabMs
+      // The start can land in a different column than the pointer — dragging a
+      // watch by its tail puts the start on the day before — so ask which
+      // column owns it rather than assuming the one under the cursor. Kept
+      // inside the viewed week: a drag may not post an event off-screen.
+      const first = columns[0].start.getTime()
+      const last = columns[6].start.getTime() + 23.5 * HOUR_MS
+      const startMs = Math.max(first, Math.min(Math.round(raw / SNAP_MS) * SNAP_MS, last))
+      let tc = columns.findIndex(
+        (w) => startMs >= w.start.getTime() && startMs < w.end.getTime(),
+      )
+      if (tc < 0) tc = startMs < first ? 0 : 6
+      const ts = clampStart((startMs - columns[tc].start.getTime()) / HOUR_MS)
       const prev = dragRef.current
       if (prev && prev.tc === tc && prev.ts === ts) return // snapped to the same slot
       const next: DragState = {
@@ -493,13 +555,127 @@ export function WeekGrid({
     window.addEventListener('pointerup', mu)
   }
 
+  /* --------------------------------------------------- resize (end edge) */
+
+  /**
+   * Drag the grip at a block's end edge to change how long it runs. Unlike a
+   * move this is a purely VERTICAL gesture read against the column the grip
+   * lives in — so a wobble sideways never rewrites which day the block is on,
+   * and pulling past the bottom of the column simply lets the block cross
+   * midnight, which is the one thing this calendar has always allowed.
+   *
+   * The block IS the preview: the live end is clipped through the same
+   * pipeline as committed events (see `liveClipsByCol`), so a block dragged
+   * past the seam grows its dotted tail into tomorrow while the pointer is
+   * still down. Occupancy is judged but never enforced mid-drag — the
+   * overlapping end shows in danger and is refused on release, the same
+   * contract a move already has.
+   */
+  const onResizeStart = (e: CalendarEvent, gripCol: number, ev: React.PointerEvent) => {
+    if (ev.button !== 0 && ev.pointerType === 'mouse') return
+    const box = boxRef.current
+    if (!box) return
+    ev.preventDefault()
+    const rect = box.getBoundingClientRect()
+    const startMs = new Date(e.start).getTime()
+    const originalEnd = new Date(e.end).getTime()
+    const colStart = columns[gripCol].start.getTime()
+    const startY = ev.clientY
+    let moved = false
+    let raf = 0
+    let pendingY = 0
+
+    const apply = () => {
+      raf = 0
+      const raw = colStart + ((pendingY - rect.top) / PXH) * HOUR_MS
+      const endMs = Math.max(
+        startMs + MIN_DUR_H * HOUR_MS,
+        Math.min(Math.round(raw / SNAP_MS) * SNAP_MS, startMs + MAX_DUR_H * HOUR_MS),
+      )
+      const prev = resizeRef.current
+      if (prev && prev.endMs === endMs) return // still the same half hour
+      const next: ResizeState = {
+        id: e.id,
+        startMs,
+        endMs,
+        valid: rangeFree(e.id, new Date(startMs), new Date(endMs)),
+      }
+      resizeRef.current = next
+      setResize(next)
+    }
+
+    const mm = (m: PointerEvent) => {
+      if (!moved && Math.abs(m.clientY - startY) < 3) return
+      if (!moved) {
+        moved = true
+        setPopover(null)
+        setQuickAdd(null)
+      }
+      pendingY = m.clientY
+      if (!raf) raf = requestAnimationFrame(apply)
+      m.preventDefault()
+    }
+    const stop = (commit: boolean) => {
+      window.removeEventListener('pointermove', mm)
+      window.removeEventListener('pointerup', mu)
+      window.removeEventListener('keydown', onKey)
+      if (raf) {
+        cancelAnimationFrame(raf)
+        if (commit) apply() // flush the last frame so the release lands where the pointer is
+      }
+      const r = resizeRef.current
+      resizeRef.current = null
+      setResize(null)
+      if (!moved) return
+      suppressClickUntil.current = Date.now() + 250
+      if (commit && r) finishResize(r, originalEnd)
+      else if (!commit) butler(voice.manor.asYouWere)
+    }
+    const mu = () => stop(true)
+    // Escape abandons the drag with the block exactly as it was — the same
+    // out the confirm dialog offers, for a gesture that has no dialog.
+    const onKey = (k: KeyboardEvent) => {
+      if (k.key === 'Escape') stop(false)
+    }
+    window.addEventListener('pointermove', mm)
+    window.addEventListener('pointerup', mu)
+    window.addEventListener('keydown', onKey)
+  }
+
+  const finishResize = (r: ResizeState, originalEnd: number) => {
+    if (r.endMs === originalEnd) return
+    if (!r.valid) {
+      butler(voice.manor.occupied)
+      return
+    }
+    const e = events.find((x) => x.id === r.id)
+    if (!e) return
+    updateEvent(r.id, { end: new Date(r.endMs).toISOString() })
+    if (!sandbox) {
+      setLastAction({ type: 'move', id: r.id, prev: { start: e.start, end: e.end } })
+      butler(
+        voice.manor.resized({
+          hours: ((r.endMs - r.startMs) / HOUR_MS).toFixed(1),
+          longer: r.endMs > originalEnd,
+        }),
+        true,
+      )
+    }
+  }
+
   /* Stable identities for everything handed to a memoized child: the handlers
      themselves are re-created each render (they close over `events`), so route
      them through a ref — the children then never re-render during a drag. */
-  const latest = useRef({ onBlockPointerDown, openPopover })
-  latest.current = { onBlockPointerDown, openPopover }
+  const latest = useRef({ onBlockPointerDown, openPopover, onResizeStart })
+  latest.current = { onBlockPointerDown, openPopover, onResizeStart }
   const handleBlockPointerDown = useCallback(
-    (e: CalendarEvent, ev: React.PointerEvent) => latest.current.onBlockPointerDown(e, ev),
+    (e: CalendarEvent, ev: React.PointerEvent, col: number) =>
+      latest.current.onBlockPointerDown(e, ev, col),
+    [],
+  )
+  const handleResizeStart = useCallback(
+    (e: CalendarEvent, col: number, ev: React.PointerEvent) =>
+      latest.current.onResizeStart(e, col, ev),
     [],
   )
   const handleEventClick = useCallback(
@@ -682,7 +858,8 @@ export function WeekGrid({
                   onMouseMove={(ev) => {
                     // affordance only — click-to-quick-add already works. Stay
                     // quiet over a block, mid-drag, or under an open popover.
-                    if (drag || popover || quickAdd || placing) return setHoverSlot(null)
+                    if (drag || resize || popover || quickAdd || placing)
+                      return setHoverSlot(null)
                     if ((ev.target as HTMLElement).closest('[data-event-block]'))
                       return setHoverSlot(null)
                     const r = ev.currentTarget.getBoundingClientRect()
@@ -711,7 +888,7 @@ export function WeekGrid({
                   <DayBody
                     col={i}
                     win={win}
-                    clips={clipsByCol[i]}
+                    clips={liveClipsByCol[i]}
                     ghostClips={ghostsByCol[i]}
                     changedIds={changedIds}
                     warnIds={warnIds}
@@ -719,8 +896,10 @@ export function WeekGrid({
                     divider={i > 0}
                     selectedId={popover?.event.id}
                     dragId={drag?.id}
+                    clashingId={resize && !resize.valid ? resize.id : undefined}
                     onEventClick={handleEventClick}
                     onEventPointerDown={handleBlockPointerDown}
+                    onEventResizeStart={handleResizeStart}
                   />
                 </div>
               ))}
@@ -1012,8 +1191,10 @@ const DayBody = memo(function DayBody({
   divider,
   selectedId,
   dragId,
+  clashingId,
   onEventClick,
   onEventPointerDown,
+  onEventResizeStart,
   blockTouchAction,
 }: {
   col: number
@@ -1026,8 +1207,12 @@ const DayBody = memo(function DayBody({
   divider: boolean
   selectedId?: string
   dragId?: string
+  /** the block being resized onto an occupied hour — drawn in danger */
+  clashingId?: string
   onEventClick: (col: number, e: CalendarEvent, y: number) => void
-  onEventPointerDown?: (e: CalendarEvent, ev: React.PointerEvent) => void
+  onEventPointerDown?: (e: CalendarEvent, ev: React.PointerEvent, col: number) => void
+  /** desktop only: the grip on a block's end edge */
+  onEventResizeStart?: (e: CalendarEvent, col: number, ev: React.PointerEvent) => void
   /** 'pan-y' on mobile: scroll wins until the long-press lifts the block */
   blockTouchAction?: 'none' | 'pan-y'
 }) {
@@ -1055,8 +1240,10 @@ const DayBody = memo(function DayBody({
           changed={changedIds?.has(c.event.id) ?? false}
           warn={warnIds?.has(c.event.id) ?? false}
           dimmed={dragId === c.event.id}
+          clashing={clashingId === c.event.id}
           onClick={onEventClick}
           onPointerDown={onEventPointerDown}
+          onResizeStart={onEventResizeStart}
           blockTouchAction={blockTouchAction}
         />
       ))}
@@ -1085,8 +1272,10 @@ const EventBlock = memo(function EventBlock({
   changed = false,
   warn = false,
   dimmed,
+  clashing = false,
   onClick,
   onPointerDown,
+  onResizeStart,
   blockTouchAction = 'none',
 }: {
   col: number
@@ -1097,8 +1286,11 @@ const EventBlock = memo(function EventBlock({
   /** training booked hard by a watch — the computed ▲ */
   warn?: boolean
   dimmed: boolean
+  /** mid-resize, over an hour that is already taken */
+  clashing?: boolean
   onClick: (col: number, e: CalendarEvent, y: number) => void
-  onPointerDown?: (e: CalendarEvent, ev: React.PointerEvent) => void
+  onPointerDown?: (e: CalendarEvent, ev: React.PointerEvent, col: number) => void
+  onResizeStart?: (e: CalendarEvent, col: number, ev: React.PointerEvent) => void
   blockTouchAction?: 'none' | 'pan-y'
 }) {
   const e = clip.event
@@ -1113,7 +1305,29 @@ const EventBlock = memo(function EventBlock({
   // Under ~45 minutes there is no room for both, and a squeezed time range
   // wins the space from the one thing that says what the block IS.
   const tooShortForTime = visibleHours < 0.75
+  /* Under an hour the block is 24 px or less, and the ordinary padded line
+     (5 px of padding + a 14.4 px line) simply does not fit inside it — the
+     title was drawn below the block's own height and then clipped away by
+     `overflow-hidden`, so a half-hour block rendered as an empty colour chip.
+     Short blocks get their own line instead: no vertical padding, a smaller
+     face, centred in whatever height there is. */
+  const tiny = visibleHours < 1
+  // the end zone has to leave something to click for the popover
+  const gripH = heightPx >= 20 ? 8 : 4
   const timeText = `${hhmm(new Date(e.start))} → ${hhmm(new Date(e.end))}`
+
+  /* The end zone is measured on the BLOCK, not delegated to a child element:
+     the button's own 1px bottom border and its 1px hover lift both sit outside
+     any child's box, so a child hit area loses exactly the last pixels — the
+     ones the pointer aims at. The grip below is therefore decoration only
+     (`pointer-events-none`) and this decides what the press means.
+     Only the clip HOLDING the event's end may resize: the half of a night
+     watch cut at the seam ends at midnight because the column does, and
+     dragging that edge would be dragging a rendering artefact. */
+  const [nearEnd, setNearEnd] = useState(false)
+  const resizable = !!onResizeStart && !clip.continuesAfter
+  const overEnd = (ev: React.PointerEvent) =>
+    (ev.currentTarget as HTMLElement).getBoundingClientRect().bottom - ev.clientY <= gripH + 2
   return (
     <button
       type="button"
@@ -1122,10 +1336,27 @@ const EventBlock = memo(function EventBlock({
       // them, so the accessible name and any copy/paste read "Linear
       // Algebra15:00 → 16:30". Spell it properly here.
       aria-label={`${e.title}, ${timeText}, ${fullHours.toFixed(1)} hours`}
+      title={resizable && nearEnd ? voice.manor.resizeHandle : undefined}
       onClick={(ev) => onClick(col, e, (ev.currentTarget as HTMLElement).offsetTop)}
-      onPointerDown={onPointerDown ? (ev) => onPointerDown(e, ev) : undefined}
+      onPointerDown={
+        onPointerDown || resizable
+          ? (ev) => {
+              if (resizable && overEnd(ev)) return onResizeStart?.(e, col, ev)
+              onPointerDown?.(e, ev, col)
+            }
+          : undefined
+      }
+      onPointerMove={
+        resizable
+          ? (ev) => {
+              const n = overEnd(ev)
+              setNearEnd((prev) => (prev === n ? prev : n))
+            }
+          : undefined
+      }
+      onPointerLeave={resizable ? () => setNearEnd(false) : undefined}
       className={[
-        'booked booked-interactive absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left',
+        'booked booked-interactive group absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left',
         isRest && 'booked-hatch',
         // the second half of a block cut by midnight is the quieter one — it
         // already happened, and two equally loud halves read as two events
@@ -1139,7 +1370,7 @@ const EventBlock = memo(function EventBlock({
         ['--booked-accent' as string]: meta.color,
         top: topPx + 1,
         height: Math.max(heightPx - 2, 12),
-        cursor: onPointerDown ? 'grab' : 'pointer',
+        cursor: resizable && nearEnd ? 'ns-resize' : onPointerDown ? 'grab' : 'pointer',
         touchAction: onPointerDown ? blockTouchAction : undefined,
         WebkitTouchCallout: 'none',
         opacity: dimmed ? 0.3 : 1,
@@ -1147,11 +1378,13 @@ const EventBlock = memo(function EventBlock({
         borderTopRightRadius: clip.continuesBefore ? 0 : undefined,
         borderBottomLeftRadius: clip.continuesAfter ? 0 : undefined,
         borderBottomRightRadius: clip.continuesAfter ? 0 : undefined,
-        outline: selected
-          ? `1.5px solid ${meta.color}`
-          : changed
-            ? '1.5px solid var(--color-accent)'
-            : 'none',
+        outline: clashing
+          ? '1.5px solid var(--color-danger)'
+          : selected
+            ? `1.5px solid ${meta.color}`
+            : changed
+              ? '1.5px solid var(--color-accent)'
+              : 'none',
         outlineOffset: 1.5,
       }}
     >
@@ -1164,9 +1397,16 @@ const EventBlock = memo(function EventBlock({
           ▲
         </span>
       )}
-      <span className="block px-2 py-[5px]">
+      <span
+        className={tiny ? 'flex h-full items-center px-1.5' : 'block px-2 py-[5px]'}
+        style={tiny ? { minWidth: 0 } : undefined}
+      >
         <span
-          className="block text-xs font-semibold leading-[1.2]"
+          className={
+            tiny
+              ? 'block min-w-0 text-[10px] font-semibold leading-none'
+              : 'block text-xs font-semibold leading-[1.2]'
+          }
           style={{
             whiteSpace: twoLine ? 'normal' : 'nowrap',
             overflow: 'hidden',
@@ -1178,7 +1418,11 @@ const EventBlock = memo(function EventBlock({
             <>
               {/* a real space, not just a margin — this pair is inline, so a
                   margin alone makes the copied text read "Algebra15:00" */}{' '}
-              <span className="text-[10.5px] font-normal text-ink-dim [font-variant-numeric:tabular-nums]">
+              <span
+                className={`font-normal text-ink-dim [font-variant-numeric:tabular-nums] ${
+                  tiny ? 'text-[9.5px]' : 'text-[10.5px]'
+                }`}
+              >
                 {timeText}
               </span>
             </>
@@ -1203,6 +1447,21 @@ const EventBlock = memo(function EventBlock({
           </>
         )}
       </span>
+      {/* the grip: the visible half of the end zone above. Invisible until the
+          block is hovered, so a week of blocks does not read as a week of
+          handles, and brighter once the pointer is actually on the edge. */}
+      {resizable && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end justify-center opacity-0 transition-opacity group-hover:opacity-100"
+          style={{ height: gripH }}
+        >
+          <span
+            className="mb-[1.5px] block h-[2px] w-6 rounded-full transition-opacity"
+            style={{ background: 'currentColor', opacity: nearEnd ? 1 : 0.5 }}
+          />
+        </span>
+      )}
     </button>
   )
 })

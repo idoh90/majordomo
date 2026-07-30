@@ -180,6 +180,9 @@ export const majordomoPack: VoicePack = {
     movePlace: 'Tap where it should go, sir.',
     releaseCancel: 'RELEASE TO CANCEL',
     movedTo: (time) => `Moved to ${time}, sir.`,
+    resized: ({ hours, longer }) =>
+      longer ? `Extended to ${hours} h, sir.` : `Trimmed to ${hours} h, sir.`,
+    resizeHandle: 'Drag to change when it ends',
     nearWatchLine: ({ mins, before }) =>
       before
         ? `Ends ${mins} minutes before the watch, sir.`

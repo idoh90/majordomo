@@ -226,6 +226,10 @@ export interface VoicePack {
     releaseCancel: string
     /** drop toast carrying the landing time */
     movedTo: (time: string) => string
+    /** toast after dragging a block's end edge changed how long it runs */
+    resized: (v: { hours: string; longer: boolean }) => string
+    /** tooltip on the grip at a block's end edge */
+    resizeHandle: string
     /** ▲ line on a training event booked hard by a watch. `before` = the
      *  session ends `mins` minutes before the watch begins; otherwise it
      *  begins `mins` minutes after the watch ends. */
