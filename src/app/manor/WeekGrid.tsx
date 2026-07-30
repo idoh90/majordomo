@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CalendarEvent, EventKind } from '../../core/events/types'
 import {
   SEAM_HOUR,
@@ -72,6 +72,47 @@ const EMPTY_CLIPS: ClippedEvent[] = []
 
 function tickLabel(offset: number): string {
   return `${String((SEAM_HOUR + offset) % 24).padStart(2, '0')}:00`
+}
+
+/** breathing room between a popover and the edges of the clipping grid box */
+const POP_GAP = 4
+
+/**
+ * Pin a popover under the click without letting it fall out of the grid box.
+ *
+ * The box CLIPS (`overflow-hidden`), and a popover's height is content-driven
+ * — six templates, or the taller custom form. A hardcoded "assume it is 236px
+ * tall" clamp is therefore a guess that is wrong by however much the content
+ * actually measures, and clicking low in the day pushed the real bottom (the
+ * last templates, or the custom form's Book button) outside the box, where it
+ * was silently cut off. Measure the panel instead, and re-measure when it
+ * grows — switching to the custom form changes the height under the same click.
+ *
+ * Deliberately no dep list: the height only ever changes through a render (a
+ * different template list, the custom form), so every render re-measures. The
+ * equality guard is what keeps that from looping. A ResizeObserver would be
+ * the tidier instrument but it is not one this project can verify — it never
+ * fires in the harness browser, so it would be an untested claim.
+ */
+function usePinnedTop(anchorY: number) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [top, setTop] = useState(POP_GAP)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const next = Math.max(POP_GAP, Math.min(anchorY, BODY_H - el.offsetHeight - POP_GAP))
+    setTop((t) => (Math.abs(t - next) < 0.5 ? t : next))
+  })
+  return [ref, top] as const
+}
+
+/** left of the column for the last three days, right of it otherwise. Anchored
+ *  by the panel's near edge, so a panel that changes width (quick-add opening
+ *  the custom form) stays put instead of sliding over the column it belongs to. */
+function popoverSide(col: number): React.CSSProperties {
+  return col < 4
+    ? { left: `calc(${col + 1} * 100% / 7 + 6px)` }
+    : { right: `calc(${7 - col} * 100% / 7 + 6px)` }
 }
 
 interface Popover {
@@ -694,13 +735,7 @@ export function WeekGrid({
                   setEditing(popover.event)
                   setPopover(null)
                 }}
-                style={{
-                  left:
-                    popover.col < 4
-                      ? `calc(${popover.col + 1} * 100% / 7 + 6px)`
-                      : `calc(${popover.col} * 100% / 7 - 242px)`,
-                  top: Math.max(4, Math.min(popover.y, BODY_H - 232)),
-                }}
+                style={popoverSide(popover.col)}
               />
             )}
             {quickAdd && (
@@ -710,13 +745,7 @@ export function WeekGrid({
                 onPick={quickAddPick}
                 onClose={() => setQuickAdd(null)}
                 fits={(h) => slotFree(null, quickAdd.col, quickAdd.ts, h)}
-                style={{
-                  left:
-                    quickAdd.col < 4
-                      ? `calc(${quickAdd.col + 1} * 100% / 7 + 6px)`
-                      : `calc(${quickAdd.col} * 100% / 7 - 218px)`,
-                  top: Math.max(4, Math.min(quickAdd.y, BODY_H - 236)),
-                }}
+                style={popoverSide(quickAdd.col)}
               />
             )}
           </div>
@@ -1276,11 +1305,13 @@ function EventPopover({
   const s = new Date(e.start)
   const en = new Date(e.end)
   const cross = localDayKey(s) !== localDayKey(en)
+  const [ref, top] = usePinnedTop(popover.y)
   return (
     <div
+      ref={ref}
       data-manor-popover
       className="menu-panel absolute z-[11] w-[236px] animate-[fade-in_160ms_ease-out] p-4"
-      style={style}
+      style={{ ...style, top, maxHeight: BODY_H - 2 * POP_GAP, overflowY: 'auto' }}
     >
       <div className="flex items-center gap-2">
         <span className="h-2 w-2 rounded-full" style={{ background: meta.color }} />
@@ -1371,13 +1402,15 @@ function QuickAddPopover({
 }) {
   const when = new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS)
   const [custom, setCustom] = useState(false)
+  const [ref, top] = usePinnedTop(quickAdd.y)
   return (
     <div
+      ref={ref}
       data-manor-popover
       className={`menu-panel absolute z-[11] animate-[fade-in_160ms_ease-out] p-3.5 ${
         custom ? 'w-[264px]' : 'w-[212px]'
       }`}
-      style={style}
+      style={{ ...style, top, maxHeight: BODY_H - 2 * POP_GAP, overflowY: 'auto' }}
     >
       <div className="flex items-center gap-2">
         <span className="text-[12.5px] font-bold [font-variant-numeric:tabular-nums]">
