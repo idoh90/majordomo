@@ -45,7 +45,7 @@ jobs:
           SUPABASE_URL: https://xigbgvuakguqmfulfaqe.supabase.co
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
           if [ -z "${SUPABASE_ANON_KEY}" ]; then
             echo "::error::SUPABASE_ANON_KEY is not set. Add it under Settings → Secrets and variables → Actions."
@@ -58,6 +58,21 @@ jobs:
           # means the registry is not answering the way it should — fail LOUDLY,
           # because a keep-alive that quietly stops working is worse than not
           # having one at all.
+          # A failing probe records its failure and the next one still runs.
+          #
+          # It used to `exit 1` on the spot, under `set -e`, which meant the
+          # app's probe failing took the whole job down BEFORE the waitlist's
+          # probe was ever attempted. Both doors are on the same paused
+          # hostname, so the common case was a report naming one of the two
+          # things that were broken — and the waitlist's probe is the only
+          # daily check that the public signup path exists at all.
+          #
+          # `curl` failing outright (DNS gone, which is exactly what a paused
+          # project looks like) also used to abort the script before the status
+          # could be printed. It is caught now and reported as 000, which is the
+          # single most diagnostic line this job can produce.
+          fails=0
+
           probe() {
             local label="$1" method="$2" url="$3"
             shift 3
@@ -69,15 +84,19 @@ jobs:
               -H "apikey: ${SUPABASE_ANON_KEY}" \
               -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
               "$@" \
-              "${url}")
+              "${url}") || status="000"
 
             echo "${label}: HTTP ${status}"
-            cat /tmp/body.txt
+            cat /tmp/body.txt 2>/dev/null || true
             echo
 
             if [ "${status}" != "200" ]; then
-              echo "::error::${label} answered ${status}, not 200. The project may be paused, the key may be wrong, or the thing being queried may be gone."
-              exit 1
+              if [ "${status}" = "000" ]; then
+                echo "::error::${label} got no answer at all — no DNS, no TLS, or a timeout. A paused Supabase project stops resolving entirely, and this is what that looks like."
+              else
+                echo "::error::${label} answered ${status}, not 200. The project may be paused, the key may be wrong, or the thing being queried may be gone."
+              fi
+              fails=$((fails + 1))
             fi
           }
 
@@ -100,5 +119,10 @@ jobs:
           probe "the waitlist" POST "${SUPABASE_URL}/rest/v1/rpc/waitlist_count" \
             -H "Content-Type: application/json" \
             -d '{}'
+
+          if [ "${fails}" -ne 0 ]; then
+            echo "::error::${fails} of 2 doors did not answer. See the errors above for which."
+            exit 1
+          fi
 
           echo "The registry is awake, and both doors answer."
