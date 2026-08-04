@@ -442,6 +442,8 @@ export const majordomoPack: VoicePack = {
       addHomework: 'ADD HOMEWORK',
       addExam: 'ADD AN EXAM',
       addTopic: (name) => `ADD A TOPIC — ${name}`,
+      calendar: 'CALENDAR',
+      calendarHint: 'Choose the day from a calendar',
       bookHintPast: 'The hour is already behind us, sir — this lands as logged, and the ring moves at once.',
       bookHintFuture: 'This will take its place on the Manor at once, sir.',
       goalZeroHint: 'A goal of nought keeps the ring quiet, sir — hours are still counted.',

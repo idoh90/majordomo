@@ -558,6 +558,10 @@ export interface VoicePack {
       addHomework: string
       addExam: string
       addTopic: (name: string) => string
+      /** the fold beside the exam-day stepper */
+      calendar: string
+      /** its accessible name — what pressing it does */
+      calendarHint: string
       bookHintPast: string
       bookHintFuture: string
       goalZeroHint: string

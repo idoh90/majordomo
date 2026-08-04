@@ -5,7 +5,10 @@ import { useEventsStore } from '../../core/events/store'
 import { StudyBriefing } from './Briefing'
 import type { CalendarEvent } from '../../core/events/types'
 import { useShellStore } from '../../core/store/shell'
+import { CollapseToggle } from '../../core/ui/CollapseToggle'
+import { Collapsible } from '../../core/ui/Collapsible'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
+import { MonthGrid } from '../../core/ui/MonthGrid'
 import { Sheet } from '../../core/ui/Sheet'
 import { useNow } from '../../core/useNow'
 import { voice } from '../../core/voice'
@@ -29,6 +32,11 @@ const MAX_RINGS = 8
 const RING_C = 2 * Math.PI * 48
 /** syllabus chips shown per awaiting session before the rest fold behind +N MORE */
 const TOPIC_CHIPS = 6
+/** where a new exam lands before it is moved */
+const EXAM_DEFAULT_AHEAD = 7
+/** how far ahead an exam may be set — a stop for the month nav, not a rule
+ *  about examinations; two years is past any syllabus that exists yet */
+const EXAM_MAX_AHEAD = 730
 
 const fdate = (d: Date) => `${WD[d.getDay()]} ${d.getDate()}`
 const hhmm = (d: Date) =>
@@ -1407,18 +1415,33 @@ function ExamSheet({
   now: number
   butler: (msg: string) => void
 }) {
+  const weekStart = useShellStore((s) => s.weekStart)
   const [title, setTitle] = useState('')
   const [subj, setSubj] = useState(defaultSubj)
-  const [onDays, setOnDays] = useState(7)
+  const [onKey, setOnKey] = useState(() => localDayKey(addDays(new Date(now), EXAM_DEFAULT_AHEAD)))
+  const [calOpen, setCalOpen] = useState(false)
 
+  // `now` is deliberately not a dependency: it ticks every minute, and a draft
+  // that reseeds itself under the user is worse than a default seeded a few
+  // minutes stale — the day it names only changes at midnight anyway
   useEffect(() => {
     if (!open) return
     setTitle('')
     setSubj(defaultSubj)
-    setOnDays(7)
+    setOnKey(localDayKey(addDays(new Date(now), EXAM_DEFAULT_AHEAD)))
+    setCalOpen(false)
   }, [open, defaultSubj])
 
-  const day = addDays(new Date(now), onDays)
+  const todayKey = localDayKey(new Date(now))
+  const lastKey = localDayKey(addDays(new Date(now), EXAM_MAX_AHEAD))
+  const day = dayKeyToDate(onKey)
+
+  /** the stepper's ±1, held inside the same bounds the grid draws */
+  const shiftDay = (delta: number) => {
+    const next = localDayKey(addDays(day, delta))
+    if (next < todayKey || next > lastKey) return
+    setOnKey(next)
+  }
 
   const save = () => {
     const trimmed = title.trim()
@@ -1426,7 +1449,7 @@ function ExamSheet({
       butler(voice.study.toast.titleFirst)
       return
     }
-    useStudyStore.getState().addExam(subj, trimmed, localDayKey(day))
+    useStudyStore.getState().addExam(subj, trimmed, onKey)
     butler(voice.study.toast.examNoted)
     onClose()
   }
@@ -1444,12 +1467,31 @@ function ExamSheet({
       <SheetLabel>{voice.study.sheet.subject}</SheetLabel>
       <SubjectChips subjects={subjects} value={subj} onPick={setSubj} />
       <SheetLabel>{voice.study.sheet.theDay}</SheetLabel>
-      <Stepper
-        label={`${voice.study.countdown(onDays)} — ${fdate(day)}`}
-        minWidth={170}
-        onDec={() => setOnDays((d) => Math.max(1, d - 1))}
-        onInc={() => setOnDays((d) => Math.min(90, d + 1))}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <Stepper
+          label={`${voice.study.countdown(daysUntil(onKey, now))} — ${fdate(day)}`}
+          minWidth={170}
+          onDec={() => shiftDay(-1)}
+          onInc={() => shiftDay(1)}
+        />
+        <CollapseToggle
+          expanded={calOpen}
+          onToggle={() => setCalOpen((v) => !v)}
+          label={voice.study.sheet.calendar}
+          hint={voice.study.sheet.calendarHint}
+        />
+      </div>
+      <Collapsible open={calOpen} innerClassName="pt-2.5">
+        <div className="rounded-[10px] border border-line bg-panel-2 p-3">
+          <MonthGrid
+            value={onKey}
+            onPick={setOnKey}
+            min={todayKey}
+            max={lastKey}
+            weekStart={weekStart}
+          />
+        </div>
+      </Collapsible>
       <div className="mt-3.5 text-xs italic text-ink-dim">{voice.study.sheet.examHint}</div>
       <SheetActions cta={voice.study.sheet.ctaExam} onCancel={onClose} onSave={save} />
     </Sheet>

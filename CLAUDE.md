@@ -122,7 +122,8 @@ src/
     ids.ts        makeId()   ·  storage.ts  storageAvailable()
     store/shell.ts  app-wide store: { skin, weekStart } @ `majordomo-shell` v3
     ui/           index.css (skin bundles) + skins.ts (SKINS flags) +
-                  Sheet / ConfirmDialog / SegmentedControl (shared primitives)
+                  Sheet / ConfirmDialog / SegmentedControl / MonthGrid
+                  (shared primitives)
   modules/
     watch/        'THE WATCH' — shifts: post a watch of any shape from the user's
                   own shift templates or a custom one (writes core/events; a
@@ -139,6 +140,15 @@ src/
 Everything under `core/` beyond the contract got there by the **extract-on-contact**
 rule: `Sheet`/`ConfirmDialog`/`SegmentedControl`, `makeId`, `storageAvailable`, and
 `useNow` all lived in training until Wayne Fund became the second consumer.
+`MonthGrid` came out of training's `CalendarPicker` the same way, when the Study
+needed a month calendar for exam days. It speaks **local day keys** at both ends
+and holds **no policy** about which days are pickable — `min`/`max` are the whole
+vocabulary, and the two wings point them in opposite directions (the Grounds
+can't log a workout ahead of now; the Study can't sit an exam behind it). The
+clock, the workout dots and the never-ahead-of-now clamp stayed in
+`CalendarPicker`, which is now that grid plus a time row. Note the grid takes
+`weekStart` but the Grounds still passes nothing (Monday, as it always was),
+so a Sunday-start user sees Sunday only in the Study — worth settling one way.
 
 **`Sheet`'s close contract**: the backdrop dismisses on **click, never
 `pointerdown`** — a press that starts on the scrim and ends on the surface (a slip,
