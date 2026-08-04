@@ -5,6 +5,7 @@ import { useNow } from '../../core/useNow'
 import { useWorkoutStore } from '../../modules/training/store'
 import { useCapitalStore } from '../../modules/capital/store'
 import { useStudyStore } from '../../modules/study/store'
+import { useRhythmStore } from '../rhythm/store'
 import { computeBriefing } from './headsUps'
 
 /**
@@ -23,6 +24,7 @@ export function useHeadsUps(): ReturnType<typeof computeBriefing> {
   const subjects = useStudyStore((s) => s.subjects)
   const exams = useStudyStore((s) => s.exams)
   const sessions = useStudyStore((s) => s.sessions)
+  const curve = useRhythmStore((s) => s.curve)
 
   return useMemo(
     () =>
@@ -37,7 +39,8 @@ export function useHeadsUps(): ReturnType<typeof computeBriefing> {
         subjects,
         exams,
         sessions,
+        curve,
       }),
-    [now, weekStart, events, workouts, weeklyGoal, snapshots, paydayDay, subjects, exams, sessions],
+    [now, weekStart, events, workouts, weeklyGoal, snapshots, paydayDay, subjects, exams, sessions, curve],
   )
 }

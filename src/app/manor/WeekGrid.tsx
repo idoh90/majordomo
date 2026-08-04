@@ -13,6 +13,7 @@ import { localDayKey } from '../../core/dates'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { voice } from '../../core/voice'
 import { useIsMobile } from '../useIsMobile'
+import { CurveOverlay } from '../rhythm/CurveOverlay'
 import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
 import { ManorLegend } from './Legend'
 import { CustomEventForm } from './fields'
@@ -868,6 +869,7 @@ export function WeekGrid({
                   }}
                   onMouseLeave={() => setHoverSlot(null)}
                 >
+                  <CurveOverlay />
                   {hoverSlot?.col === i && (
                     <div
                       className="pointer-events-none absolute inset-x-[3px] z-[1] flex items-center gap-1 rounded-[6px] px-1.5"
@@ -2151,6 +2153,7 @@ function MobileWeek({
                   style={{ height: BODY_H }}
                   onClick={(ev) => onColumnClick(i, ev)}
                 >
+                  <CurveOverlay />
                   <Rules />
                   <DayBody
                     col={i}

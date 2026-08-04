@@ -9,6 +9,8 @@ import {
   type WeekStart,
 } from '../../core/dates'
 import { voice } from '../../core/voice'
+import { TROUGH, evalCurve, type RhythmCurve } from '../rhythm/curve'
+import { hhmm } from './kinds'
 import { isRun, type Workout } from '../../modules/training/types'
 import { unfulfilledTrainingEvents } from '../../modules/training/lib/fulfillment'
 import type { Snapshot } from '../../modules/capital/types'
@@ -29,6 +31,7 @@ export type HeadsUpId =
   | 'week-plan'
   | 'snapshot-nudge'
   | 'night-tonight'
+  | 'against-the-curve'
   | 'awaiting-report'
   | 'goal-behind'
 
@@ -49,6 +52,8 @@ export interface HeadsUpInputs {
   subjects: Subject[]
   exams: Exam[]
   sessions: Record<string, SessionMeta>
+  /** the day curve — null while dormant, and the rule stays silent with it */
+  curve: RhythmCurve | null
 }
 
 /** at most this many heads-up lines render; the greeting is free */
@@ -135,7 +140,36 @@ export function computeBriefing(i: HeadsUpInputs): { greeting: string | null; he
   })
   if (nightAhead) push('night-tonight', voice.manor.headsUp.nightTonight)
 
-  /* ---- 7 · study sessions still awaiting their report ---- */
+  /* ---- 7 · a booking whose middle sits in the day curve's trough ---- */
+  {
+    const curve = i.curve
+    if (curve) {
+      // the session's MIDPOINT is the single defensible sample: "booked over
+      // the trough" means the middle of it sits there, not that an edge grazes
+      const against = i.events
+        .filter((e) => (e.kind === 'training' || e.kind === 'study') && !e.allDay)
+        .filter((e) => {
+          const start = new Date(e.start).getTime()
+          return start > i.now && start <= i.now + 48 * HOUR_MS
+        })
+        .sort((a, b) => a.start.localeCompare(b.start))
+        .find((e) => {
+          const mid = new Date((new Date(e.start).getTime() + new Date(e.end).getTime()) / 2)
+          return evalCurve(curve, mid.getHours() * 60 + mid.getMinutes()) < TROUGH
+        })
+      if (against) {
+        push(
+          'against-the-curve',
+          voice.manor.headsUp.againstTheCurve({
+            title: against.title,
+            time: hhmm(new Date(against.start)),
+          }),
+        )
+      }
+    }
+  }
+
+  /* ---- 8 · study sessions still awaiting their report ---- */
   const pending = awaitingReport(i.events, i.sessions, i.now)
   if (pending.length > 0) {
     const oldest = Math.min(...pending.map((e) => new Date(e.end).getTime()))
@@ -144,7 +178,7 @@ export function computeBriefing(i: HeadsUpInputs): { greeting: string | null; he
     }
   }
 
-  /* ---- 8 · weekly goal short with the week nearly out ---- */
+  /* ---- 9 · weekly goal short with the week nearly out ---- */
   if (i.weeklyGoal > 0) {
     const weekStartD = startOfWeek(nowD, i.weekStart)
     const daysIn = Math.floor((startOfLocalDay(nowD).getTime() - weekStartD.getTime()) / DAY_MS)

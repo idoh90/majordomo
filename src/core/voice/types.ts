@@ -289,6 +289,8 @@ export interface VoicePack {
       awaitingReport: (n: number) => string
       /** weekly training goal short with the week nearly over */
       goalBehind: (v: { done: number; goal: number }) => string
+      /** a training/study booking whose middle sits in the day curve's trough */
+      againstTheCurve: (v: { title: string; time: string }) => string
     }
     whatIf: {
       button: string
@@ -306,6 +308,34 @@ export interface VoicePack {
       /** drawer note when a rehearsed training block sits near a watch */
       conflict: (v: { title: string; mins: number; before: boolean }) => string
     }
+  }
+  /** the day's rhythm — the user-authored 24h energy curve (editor sheet + Manor overlay) */
+  rhythm: {
+    /** gear menu item, Estate group */
+    menuItem: string
+    /** editor sheet title */
+    title: string
+    /** one line under the title */
+    blurb: string
+    /** readout row when nothing is selected: how to add/adjust points */
+    hintAdd: string
+    /** readout row after a tap that could not add (curve already at capacity) */
+    hintFull: string
+    /** readout row while a point is selected or dragged */
+    readout: (v: { time: string; value: string }) => string
+    /** a control point's accessible label */
+    pointLabel: (v: { time: string; value: string }) => string
+    /** footer controls */
+    removePoint: string
+    reset: string
+    save: string
+    /** retiring the curve — back to dormant */
+    retire: string
+    retireTitle: string
+    retireBody: string
+    retireYes: string
+    /** the Manor legend entry for the overlay */
+    legend: string
   }
   watch: {
     onDuty: string

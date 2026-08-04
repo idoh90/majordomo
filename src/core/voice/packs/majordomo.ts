@@ -243,6 +243,8 @@ export const majordomoPack: VoicePack = {
           : `${n} study sessions await their report, sir.`,
       goalBehind: ({ done, goal }) =>
         `${done} session${done === 1 ? '' : 's'} of ${goal} this week, sir, with the week nearly out.`,
+      againstTheCurve: ({ title, time }) =>
+        `${title} at ${time} sits in the trough of the day's rhythm, sir — the hour will fight you.`,
     },
     whatIf: {
       button: '⧉ WHAT-IF',
@@ -262,6 +264,24 @@ export const majordomoPack: VoicePack = {
           ? `${title} would end ${mins} minutes before the watch, sir.`
           : `${title} would begin ${mins} minutes after the watch, sir.`,
     },
+  },
+  rhythm: {
+    menuItem: 'The day’s rhythm…',
+    title: 'THE DAY’S RHYTHM',
+    blurb: 'The household’s energy, hour by hour. Draw it once and the Manor will keep it in mind.',
+    hintAdd: 'Drag a point to shape the day. Tap an empty stretch to add one.',
+    hintFull: 'Eight points is quite enough definition, sir.',
+    readout: ({ time, value }) => `${time} · ${value}`,
+    pointLabel: ({ time, value }) => `Control point — ${time}, energy ${value} of 10`,
+    removePoint: 'Remove point',
+    reset: 'Reset',
+    save: 'Save',
+    retire: 'Retire the curve',
+    retireTitle: 'Retire the curve?',
+    retireBody:
+      'The overlay and its counsel go quiet. Your points are not kept — drawing it again starts fresh.',
+    retireYes: 'Retire it',
+    legend: 'rhythm',
   },
   grounds: {
     ledger: {

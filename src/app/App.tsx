@@ -30,6 +30,9 @@ export default function App() {
     const params = new URLSearchParams(window.location.search)
     const v = params.get('view') ?? params.get('console')
     if (v && (v === 'manor' || CONSOLES.some((x) => x.id === v))) return v
+    // ?sheet=rhythm is a shell sheet, not a Grounds aid — stay on the Manor
+    // so the day-curve overlay is visible behind its editor
+    if (params.get('sheet') === 'rhythm') return 'manor'
     const trainingParams = ['sheet', 'detail', 'map', 'debugmap']
     if (trainingParams.some((k) => params.has(k))) return 'training'
     return 'manor'

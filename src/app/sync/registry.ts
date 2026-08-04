@@ -16,6 +16,8 @@ import { useWorkoutStore } from '../../modules/training/store'
 import type { Workout } from '../../modules/training/types'
 import { useWatchStore } from '../../modules/watch/store'
 import type { ShiftTemplate } from '../../modules/watch/types'
+import { normalizeCurve } from '../rhythm/curve'
+import { useRhythmStore } from '../rhythm/store'
 
 /**
  * What each wing contributes to the registry, and how it takes records back.
@@ -304,6 +306,29 @@ const watchSource: SyncSource = {
     })),
 }
 
+/* --------------------------------------------------------------- the rhythm */
+
+/**
+ * The day curve travels as ONE whole-curve record, last-writer-wins:
+ * per-point records would let two offline devices interleave their points
+ * into a shape nobody drew. The id 'day' leaves room for day-type channels
+ * later. A retired curve is the same record with a null payload — no
+ * deletion machinery needed.
+ */
+const rhythmSource: SyncSource = {
+  wing: 'rhythm',
+  toRecords: () => [rec('rhythm', 'curve', 'day', useRhythmStore.getState().curve)],
+  subscribe: (onChange) => useRhythmStore.subscribe(onChange),
+  apply: (records) => {
+    for (const r of of(records, 'curve')) {
+      if (r.id !== 'day') continue
+      // normalizeCurve is NOT optional: a hand-edited or future-shaped
+      // payload must clamp to something the overlay can render, or go dormant
+      useRhythmStore.setState({ curve: r.deleted ? null : normalizeCurve(r.payload) })
+    }
+  },
+}
+
 export const SYNC_SOURCES: SyncSource[] = [
   shellSource,
   manorSource,
@@ -311,4 +336,5 @@ export const SYNC_SOURCES: SyncSource[] = [
   studySource,
   ledgerSource,
   watchSource,
+  rhythmSource,
 ]

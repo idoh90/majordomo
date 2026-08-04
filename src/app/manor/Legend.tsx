@@ -2,6 +2,7 @@ import { useShellStore } from '../../core/store/shell'
 import { SKINS } from '../../core/ui/skins'
 import { strainToColor } from '../../modules/training/lib/strainColor'
 import { voice } from '../../core/voice'
+import { useRhythmStore } from '../rhythm/store'
 import { KIND_META } from './kinds'
 
 /**
@@ -22,6 +23,8 @@ import { KIND_META } from './kinds'
  */
 export function ManorLegend({ variant }: { variant: 'month' | 'week' }) {
   const ramp = SKINS[useShellStore((s) => s.skin)].heatRamp
+  // gated on the curve: the legend must never explain a color that isn't painted
+  const hasCurve = useRhythmStore((s) => s.curve !== null)
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] lowercase text-ink-dim">
       {(['shift', 'training', 'study', 'marker'] as const).map((k) => (
@@ -71,6 +74,20 @@ export function ManorLegend({ variant }: { variant: 'month' | 'week' }) {
         )}
         {voice.manor.monthLegend.strain}
       </span>
+      {variant === 'week' && hasCurve && (
+        <span className="inline-flex items-center gap-1.5">
+          {/* a left-edge fade, the ridge in miniature */}
+          <span
+            aria-hidden
+            className="inline-block h-2.5 w-3.5 rounded-[2px]"
+            style={{
+              background:
+                'linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 25%, transparent), transparent)',
+            }}
+          />
+          {voice.rhythm.legend}
+        </span>
+      )}
     </div>
   )
 }

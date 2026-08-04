@@ -215,9 +215,17 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   ARE the initial state (a rehydrated blob always wins, including an empty list);
   they carry **fixed ids and a constant `createdAt`** so two devices seeding
   independently produce identical records instead of eight shapes.
+- **`majordomo-rhythm` v1** (`src/app/rhythm/store.ts`) — the day curve: the user's
+  24h energy shape, 2–8 control points (min-since-midnight × 0–10), periodic
+  monotone-cubic interpolation (`rhythm/curve.ts`), **null = dormant** (no Manor
+  overlay, no legend entry, no briefing line — the default shape is never
+  auto-saved). Edited via gear menu → "The day's rhythm…"; everything reaching a
+  renderer passes `normalizeCurve` (migrate/rehydrate/set/sync-apply). Lives in
+  `app/` on purpose — first module consumer (Watch sleep placement) triggers the
+  extract-on-contact move to `core/rhythm/`, key unchanged.
 
 **Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
-`majordomo-events` / `majordomo-study` / `majordomo-watch`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+`majordomo-events` / `majordomo-study` / `majordomo-watch` / `majordomo-rhythm`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
 boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
 still applies; the old keys are left in place as insurance and never read again.
 
@@ -410,9 +418,10 @@ auto-enter Training so they land on the right screen.
 
 - `?demo` — seeds fixtures into empty stores: 10 workouts, the Wayne Fund demo
   (8 accounts, 6 ~monthly snapshots ending today, budget + spend, 2 live-priced
-  holdings with cached quotes so the board renders without a key), **and** the
+  holdings with cached quotes so the board renders without a key), the
   Manor's "brutal week" (4 night watches + sleep + training + study + payday,
-  plus a quieter next week) — screenshot aid
+  plus a quieter next week), **and** a night-shift-shaped day curve (peaks over
+  the watches, trough under the 09:00 sleep) — screenshot aid
 - `?manor=month` — opens the Manor in month view · `window.__events` — events store
 - `?console=training|capital` — start the shell inside that console
 - `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by
@@ -420,6 +429,8 @@ auto-enter Training so they land on the right screen.
 - `?sheet=add` / `?sheet=effort` / `?sheet=when` — opens the add sheet on load
   (effort = edit mode on newest workout; when = also expands the calendar)
 - `?sheet=skin` — opens the App-skin picker sheet on load
+- `?sheet=rhythm` — opens the day-curve editor sheet on load (stays on the Manor,
+  unlike the other `?sheet` values, so the overlay is visible behind it)
 - `?detail` — opens the newest workout's detail sheet
 - `?map=volume` — starts the body map in weekly-volume mode
 - `?debugmap` — rainbow-colors every muscle plate to spot gaps/overlaps
@@ -427,6 +438,7 @@ auto-enter Training so they land on the right screen.
 - `window.__capital` — the Wayne Fund store handle in dev
 - `window.__study` — the Study store handle in dev
 - `window.__watch` — the Watch's shift-shape store handle in dev
+- `window.__rhythm` — the day-curve store handle in dev
 - `window.__engine` — the strain module (sample `recoveryEnvelope(t, style, muscleFactor, nf)`
   to plot recovery curves without React round-trips)
 - `window.__nutrition` — the nutrition module (`dailyTargets`, `bmr`, … for macro checks)

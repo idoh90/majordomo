@@ -20,6 +20,7 @@ import { useWorkoutStore } from '../modules/training/store'
 import { ConfirmDialog } from '../core/ui/ConfirmDialog'
 import { ProfileSheet } from '../modules/training/components/ProfileSheet'
 import { Sheet } from '../core/ui/Sheet'
+import { RhythmSheet } from './rhythm/RhythmSheet'
 
 export function SettingsMenu() {
   const workouts = useWorkoutStore((s) => s.workouts)
@@ -30,10 +31,14 @@ export function SettingsMenu() {
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  // ?sheet=skin — dev screenshot aid, same family as ?sheet=add/effort/when
+  // ?sheet=skin / ?sheet=rhythm — dev screenshot aids, same family as ?sheet=add/effort/when
   const [skinOpen, setSkinOpen] = useState(
     () =>
       import.meta.env.DEV && new URLSearchParams(window.location.search).get('sheet') === 'skin',
+  )
+  const [rhythmOpen, setRhythmOpen] = useState(
+    () =>
+      import.meta.env.DEV && new URLSearchParams(window.location.search).get('sheet') === 'rhythm',
   )
   const [importOpen, setImportOpen] = useState(false)
   const [estateOpen, setEstateOpen] = useState(false)
@@ -120,6 +125,14 @@ export function SettingsMenu() {
                 ))}
               </div>
             </div>
+            <MenuItem
+              onClick={() => {
+                setMenuOpen(false)
+                setRhythmOpen(true)
+              }}
+            >
+              {voice.rhythm.menuItem}
+            </MenuItem>
             {/* the estate: every wing, for moving between devices/origins */}
             {registryShut === 'demo' ? (
               <MenuNote>{voice.sync.demoNote}</MenuNote>
@@ -179,6 +192,8 @@ export function SettingsMenu() {
       <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} />
 
       <SkinSheet open={skinOpen} onClose={() => setSkinOpen(false)} />
+
+      <RhythmSheet open={rhythmOpen} onClose={() => setRhythmOpen(false)} />
 
       <ImportSheet open={importOpen} onClose={() => setImportOpen(false)} onImport={replaceAll} />
 
