@@ -504,6 +504,8 @@ export interface VoicePack {
     noAwaiting: string
     /** unfiled quick-add row: label over the subject picker */
     fileUnder: string
+    /** awaiting-report row: label over the syllabus-topic picker */
+    topicsCovered: string
     done: string
     partial: string
     skipped: string
@@ -571,8 +573,11 @@ export interface VoicePack {
     }
     toast: {
       markedDone: string
+      /** report that also ticked topics off the syllabus */
+      markedDoneCovered: (topics: number) => string
       struck: string
       notedPartial: (h: number) => string
+      notedPartialCovered: (h: number, topics: number) => string
       restStruck: string
       logged: string
       onBooks: string

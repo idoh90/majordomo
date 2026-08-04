@@ -43,7 +43,14 @@ interface StudyState {
   deleteExam: (id: string) => void
 
   setSessionMeta: (eventId: string, meta: SessionMeta) => void
-  fulfill: (eventId: string, fulfillment: Fulfillment, doneH?: number) => void
+  /** report a session. `topicIds` are the syllabus topics it covered: they are
+   *  remembered on the meta AND ticked on the syllabus, in the one action */
+  fulfill: (
+    eventId: string,
+    fulfillment: Fulfillment,
+    doneH?: number,
+    topicIds?: string[],
+  ) => void
   /** drop metadata whose event no longer exists (call with committed ids only) */
   pruneSessions: (liveEventIds: string[]) => void
 }
@@ -185,13 +192,32 @@ export const useStudyStore = create<StudyState>()(
 
       setSessionMeta: (eventId, meta) =>
         set((s) => ({ sessions: { ...s.sessions, [eventId]: meta } })),
-      fulfill: (eventId, fulfillment, doneH) =>
-        set((s) => ({
-          sessions: {
-            ...s.sessions,
-            [eventId]: { ...(s.sessions[eventId] ?? {}), fulfillment, doneH },
-          },
-        })),
+      fulfill: (eventId, fulfillment, doneH, topicIds) =>
+        set((s) => {
+          // a skipped session covered nothing, so it ticks nothing off — and
+          // ids are re-checked against the roster because the syllabus sits on
+          // the same screen: a topic can be deleted between tick and report
+          const known = new Set(s.topics.map((t) => t.id))
+          const ticked =
+            fulfillment === 'skipped'
+              ? []
+              : [...new Set(topicIds ?? [])].filter((id) => known.has(id))
+          return {
+            sessions: {
+              ...s.sessions,
+              [eventId]: {
+                ...(s.sessions[eventId] ?? {}),
+                fulfillment,
+                doneH,
+                topicIds: ticked.length > 0 ? ticked : undefined,
+              },
+            },
+            topics:
+              ticked.length === 0
+                ? s.topics
+                : s.topics.map((t) => (ticked.includes(t.id) ? { ...t, covered: true } : t)),
+          }
+        }),
       /**
        * MUST NEVER record a deletion. This is local garbage collection, not
        * intent: once records arrive from other devices, a session's metadata

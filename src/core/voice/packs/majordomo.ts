@@ -389,6 +389,7 @@ export const majordomoPack: VoicePack = {
     awaiting: 'AWAITING REPORT',
     noAwaiting: 'Nothing awaiting report, sir.',
     fileUnder: 'FILE UNDER',
+    topicsCovered: 'COVERED — OPTIONAL',
     done: 'DONE',
     partial: 'PARTIAL',
     skipped: 'SKIPPED',
@@ -456,8 +457,12 @@ export const majordomoPack: VoicePack = {
     },
     toast: {
       markedDone: 'Marked done, sir. The ring moves.',
+      markedDoneCovered: (topics) =>
+        `Marked done, sir. The ring moves, and ${topics === 1 ? 'a topic' : `${topics} topics`} off the syllabus with it.`,
       struck: 'Struck as skipped, sir.',
       notedPartial: (h) => `Noted, sir — ${h.toFixed(1)} h of it.`,
+      notedPartialCovered: (h, topics) =>
+        `Noted, sir — ${h.toFixed(1)} h of it, and ${topics === 1 ? 'a topic' : `${topics} topics`} off the syllabus.`,
       restStruck: 'The rest are struck, sir.',
       logged: 'Logged, sir. The ring moves.',
       onBooks: 'On the books, sir.',

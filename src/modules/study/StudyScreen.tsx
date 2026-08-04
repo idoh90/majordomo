@@ -27,6 +27,8 @@ import type { Exam, SessionMeta, Subject } from './types'
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const MAX_RINGS = 8
 const RING_C = 2 * Math.PI * 48
+/** syllabus chips shown per awaiting session before the rest fold behind +N MORE */
+const TOPIC_CHIPS = 6
 
 const fdate = (d: Date) => `${WD[d.getDay()]} ${d.getDate()}`
 const hhmm = (d: Date) =>
@@ -673,6 +675,17 @@ function SubjectLedger({
 
 /* ---------------------------------------------------------------- the desk */
 
+/** one line for a report, which says whether the syllabus moved with it */
+function reportToast(f: SessionMeta['fulfillment'], doneH: number, ticked: number): string {
+  if (f === 'skipped') return voice.study.toast.struck
+  if (f === 'done') {
+    return ticked > 0 ? voice.study.toast.markedDoneCovered(ticked) : voice.study.toast.markedDone
+  }
+  return ticked > 0
+    ? voice.study.toast.notedPartialCovered(doneH, ticked)
+    : voice.study.toast.notedPartial(doneH)
+}
+
 function Desk({
   events,
   subjects,
@@ -692,6 +705,11 @@ function Desk({
 }) {
   const [partialFor, setPartialFor] = useState<string | null>(null)
   const [partialH, setPartialH] = useState(1)
+  // topics ticked but not yet reported, per awaiting session; the report
+  // commits them and clears the row's draft
+  const [picked, setPicked] = useState<Record<string, string[]>>({})
+  const [allTopicsFor, setAllTopicsFor] = useState<Record<string, boolean>>({})
+  const topics = useStudyStore((s) => s.topics)
 
   const nameOf = (e: CalendarEvent) => {
     const id = subjectOfEvent(e)
@@ -700,16 +718,25 @@ function Desk({
 
   const awaiting = awaitingReport(events, sessions, now)
   const fulfill = (id: string, f: SessionMeta['fulfillment'], doneH?: number) => {
-    useStudyStore.getState().fulfill(id, f, doneH)
+    const ticked = f === 'skipped' ? [] : (picked[id] ?? [])
+    useStudyStore.getState().fulfill(id, f, doneH, ticked)
     setPartialFor(null)
-    butler(
-      f === 'done'
-        ? voice.study.toast.markedDone
-        : f === 'skipped'
-          ? voice.study.toast.struck
-          : voice.study.toast.notedPartial(doneH ?? 0),
-    )
+    setPicked((p) => {
+      if (!(id in p)) return p
+      const next = { ...p }
+      delete next[id]
+      return next
+    })
+    butler(reportToast(f, doneH ?? 0, ticked.length))
   }
+  const toggleTopic = (eventId: string, topicId: string) =>
+    setPicked((p) => {
+      const cur = p[eventId] ?? []
+      return {
+        ...p,
+        [eventId]: cur.includes(topicId) ? cur.filter((t) => t !== topicId) : [...cur, topicId],
+      }
+    })
   const file = (e: CalendarEvent, subjectId: string) => {
     useEventsStore.getState().updateEvent(e.id, { sourceRef: subjRef(subjectId) })
     useStudyStore.getState().setSessionMeta(e.id, { fulfillment: 'planned' })
@@ -740,9 +767,18 @@ function Desk({
         {awaiting.map((e) => {
           const s = new Date(e.start)
           const en = new Date(e.end)
-          const unfiled = subjectOfEvent(e) === null
+          const subjectId = subjectOfEvent(e)
+          const unfiled = subjectId === null
           const open = partialFor === e.id
           const maxP = Math.max(0.5, hoursOf(e) - 0.5)
+          // only what the hour could still buy: topics already covered are
+          // nothing to tick, so the strip shrinks as the syllabus fills
+          const offer = topics
+            .filter((t) => t.subjectId === subjectId && !t.covered)
+            .sort((a, b) => a.order - b.order)
+          const showAll = allTopicsFor[e.id] === true
+          const shown = showAll ? offer : offer.slice(0, TOPIC_CHIPS)
+          const chosen = picked[e.id] ?? []
           return (
             <div key={e.id} className="border-b border-line py-2.5 last:border-b-0">
               <div className="flex flex-wrap items-baseline gap-2.5">
@@ -774,6 +810,43 @@ function Desk({
                 </div>
               ) : (
                 <>
+                  {offer.length > 0 && (
+                    <div className="mt-2">
+                      <span className="font-display text-[9px] font-semibold tracking-[0.16em] text-ink-faint">
+                        {voice.study.topicsCovered}
+                      </span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {shown.map((t) => {
+                          const on = chosen.includes(t.id)
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              aria-pressed={on}
+                              onClick={() => toggleTopic(e.id, t.id)}
+                              className="rounded-pill border px-3 py-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors"
+                              style={{
+                                borderColor: on ? 'var(--color-w-study)' : 'var(--color-line)',
+                                background: on ? 'var(--color-w-study)' : 'var(--color-panel-2)',
+                                color: on ? 'var(--color-bg)' : 'var(--color-ink-dim)',
+                              }}
+                            >
+                              {t.title.toUpperCase()}
+                            </button>
+                          )
+                        })}
+                        {!showAll && offer.length > TOPIC_CHIPS && (
+                          <button
+                            type="button"
+                            onClick={() => setAllTopicsFor((m) => ({ ...m, [e.id]: true }))}
+                            className="rounded-pill border border-line bg-transparent px-3 py-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors hover:text-ink-dim"
+                          >
+                            {voice.study.more(offer.length - TOPIC_CHIPS)}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-2 flex flex-wrap gap-2">
                     <QueueAction
                       label={voice.study.done}
@@ -823,6 +896,8 @@ function Desk({
                 if (subjectOfEvent(e) !== null) useStudyStore.getState().fulfill(e.id, 'skipped')
               }
               setPartialFor(null)
+              // nothing was covered, so no draft ticks survive the strike
+              setPicked({})
               butler(voice.study.toast.restStruck)
             }}
             className="mt-2.5 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-faint transition-colors hover:text-ink-dim"

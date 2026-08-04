@@ -209,6 +209,11 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   event id (sessions themselves are `majordomo-events` entries). Homework/exam actions
   write their Manor marker through the events store; `reconcileMarkers` heals drift
   (and trails overdue homework chips to today), never while a what-if sandbox is open.
+  `fulfill` is the one action that writes ACROSS records: reporting a session with
+  ticked topics stores them on the meta (`topicIds`) **and** flips those topics'
+  `covered` flag, so the report and the syllabus can never disagree. A skipped
+  session covered nothing and ticks nothing; the Dossier checklist stays the
+  manual overrule, since a reported session leaves the queue and cannot be re-reported.
 - **`majordomo-watch` v1** (`modules/watch/store.ts`) — shift *shapes* only
   (`ShiftTemplate { name, startMin, endMin }`, minutes since local midnight,
   `endMin > 1440` = ends next day). The watches themselves are events. Four starters

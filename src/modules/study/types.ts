@@ -57,6 +57,8 @@ export interface SessionMeta {
   /** hours actually done when fulfillment === 'partial' */
   doneH?: number
   homeworkId?: string
-  /** reserved: topic-ticking from the session flow is deferred */
+  /** syllabus topics this session covered, ticked when it was reported. A
+   *  record of what that hour bought — the topic's own `covered` flag is the
+   *  syllabus truth, and the Dossier checklist can still overrule it. */
   topicIds?: string[]
 }

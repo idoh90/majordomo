@@ -182,11 +182,14 @@ silence over noise. Voice bible as ever: dry, at most one sentence-final
 
 ## §7 · Deferred (explicit backlog)
 
-Per-subject ring hue · topic-ticking from the session flow (`topicIds`
-reserved in `SessionMeta`) · topic reorder · `countFrom` editing UI ·
-partial/skipped visuals on Manor blocks · block-trim-to-actual on partial ·
-weekly history chart · recurring study blocks (rides the Watch-rotations
-backlog item) · timed exam-sitting blocks on the calendar.
+Per-subject ring hue · ~~topic-ticking from the session flow~~ **done** — the
+AWAITING REPORT row offers the subject's uncovered topics; DONE / PARTIAL
+carries the ticks into `SessionMeta.topicIds` and flips the syllabus in the
+one `fulfill` action (SKIPPED covered nothing, so it ticks nothing) · topic
+reorder · `countFrom` editing UI · partial/skipped visuals on Manor blocks ·
+block-trim-to-actual on partial · weekly history chart · recurring study
+blocks (rides the Watch-rotations backlog item) · timed exam-sitting blocks
+on the calendar.
 
 ## §V · Verification deltas
 
