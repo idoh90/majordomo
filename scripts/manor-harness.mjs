@@ -215,9 +215,9 @@ async function desktopChecks(browser) {
       await page.mouse.move(targetX, wb.y + 8, { steps: 8 })
       // capture the ghost's geometry while it is still crossing midnight
       const ghostGeo = await page.evaluate(() => {
-        const g = [...document.querySelectorAll('div')].find(
-          (d) => d.style.willChange === 'transform' && d.style.transition?.includes('90ms'),
-        )
+        // the ghosts mark themselves: the old willChange/90ms fingerprint went
+        // dark the moment the drag lean took ownership of the transform
+        const g = document.querySelector('[data-drag-ghost]')
         if (!g) return null
         const box = g.closest('[style*="overflow"]')?.getBoundingClientRect()
         const r = g.getBoundingClientRect()
@@ -249,6 +249,10 @@ async function desktopChecks(browser) {
         ghostGeo.borderBottom === 'dotted'
           ? ok('A2b crossing ghost wears the seam cut edge')
           : bad('A2b crossing ghost wears the seam cut edge', `border-bottom: ${ghostGeo.borderBottom}`)
+      } else {
+        // a check that quietly stops running is a check that has already
+        // broken — silence reads as breakage here too
+        bad('A2b crossing ghost present mid-drag', 'no [data-drag-ghost] in the DOM')
       }
     }
   }
