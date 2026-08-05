@@ -248,7 +248,7 @@ export function SpendSheet({ open, now, onClose }: SpendSheetProps) {
 
       <Section
         title="Recurring monthly"
-        hint="Rent, subscriptions — counted every month until removed."
+        hint={voice.capital.spend.recurringHint}
         onAdd={() => setRec((r) => [...r, { id: makeId(), name: '', amount: '', active: true }])}
       >
         {rec.map((r) => (

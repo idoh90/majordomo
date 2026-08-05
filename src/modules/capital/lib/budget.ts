@@ -46,6 +46,44 @@ export function activeRecurringTotal(recurring: RecurringExpense[]): number {
   return recurring.filter((r) => r.active).reduce((s, r) => s + r.amount, 0)
 }
 
+export function daysInMonthOf(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+}
+
+/* ---- fixed vs variable ------------------------------------------------------
+ * The month's spend is two different KINDS of money and they do not behave
+ * alike in time. Recurring expenses are FIXED: rent is committed the instant
+ * the month opens, in full, and no amount of care this week makes it smaller.
+ * The card total and one-off items are VARIABLE: they accrue day by day and
+ * are the only part a run rate can honestly describe.
+ *
+ * Adding the two and dividing by the day elapsed — which everything used to do
+ * — books rent as if it were spent on the 1st: on day 5 of a month carrying
+ * ₪4,000 of rent the burn rate read ₪986 a day against ₪339 last month, an
+ * artifact of the denominator that decayed away as the month wore on. Rates
+ * and pace comparisons therefore run through `spendPace` below; the headline
+ * TOTAL is untouched, because money already committed is genuinely gone. */
+export interface SpendBreakdown {
+  /** Σ active recurring — committed the moment the month opens */
+  fixed: number
+  /** card snapshot + this month's one-offs — what actually accrues day by day */
+  variable: number
+  /** fixed + variable: the month's full commitment, what monthlySpent returns */
+  total: number
+}
+
+export function spendBreakdown(
+  month: string,
+  spends: Record<string, number>,
+  recurring: RecurringExpense[],
+  items: SpendItem[],
+): SpendBreakdown {
+  const fixed = activeRecurringTotal(recurring)
+  const variable =
+    (spends[month] ?? 0) + itemsForMonth(items, month).reduce((s, i) => s + i.amount, 0)
+  return { fixed, variable, total: fixed + variable }
+}
+
 /**
  * Month-to-date spend for `month` — additive: the card-spend snapshot (the
  * running total in `spends`, overwritten whenever the user checks their card
@@ -57,11 +95,69 @@ export function monthlySpent(
   recurring: RecurringExpense[],
   items: SpendItem[],
 ): number {
-  return (
-    (spends[month] ?? 0) +
-    activeRecurringTotal(recurring) +
-    itemsForMonth(items, month).reduce((s, i) => s + i.amount, 0)
-  )
+  return spendBreakdown(month, spends, recurring, items).total
+}
+
+/**
+ * What a day of this month actually costs: the fixed side spread flat across
+ * every day it buys, plus the variable side over the days actually elapsed.
+ * Hand a finished month `dayOfMonth === daysInMonth` and it collapses to
+ * total/days — so this month and last month are the same quantity, comparable.
+ */
+export function dailyBurn(b: SpendBreakdown, dayOfMonth: number, daysInMonth: number): number {
+  const days = Math.max(1, daysInMonth)
+  return b.fixed / days + b.variable / Math.min(days, Math.max(1, dayOfMonth))
+}
+
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
+
+export interface SpendPace {
+  fixed: number
+  variable: number
+  total: number
+  budget: number
+  dayOfMonth: number
+  daysInMonth: number
+  /** how far through the month we are, 0..1 */
+  dayFraction: number
+  /** the share of the budget fixed costs claim before the month even starts */
+  fixedFraction: number
+  /** total / budget — where the bar actually sits (unclamped; callers clamp) */
+  usedFraction: number
+  /** where the bar OUGHT to sit today: ALL of fixed, plus the elapsed share of
+   *  whatever the budget leaves for variable spending */
+  expectedFraction: number
+  /** what remains of the budget for variable spending once fixed is taken out */
+  variableBudget: number
+  /** the honest daily figure — see dailyBurn */
+  perDay: number
+  underPace: boolean
+}
+
+export function spendPace(b: SpendBreakdown, budget: number, now: Date): SpendPace {
+  const dayOfMonth = now.getDate()
+  const daysInMonth = daysInMonthOf(now)
+  const dayFraction = dayOfMonth / daysInMonth
+  const variableBudget = Math.max(0, budget - b.fixed)
+  // with no recurring at all this is exactly dayFraction — the old comparison,
+  // unchanged for anyone who never itemized a fixed cost
+  const expectedFraction =
+    budget > 0 ? clamp01((Math.max(0, b.fixed) + variableBudget * dayFraction) / budget) : 0
+  const usedFraction = budget > 0 ? b.total / budget : 0
+
+  return {
+    ...b,
+    budget,
+    dayOfMonth,
+    daysInMonth,
+    dayFraction,
+    fixedFraction: budget > 0 ? clamp01(b.fixed / budget) : 0,
+    usedFraction,
+    expectedFraction,
+    variableBudget,
+    perDay: dailyBurn(b, dayOfMonth, daysInMonth),
+    underPace: budget > 0 && usedFraction <= expectedFraction,
+  }
 }
 
 /*

@@ -81,7 +81,10 @@ export interface CapitalBriefingFacts {
   hasBudget: boolean
   dayOfMonth: number
   daysInMonth: number
+  /** the honest daily figure: fixed costs spread flat, variable over days elapsed */
   perDay: string | null
+  /** Σ this month's fixed commitments, or null when nothing recurs */
+  fixed: string | null
   underPace: boolean
   portfolio: {
     value: string
@@ -664,10 +667,17 @@ export interface VoicePack {
     }
     /** the spending sheet, month by month */
     spend: {
-      /** the pace chip beside the bar: spend-so-far against month-so-far.
-       *  A comparison of two fractions — never a projection of month-end */
+      /** the pace chip beside the bar: spend-so-far against what the month
+       *  ought to have claimed by now — fixed costs in full plus the elapsed
+       *  share of the rest. A comparison of two fractions, never a projection */
       underPace: string
       overPace: string
+      /** the spend card's legend: names the bar's muted fixed slice, then the
+       *  variable side and the days it accrued over */
+      fixedWord: string
+      variableOverDays: (days: number) => string
+      /** the recurring section's hint — why a fixed cost is not "spent on the 1st" */
+      recurringHint: string
       /** the spend card's affordance onto the sheet's month pager */
       history: string
       /** month pager arrows */

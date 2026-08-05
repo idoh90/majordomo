@@ -8,7 +8,7 @@ import { reconcilePaydayMarkers } from './lib/payday'
 import { useCapitalUi } from './uiStore'
 import type { Account, Holding, Snapshot, SpendItem } from './types'
 import { Amount } from './components/Amount'
-import { monthKey, monthlySpent } from './lib/budget'
+import { monthKey, spendBreakdown } from './lib/budget'
 import { displayDelta, latestSnapshot, liveNetWorth, netWorthOf, netWorthSeries } from './lib/networth'
 import { Vault } from './components/Vault'
 import { NetWorthChart } from './components/NetWorthChart'
@@ -106,7 +106,7 @@ export function CapitalScreen() {
     return { latest, series, live, delta }
   }, [snapshots, accounts, holdings, prices, fx])
 
-  const spent = monthlySpent(monthKey(new Date(now)), spends, recurring, spendItems)
+  const breakdown = spendBreakdown(monthKey(new Date(now)), spends, recurring, spendItems)
   const hasData = derived.latest != null || holdings.length > 0
   const hasHoldings = holdings.length > 0
 
@@ -172,7 +172,7 @@ export function CapitalScreen() {
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           <SpendCard
-            spent={spent}
+            breakdown={breakdown}
             budget={monthlyBudget}
             now={new Date(now)}
             onEdit={() => setSpendOpen(true)}

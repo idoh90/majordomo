@@ -6,7 +6,14 @@ import {
 } from '../../core/events/lib'
 import type { CalendarEvent } from '../../core/events/types'
 import type { Account, Holding, Snapshot, SpendItem, RecurringExpense } from '../../modules/capital/types'
-import { monthKey, monthlySpent, shiftMonth } from '../../modules/capital/lib/budget'
+import {
+  dailyBurn,
+  daysInMonthOf,
+  monthKey,
+  monthlySpent,
+  shiftMonth,
+  spendBreakdown,
+} from '../../modules/capital/lib/budget'
 import type { Fx, Prices } from '../../modules/capital/lib/holdings'
 import { weeklyCounts } from '../../modules/training/lib/insights'
 import { computeStrains, readiness, type Readiness } from '../../modules/training/lib/strain'
@@ -154,14 +161,31 @@ export function computeHouse(i: HouseInputs): HouseModel {
     const m = shiftMonth(thisMonth, -(5 - k))
     return monthlySpent(m, i.spends, i.recurring, i.spendItems)
   })
+  const prevMonth = shiftMonth(thisMonth, -1)
   const prevMonthSpent = spendMonths[spendMonths.length - 2] ?? null
   const dayOfMonth = nowDate.getDate()
   const prevDays = new Date(nowDate.getFullYear(), nowDate.getMonth(), 0).getDate()
+  // Fixed costs are spread flat over the days they buy and only the variable
+  // side is divided by the days elapsed — otherwise rent, committed on the 1st,
+  // put the burn rate at three times its true figure on the 5th and let it sag
+  // back down as the month caught up with it. The month just gone is complete,
+  // so its own rate is the same expression with every day elapsed.
   const burn =
     spentNow > 0
       ? {
-          perDay: spentNow / Math.max(1, dayOfMonth),
-          prevPerDay: prevMonthSpent != null && prevMonthSpent > 0 ? prevMonthSpent / prevDays : null,
+          perDay: dailyBurn(
+            spendBreakdown(thisMonth, i.spends, i.recurring, i.spendItems),
+            dayOfMonth,
+            daysInMonthOf(nowDate),
+          ),
+          prevPerDay:
+            prevMonthSpent != null && prevMonthSpent > 0
+              ? dailyBurn(
+                  spendBreakdown(prevMonth, i.spends, i.recurring, i.spendItems),
+                  prevDays,
+                  prevDays,
+                )
+              : null,
         }
       : null
 

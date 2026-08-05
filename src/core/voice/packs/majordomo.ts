@@ -766,7 +766,7 @@ export const majordomoPack: VoicePack = {
           ? `${worth} ${left} over the month's budget of ${budget}, ${runway}.`
           : `${worth} ${left} of the month's budget remains, ${runway}.`
       },
-      detail: ({ portfolio, perDay, underPace, hasBudget }) => {
+      detail: ({ portfolio, perDay, fixed, underPace, hasBudget }) => {
         const parts: string[] = []
         if (portfolio) {
           parts.push(
@@ -779,6 +779,11 @@ export const majordomoPack: VoicePack = {
               ? `Spending runs at ${perDay} a day, against a budget that allows ${underPace ? 'more' : 'less'}.`
               : `Spending runs at ${perDay} a day.`,
           )
+          // the daily figure is only honest if it says how the fixed side was
+          // treated — otherwise it reads as a run rate the user could change
+          if (fixed) {
+            parts.push(`${fixed} of the month is fixed, spread across it rather than charged to the 1st.`)
+          }
         }
         if (parts.length === 0) parts.push('Nothing further to report on the books, sir.')
         return parts.join(' ')
@@ -804,6 +809,10 @@ export const majordomoPack: VoicePack = {
     spend: {
       underPace: 'UNDER PACE',
       overPace: 'AHEAD OF PACE',
+      fixedWord: 'fixed',
+      variableOverDays: (days) => `over ${lower(days)} ${plural(days, 'day', 'days')}`,
+      recurringHint:
+        'Rent, subscriptions — counted every month until removed. Committed to the month, not spent on its first day.',
       history: 'History',
       prevMonth: 'Previous month',
       nextMonth: 'Next month',

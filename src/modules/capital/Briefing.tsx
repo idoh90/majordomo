@@ -2,7 +2,7 @@ import { useNow } from '../../core/useNow'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { CapitalBriefingFacts } from '../../core/voice/types'
-import { monthKey, monthlySpent } from './lib/budget'
+import { monthKey, spendBreakdown, spendPace } from './lib/budget'
 import { holdingRow, portfolioTotals } from './lib/holdings'
 import { formatCompact, formatILS } from './lib/money'
 import {
@@ -37,7 +37,9 @@ export function LedgerBriefing({ className = '' }: { className?: string } = {}) 
   const now = useNow()
 
   const nowDate = new Date(now)
-  const spent = monthlySpent(monthKey(nowDate), spends, recurring, spendItems)
+  const breakdown = spendBreakdown(monthKey(nowDate), spends, recurring, spendItems)
+  const spent = breakdown.total
+  const pace = spendPace(breakdown, monthlyBudget, nowDate)
   const latest = latestSnapshot(snapshots)
   const live = liveNetWorth(accounts, holdings, prices, fx, latest)
   const delta = displayDelta({
@@ -51,8 +53,7 @@ export function LedgerBriefing({ className = '' }: { className?: string } = {}) 
   const rows = holdings.map((h) => holdingRow(h, prices, fx))
   const port = portfolioTotals(rows)
 
-  const dayOfMonth = nowDate.getDate()
-  const daysInMonth = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 0).getDate()
+  const { dayOfMonth, daysInMonth } = pace
   const hasBudget = monthlyBudget > 0
   const over = hasBudget && spent > monthlyBudget
 
@@ -79,10 +80,13 @@ export function LedgerBriefing({ className = '' }: { className?: string } = {}) 
     hasBudget,
     dayOfMonth,
     daysInMonth,
-    // factual: what has been spent, divided by the days it took. No projection
-    // — budgetPace was retired for scaling fixed costs with the calendar.
-    perDay: spent > 0 && dayOfMonth > 0 ? formatILS(Math.round(spent / dayOfMonth)) : null,
-    underPace: hasBudget && spent / monthlyBudget < dayOfMonth / daysInMonth,
+    // factual: fixed costs spread flat over the month they buy, the variable
+    // side over the days actually elapsed. No projection — budgetPace was
+    // retired for scaling fixed costs with the calendar, and dividing rent by
+    // the day of the month was the same distortion pointed the other way.
+    perDay: spent > 0 ? formatILS(Math.round(pace.perDay)) : null,
+    fixed: breakdown.fixed > 0 ? formatILS(breakdown.fixed) : null,
+    underPace: pace.underPace,
     portfolio:
       holdings.length > 0
         ? {
