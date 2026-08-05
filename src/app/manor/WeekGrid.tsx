@@ -15,6 +15,7 @@ import { voice } from '../../core/voice'
 import { useIsMobile } from '../useIsMobile'
 import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
 import { ManorLegend } from './Legend'
+import { TILT, TILT_MOBILE, useGhostTilt } from './dragTilt'
 import { CustomEventForm } from './fields'
 import { EventEditSheet, MobileEventSheet, MobileQuickAddSheet } from './MobileSheets'
 import { nearWatch } from './nearWatch'
@@ -140,6 +141,12 @@ interface DragState {
   /** column width in px, measured once at grab — lets the ghost and the column
    *  highlight position themselves with `transform` instead of `left`/`top` */
   colW: number
+  /** where inside the block the grab landed, in ghost-local px — the point the
+   *  ghost tilts around. Written once at grab and clamped into the box: a night
+   *  watch grabbed by its 02:00 tail is held over the NEXT column, outside the
+   *  segment being drawn. Cosmetic only; the drop maths uses grabMs. */
+  gx: number
+  gy: number
 }
 
 /** a live drag on a block's end edge — the block itself is the preview */
@@ -177,6 +184,9 @@ interface MobileDrag {
   fromCol: number
   /** pointer is in the RELEASE TO CANCEL strip */
   escape: boolean
+  /** the grab point in ghost-local px — the tilt pivot (see DragState) */
+  gx: number
+  gy: number
 }
 
 type LastAction =
@@ -482,6 +492,11 @@ export function WeekGrid({
     const startX = ev.clientX
     const startY = ev.clientY
     const colW = rect.width / 7
+    /* the tilt pivot: the grab point expressed inside the ghost's own box.
+       Clamped, because the pointer can sit outside the drawn segment (see
+       DragState.gx). Purely cosmetic — nothing below reads these. */
+    const gx = Math.max(0, Math.min(startX - rect.left - fromCol * colW - 3, colW - 6))
+    const gy = Math.max(0, Math.min((grabMs / HOUR_MS) * PXH, durH * PXH))
     let moved = false
 
     // pointermove fires faster than the display refreshes (high-poll mice fire
@@ -522,6 +537,8 @@ export function WeekGrid({
         title: e.title,
         kind: e.kind,
         colW,
+        gx,
+        gy,
       }
       dragRef.current = next
       setDrag(next)
@@ -1495,7 +1512,13 @@ const GhostBlock = memo(function GhostBlock({
 
 /** the lifted copy that follows the pointer during a drag. Position is a
  *  `transform` (compositor-only) — the old `left`/`top` transition re-laid-out
- *  the block on every frame of the drag, which is what made it feel sticky. */
+ *  the block on every frame of the drag, which is what made it feel sticky.
+ *
+ *  While the tilt motor is live it owns `transform` outright (see dragTilt.ts),
+ *  so this renders NEITHER `transform` nor `transition`: a style key absent
+ *  from every render is one React never diffs, which is what stops a slot-hop
+ *  re-render from stamping over the motor's per-frame writes. Under reduced
+ *  motion the motor never starts and both keys come back. */
 function DragGhost({ drag, columns }: { drag: DragState; columns: ColumnWindow[] }) {
   const meta = KIND_META[drag.kind]
   const start = new Date(columns[drag.tc].start.getTime() + drag.ts * HOUR_MS)
@@ -1505,13 +1528,24 @@ function DragGhost({ drag, columns }: { drag: DragState; columns: ColumnWindow[]
   // dropped block will actually be drawn — the ghost shows what it becomes.
   const crosses = drag.ts + drag.durH > 24
   const visibleH = Math.min(drag.durH, 24 - drag.ts)
+  const ref = useRef<HTMLDivElement>(null)
+  // read once per ghost: a drag lasts seconds, and the branch below must not
+  // change shape mid-gesture. The global CSS reduced-motion rule only zeroes
+  // durations — it cannot stop a transform written from JS, so this gate is
+  // the one that matters (same matchMedia read the Watch already does).
+  const [reduced] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const live = !reduced
+  const tx = drag.tc * drag.colW + 3
+  const ty = drag.ts * PXH + 1
+  useGhostTilt(ref, tx, ty, { maxDeg: TILT.MAX_DEG_DESKTOP, scale: 1.02 }, live)
   return (
     <div
+      ref={ref}
+      data-drag-ghost
       className="pointer-events-none absolute left-0 top-0 z-[6] rounded-[7px] px-2 py-[5px]"
       style={{
         width: drag.colW - 6,
         height: Math.max(visibleH * PXH - 2, 12),
-        transform: `translate3d(${drag.tc * drag.colW + 3}px, ${drag.ts * PXH + 1}px, 0) scale(1.02)`,
         willChange: 'transform',
         overflow: 'hidden',
         // per-side longhands, not the `border` shorthand: React warns about (and
@@ -1530,7 +1564,14 @@ function DragGhost({ drag, columns }: { drag: DragState; columns: ColumnWindow[]
         boxShadow: drag.valid
           ? '0 14px 34px rgb(0 0 0 / 0.5), 0 0 18px var(--glow-accent)'
           : '0 14px 34px rgb(0 0 0 / 0.5)',
-        transition: 'transform 90ms ease-out',
+        ...(live
+          ? // re-clamped every render: the seam can shorten the ghost mid-drag,
+            // and a pivot below its own box would swing it visibly
+            { transformOrigin: `${drag.gx}px ${Math.min(drag.gy, visibleH * PXH)}px` }
+          : {
+              transform: `translate3d(${tx}px, ${ty}px, 0) scale(1.02)`,
+              transition: 'transform 90ms ease-out',
+            }),
       }}
     >
       <div className="text-xs font-semibold leading-[1.2]">{drag.title}</div>
@@ -1931,6 +1972,9 @@ function MobileWeek({
         valid: true,
         fromCol,
         escape: false,
+        // the tilt pivot, in the ghost's own px (see DragState.gx)
+        gx: Math.max(0, Math.min(lastX - bodyRect.left - 3, bodyRect.width - 6)),
+        gy: Math.max(0, Math.min(grabH * PXH, durH * PXH)),
       }
       mdRef.current = first
       setMDrag(first)
@@ -2187,12 +2231,21 @@ function MobileDragGhost({ drag, columns }: { drag: MobileDrag; columns: ColumnW
   // same seam treatment as the desktop ghost — clipped at midnight, cut edge
   const crosses = drag.ts + drag.durH > 24
   const visibleH = Math.min(drag.durH, 24 - drag.ts)
+  const ref = useRef<HTMLDivElement>(null)
+  const [reduced] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const live = !reduced && TILT_MOBILE
+  // x is always 0 here — the left/right insets own the column, and a chip hop
+  // remounts this ghost inside the new column (so the tilt starts level again,
+  // exactly as the old 90 ms transition did across the same remount)
+  const ty = drag.ts * PXH + 1
+  useGhostTilt(ref, 0, ty, { maxDeg: TILT.MAX_DEG_MOBILE, scale: 1.03 }, live)
   return (
     <div
+      ref={ref}
+      data-drag-ghost
       className="pointer-events-none absolute left-[3px] right-[3px] top-0 z-[6] rounded-[8px] px-2.5 py-1.5"
       style={{
         height: Math.max(visibleH * PXH - 2, 12),
-        transform: `translate3d(0, ${drag.ts * PXH + 1}px, 0) scale(1.03)`,
         willChange: 'transform',
         borderTop: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
         borderLeft: `1.5px solid ${drag.valid ? meta.color : 'var(--color-danger)'}`,
@@ -2208,7 +2261,12 @@ function MobileDragGhost({ drag, columns }: { drag: MobileDrag; columns: ColumnW
         boxShadow: drag.valid
           ? '0 18px 44px rgb(0 0 0 / 0.6), 0 0 24px var(--glow-accent)'
           : '0 18px 44px rgb(0 0 0 / 0.6)',
-        transition: 'transform 90ms ease-out',
+        ...(live
+          ? { transformOrigin: `${drag.gx}px ${Math.min(drag.gy, visibleH * PXH)}px` }
+          : {
+              transform: `translate3d(0, ${ty}px, 0) scale(1.03)`,
+              transition: 'transform 90ms ease-out',
+            }),
       }}
     >
       <div

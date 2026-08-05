@@ -215,9 +215,11 @@ async function desktopChecks(browser) {
       await page.mouse.move(targetX, wb.y + 8, { steps: 8 })
       // capture the ghost's geometry while it is still crossing midnight
       const ghostGeo = await page.evaluate(() => {
-        const g = [...document.querySelectorAll('div')].find(
-          (d) => d.style.willChange === 'transform' && d.style.transition?.includes('90ms'),
-        )
+        // marked element, not a style fingerprint: this used to sniff for
+        // `willChange: transform` + a 90ms transition, both of which the tilt
+        // motor legitimately removes — and a missed ghost skipped the check
+        // in silence rather than failing it.
+        const g = document.querySelector('[data-drag-ghost]')
         if (!g) return null
         const box = g.closest('[style*="overflow"]')?.getBoundingClientRect()
         const r = g.getBoundingClientRect()
@@ -249,6 +251,8 @@ async function desktopChecks(browser) {
         ghostGeo.borderBottom === 'dotted'
           ? ok('A2b crossing ghost wears the seam cut edge')
           : bad('A2b crossing ghost wears the seam cut edge', `border-bottom: ${ghostGeo.borderBottom}`)
+      } else {
+        bad('A2b crossing ghost wears the seam cut edge', 'no [data-drag-ghost] mid-drag')
       }
     }
   }
