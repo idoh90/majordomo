@@ -15,6 +15,7 @@ import { StatTiles } from './components/insights/StatTiles'
 import { TopMusclesChart } from './components/insights/TopMusclesChart'
 import { WeeklyChart } from './components/insights/WeeklyChart'
 import { WeeklyGoalCard } from './components/insights/WeeklyGoalCard'
+import { reconcileWorkoutBlocks } from './lib/blocks'
 import { computeStrains } from './lib/strain'
 import { useWorkoutStore } from './store'
 import { useTrainingUi } from './uiStore'
@@ -23,6 +24,12 @@ export function TrainingScreen() {
   const workouts = useWorkoutStore((s) => s.workouts)
   const now = useNow()
   const strains = useMemo(() => computeStrains(workouts, now), [workouts, now])
+
+  // a session logged here reaches the Manor the moment it is saved — the same
+  // pass also heals an edited time, and takes the block away with a deletion
+  useEffect(() => {
+    reconcileWorkoutBlocks(workouts)
+  }, [workouts])
 
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Workout | null>(null)

@@ -1,5 +1,6 @@
 import type { CalendarEvent } from '../../../core/events/types'
 import type { Workout } from '../types'
+import { isWorkoutMirror } from './blocks'
 
 /**
  * log-fulfills-block — the Grounds' side of the Manor contract (M7 slice).
@@ -16,7 +17,10 @@ const HOUR_MS = 3_600_000
 const MATCH_BEFORE_START_MS = 2 * HOUR_MS
 const MATCH_AFTER_END_MS = 24 * HOUR_MS
 
-const isTimedTraining = (e: CalendarEvent) => e.kind === 'training' && !e.allDay
+/** a block that could be BOOKED — a session's own mirror is not one of them,
+ *  or a log would offer to fulfil the block another log had just drawn */
+const isTimedTraining = (e: CalendarEvent) =>
+  e.kind === 'training' && !e.allDay && !isWorkoutMirror(e)
 
 /**
  * Every block a workout could fulfil, best first: timed training events, not

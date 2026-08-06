@@ -7,6 +7,7 @@ import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { GroundsBriefingFacts } from '../../core/voice/types'
 import { ALL_MUSCLE_IDS, muscleLabel } from './data/muscles'
+import { isWorkoutMirror } from './lib/blocks'
 import { linkedEventIds } from './lib/fulfillment'
 import { thisWeekCount } from './lib/insights'
 import { dailyTargets } from './lib/nutrition'
@@ -51,6 +52,7 @@ export function GroundsBriefing({
       (e) =>
         e.kind === 'training' &&
         !e.allDay &&
+        !isWorkoutMirror(e) &&
         new Date(e.end).getTime() > now &&
         !claimed.has(e.id),
     )

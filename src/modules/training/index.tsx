@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { ConsoleModule } from '../../core/module'
 import { voice } from '../../core/voice'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
 import { GroundsBriefing } from './Briefing'
+import { reconcileWorkoutBlocks } from './lib/blocks'
 import { thisWeekCount } from './lib/insights'
 import { computeStrains } from './lib/strain'
 import { useWorkoutStore } from './store'
@@ -12,12 +13,19 @@ import { TrainingScreen } from './TrainingScreen'
 /** The Grounds' briefing strip, plus the DEV strain handle it has always
  *  owned — this mounts wherever the Manor renders, so __strains stays live
  *  on every view. The strain map is computed once here and handed down so
- *  the strip and the summary can never describe two different bodies. */
+ *  the strip and the summary can never describe two different bodies.
+ *  It also hosts the logged-session heal pass, on the Study's precedent:
+ *  mounting wherever the Manor renders is what makes a workout logged on
+ *  another device show up on this one's week without opening the wing. */
 function Briefing() {
   const workouts = useWorkoutStore((s) => s.workouts)
   const now = useNow()
   const nowH = Math.floor(now / 3_600_000) * 3_600_000
   const strains = useMemo(() => computeStrains(workouts, nowH), [workouts, nowH])
+
+  useEffect(() => {
+    reconcileWorkoutBlocks(workouts)
+  }, [workouts])
 
   if (import.meta.env.DEV) {
     ;(window as unknown as Record<string, unknown>).__strains = strains

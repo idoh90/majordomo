@@ -4,6 +4,7 @@ import {
   SEAM_HOUR,
   clipToWindow,
   hoursOf,
+  occupies,
   overlaps,
   type ClippedEvent,
   type ColumnWindow,
@@ -18,7 +19,7 @@ import { ManorLegend } from './Legend'
 import { TILT, TILT_MOBILE, useGhostTilt } from './dragTilt'
 import { CustomEventForm } from './fields'
 import { EventEditSheet, MobileEventSheet, MobileQuickAddSheet } from './MobileSheets'
-import { nearWatch } from './nearWatch'
+import { nearWatch, warnableBlock } from './nearWatch'
 import { StrainBar } from './StrainBar'
 import type { DayStrain } from './strain'
 import { useManorUi } from './uiStore'
@@ -350,7 +351,7 @@ export function WeekGrid({
   const warnIds = useMemo(() => {
     const ids = new Set<string>()
     for (const e of events) {
-      if (e.kind !== 'training' || e.allDay) continue
+      if (!warnableBlock(e)) continue
       if (nearWatch(events, new Date(e.start), new Date(e.end), e.id)) ids.add(e.id)
     }
     return ids
@@ -362,11 +363,11 @@ export function WeekGrid({
     setPopover((p) => (p?.event.id === event.id ? null : { event, col, y }))
   }
 
-  /** is [start, end) free of every timed event but `ignoreId`? */
+  /** is [start, end) free of every hour-holding event but `ignoreId`? */
   const rangeFree = (ignoreId: string | null, start: Date, end: Date): boolean =>
     !events.some(
       (e) =>
-        !e.allDay &&
+        occupies(e) &&
         e.id !== ignoreId &&
         overlaps(new Date(e.start), new Date(e.end), start, end),
     )
@@ -430,7 +431,7 @@ export function WeekGrid({
     const newEnd = new Date(newStart.getTime() + d.durH * HOUR_MS)
     // a training block landing hard by a watch earns a word first (drag
     // contract row 7); appended to the cross-day confirm when both apply
-    const nw = !sandbox && e.kind === 'training' ? nearWatch(events, newStart, newEnd, e.id) : null
+    const nw = !sandbox && warnableBlock(e) ? nearWatch(events, newStart, newEnd, e.id) : null
     if (d.tc !== d.fromCol && !sandbox) {
       const s = new Date(e.start)
       const en = new Date(e.end)
@@ -775,11 +776,7 @@ export function WeekGrid({
   /** the mobile edit sheet's save — false = destination occupied, sheet stays */
   const saveEdit = (id: string, title: string, start: Date, durH: number): boolean => {
     const end = new Date(start.getTime() + durH * HOUR_MS)
-    const clash = events.some(
-      (e) =>
-        !e.allDay && e.id !== id && overlaps(new Date(e.start), new Date(e.end), start, end),
-    )
-    if (clash) {
+    if (!rangeFree(id, start, end)) {
       butler(voice.manor.occupied)
       return false
     }
@@ -992,7 +989,7 @@ export function WeekGrid({
             event={popover?.event ?? null}
             hotNames={popover ? (strain?.[popover.col]?.hot.map((h) => h.label) ?? []) : []}
             near={
-              popover && popover.event.kind === 'training'
+              popover && warnableBlock(popover.event)
                 ? nearWatch(
                     events,
                     new Date(popover.event.start),

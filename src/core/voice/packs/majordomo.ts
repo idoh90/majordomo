@@ -334,6 +334,8 @@ export const majordomoPack: VoicePack = {
     fulfilsChange: 'change',
     fulfilsNoBlock: "None — don't link",
     fulfilledTag: 'LOGGED',
+    loggedBlockTitle: ({ ppl, run }) =>
+      run ? 'Run' : ppl ? { push: 'Push', pull: 'Pull', legs: 'Legs' }[ppl] : 'Training',
     runPace: ({ pace }) => `That is ${pace} per kilometre, sir.`,
     runPaceWalking: 'Walking pace, sir.',
     runOptional: 'Both optional, sir — effort is what drives the strain.',

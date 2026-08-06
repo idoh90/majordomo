@@ -451,6 +451,9 @@ export interface VoicePack {
     fulfilsNoBlock: string
     /** dim tag on a booked block that already has a workout linked */
     fulfilledTag: string
+    /** title of the Manor block drawn from a logged session that answered no
+     *  booking — the Grounds' own projection onto the week */
+    loggedBlockTitle: (v: { ppl: 'push' | 'pull' | 'legs' | null; run: boolean }) => string
     /** run step: the pace read-out, its walking-pace floor, and the hint */
     runPace: (v: { pace: string }) => string
     runPaceWalking: string

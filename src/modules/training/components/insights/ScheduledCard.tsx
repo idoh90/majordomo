@@ -4,6 +4,7 @@ import { addDays, localDayKey, timeLabel } from '../../../../core/dates'
 import { voice } from '../../../../core/voice'
 import { useWorkoutStore } from '../../store'
 import { linkedEventIds } from '../../lib/fulfillment'
+import { isWorkoutMirror } from '../../lib/blocks'
 
 const SHOW = 5
 
@@ -13,11 +14,17 @@ export function ScheduledCard({ now }: { now: number }) {
   const events = useEventsStore((s) => s.events)
   const workouts = useWorkoutStore((s) => s.workouts)
 
-  // events are stored start-ascending; keep in-progress + future sessions
+  // events are stored start-ascending; keep in-progress + future sessions.
+  // A logged session's own block is not "on the books" — it already happened,
+  // and its default hour would otherwise list it as still ahead.
   const upcoming = useMemo(
     () =>
       events.filter(
-        (e) => e.kind === 'training' && !e.allDay && new Date(e.end).getTime() > now,
+        (e) =>
+          e.kind === 'training' &&
+          !e.allDay &&
+          !isWorkoutMirror(e) &&
+          new Date(e.end).getTime() > now,
       ),
     [events, now],
   )

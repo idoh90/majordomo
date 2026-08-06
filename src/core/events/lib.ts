@@ -71,10 +71,26 @@ export function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): bo
   return aStart < bEnd && bStart < aEnd
 }
 
-/** is [start,end) free of every timed event? */
+/**
+ * Does this event hold its hour against anything else being booked there?
+ *
+ * All-day markers never have. Neither does a block drawn from a logged
+ * record — a session the Grounds mirrors onto the week is HISTORY, not a
+ * booking, and letting it hold an hour has the estate arguing with the past:
+ * train at six, stand watch at seven, and the watch could no longer be
+ * retimed because the workout you had already finished sat under it.
+ *
+ * The ref prefix is duplicated here rather than imported for the same reason
+ * core/sync/projection.ts duplicates it — core may not read modules.
+ */
+export function occupies(e: CalendarEvent): boolean {
+  return !e.allDay && !(e.sourceRef?.startsWith('workout:') ?? false)
+}
+
+/** is [start,end) free of every timed event that holds its hour? */
 export function rangeFree(events: CalendarEvent[], start: Date, end: Date): boolean {
   return !events.some(
-    (e) => !e.allDay && overlaps(new Date(e.start), new Date(e.end), start, end),
+    (e) => occupies(e) && overlaps(new Date(e.start), new Date(e.end), start, end),
   )
 }
 

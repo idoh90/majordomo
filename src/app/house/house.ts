@@ -20,7 +20,7 @@ import { computeStrains, readiness, type Readiness } from '../../modules/trainin
 import type { Workout } from '../../modules/training/types'
 import { bookedHoursBeforeExam, daysUntil, fulfilledHoursBetween, nextExam } from '../../modules/study/lib'
 import type { Exam, SessionMeta, Subject } from '../../modules/study/types'
-import { nearWatch } from '../manor/nearWatch'
+import { nearWatch, warnableBlock } from '../manor/nearWatch'
 
 /**
  * THE HOUSE — what each wing is doing, read from one place.
@@ -254,7 +254,7 @@ function findPattern(i: HouseInputs): { id: PatternId; args: Record<string, stri
 
   // a training block sitting hard by a watch — the estate can name the block
   for (const e of ahead) {
-    if (e.kind !== 'training') continue
+    if (!warnableBlock(e)) continue
     const nw = nearWatch(i.events, new Date(e.start), new Date(e.end), e.id)
     if (nw) return { id: 'train-after-watch', args: { title: e.title, mins: nw.mins, before: String(nw.before) } }
   }

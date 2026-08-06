@@ -1,5 +1,6 @@
 import type { CalendarEvent } from '../../core/events/types'
 import { voice } from '../../core/voice'
+import { isWorkoutMirror } from '../../modules/training/lib/blocks'
 
 /**
  * "You would train already worn, sir." — a training block that sits hard by
@@ -12,6 +13,14 @@ import { voice } from '../../core/voice'
 const HOUR_MS = 3_600_000
 const BEFORE_H = 6
 const AFTER_H = 4
+
+/**
+ * Which blocks the warning is even ABOUT. "You would train already worn" is
+ * advice for a booking; a block drawn from a logged session is a record of
+ * something that has already happened, and warning about it is stale counsel.
+ */
+export const warnableBlock = (e: CalendarEvent): boolean =>
+  e.kind === 'training' && !e.allDay && !isWorkoutMirror(e)
 
 export interface NearWatch {
   /** minutes of gap between the session and the watch */
@@ -57,7 +66,7 @@ export function nearWatch(
  */
 export function draftConflictLine(draft: CalendarEvent[]): string | null {
   for (const e of draft) {
-    if (e.kind !== 'training' || e.allDay) continue
+    if (!warnableBlock(e)) continue
     const nw = nearWatch(draft, new Date(e.start), new Date(e.end), e.id)
     if (nw) return voice.manor.whatIf.conflict({ title: e.title, ...nw })
   }
