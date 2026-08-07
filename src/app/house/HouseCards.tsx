@@ -1,5 +1,6 @@
 import { useNavStore } from '../../core/store/nav'
 import { muscleLabel } from '../../modules/training/data/muscles'
+import { Hinted } from '../../core/ui/Hint'
 import { voice } from '../../core/voice'
 import { Sparkline } from './Sparkline'
 import type { HouseModel, HouseRow, WingId } from './house'
@@ -113,10 +114,12 @@ export function HouseCard({ house, exclude }: { house: HouseModel; exclude: Wing
   const rows = house.rows.filter((r) => r.id !== exclude)
   return (
     <section className="panel px-4 py-3.5">
-      <div className="card-title">{voice.house.title}</div>
-      {/* the subtitle is load-bearing: it is what licenses five different
-          units to sit in one column without any of them being wrong */}
-      <div className="mt-0.5 text-[10.5px] italic text-ink-faint">{voice.house.subtitle}</div>
+      <Hinted tip={voice.hints.house.rail}>
+        <div className="card-title">{voice.house.title}</div>
+        {/* the subtitle is load-bearing: it is what licenses five different
+            units to sit in one column without any of them being wrong */}
+        <div className="mt-0.5 text-[10.5px] italic text-ink-faint">{voice.house.subtitle}</div>
+      </Hinted>
       <ul className="mt-3 flex flex-col gap-2.5">
         {rows.map((r) => (
           <Row key={r.id} row={r} />
@@ -138,7 +141,7 @@ function Row({ row }: { row: HouseRow }) {
       <span className="ml-auto flex flex-col items-end leading-tight">
         <span className="stat-num text-[12.5px] text-ink">{row.figure}</span>
         <span className="text-[9px] tracking-[0.1em] text-ink-faint">
-          {voice.house.rowLabel[row.id]}
+          {row.figureIsSpend ? voice.house.rowLabel.capitalSpent : voice.house.rowLabel[row.id]}
         </span>
       </span>
       <Delta row={row} />
@@ -195,9 +198,11 @@ export function PatternCard({ house }: { house: HouseModel }) {
         borderColor: 'color-mix(in srgb, var(--color-ember) 28%, transparent)',
       }}
     >
-      <div className="card-title" style={{ color: 'var(--color-ember)' }}>
-        {voice.house.pattern.title}
-      </div>
+      <Hinted tip={voice.hints.house.pattern}>
+        <div className="card-title" style={{ color: 'var(--color-ember)' }}>
+          {voice.house.pattern.title}
+        </div>
+      </Hinted>
       <p className="mt-1.5 text-[12px] leading-relaxed text-ink-dim">{line}</p>
       {id === 'train-after-watch' && (
         <button
@@ -229,7 +234,9 @@ function Card({
       className="panel panel-lit px-4 py-3.5"
       style={{ ['--lit-accent' as string]: accent }}
     >
-      <div className="card-title">{title}</div>
+      <Hinted tip={voice.hints.house.signal}>
+        <div className="card-title">{title}</div>
+      </Hinted>
       {children}
     </section>
   )

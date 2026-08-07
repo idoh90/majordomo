@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useShellStore } from '../../../../core/store/shell'
 import { Collapsible } from '../../../../core/ui/Collapsible'
 import { CollapseToggle } from '../../../../core/ui/CollapseToggle'
+import { Hinted } from '../../../../core/ui/Hint'
 import { SKINS } from '../../../../core/ui/skins'
 import { voice } from '../../../../core/voice'
 import { ALL_MUSCLE_IDS, GROUP_LABELS, PICKER_GROUPS, muscleLabel } from '../../data/muscles'
@@ -74,6 +75,7 @@ export function MuscleLedger({
 
   return (
     <section className="panel px-4 pb-4 pt-3">
+      <Hinted tip={voice.hints.grounds.ledger}>
       <div className="flex items-center gap-2">
         <h2 className="card-title min-w-0 flex-1 truncate">{voice.grounds.ledger.title}</h2>
         <span className="chip-tint flex-none px-2.5 py-1 text-[10px] tracking-[0.12em] text-ink-dim">
@@ -94,6 +96,7 @@ export function MuscleLedger({
           className="md:hidden"
         />
       </div>
+      </Hinted>
 
       {/* Strain decays from every session ever logged; sets count only this
           calendar week's lifting. Without the window spelled out, a muscle

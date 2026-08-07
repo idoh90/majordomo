@@ -1,6 +1,7 @@
 import type { Workout } from '../../types'
 import { dailyTargets, proteinPerMeal, weeklyProtein } from '../../lib/nutrition'
 import { useWorkoutStore } from '../../store'
+import { Hinted } from '../../../../core/ui/Hint'
 import { voice } from '../../../../core/voice'
 
 interface NutritionCardProps {
@@ -37,6 +38,7 @@ export function NutritionCard({ workouts, now }: NutritionCardProps) {
 
   return (
     <div className="panel p-4">
+      <Hinted tip={voice.hints.grounds.fuel}>
       <div className="flex items-start justify-between">
         <div>
           <div className="card-title">{voice.grounds.fuelTitle}</div>
@@ -57,6 +59,7 @@ export function NutritionCard({ workouts, now }: NutritionCardProps) {
           {t.isTrainingDay ? voice.grounds.fuelTrainingDay : voice.grounds.fuelRestDay}
         </span>
       </div>
+      </Hinted>
 
       {/* stacked macro bar (share of calories) */}
       <div className="chip mt-3 flex h-2 overflow-hidden bg-panel-2">

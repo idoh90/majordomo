@@ -1,6 +1,7 @@
 import type { Workout } from '../../types'
 import { muscleLabel } from '../../data/muscles'
 import { topMuscles } from '../../lib/insights'
+import { Hinted } from '../../../../core/ui/Hint'
 import { voice } from '../../../../core/voice'
 
 interface TopMusclesChartProps {
@@ -15,7 +16,9 @@ export function TopMusclesChart({ workouts, now }: TopMusclesChartProps) {
 
   return (
     <div className="panel p-4">
-      <h3 className="card-title">{voice.grounds.topMusclesTitle}</h3>
+      <Hinted tip={voice.hints.grounds.topMuscles}>
+        <h3 className="card-title">{voice.grounds.topMusclesTitle}</h3>
+      </Hinted>
       {rows.length === 0 ? (
         <p className="mt-4 pb-2 text-center text-xs text-ink-faint">
           {voice.grounds.topMusclesEmpty}

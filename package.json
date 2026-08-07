@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.api.json && vite build",
     "lint": "eslint src",
     "preview": "vite preview",
-    "check:manor": "node scripts/manor-harness.mjs"
+    "check:manor": "node scripts/manor-harness.mjs",
+    "bell:probe": "node scripts/bell-probe.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@fontsource/anton": "^5.2.7",
     "@fontsource/big-shoulders": "^5.2.6",
     "@fontsource/chakra-petch": "^5.2.7",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.10",
+    "@types/node": "^26.1.2",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@typescript-eslint/parser": "^8.63.0",

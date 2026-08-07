@@ -2,6 +2,7 @@ import type { NetWorthDelta } from '../lib/networth'
 import { voice } from '../../../core/voice'
 import { formatPercent } from '../lib/money'
 import { Amount } from './Amount'
+import { Hinted } from '../../../core/ui/Hint'
 
 interface VaultProps {
   netWorth: number
@@ -43,7 +44,9 @@ export function Vault({
       className="panel panel-lit p-6 sm:p-8"
       style={{ ['--lit-accent' as string]: 'var(--color-w-ledger)' }}
     >
-      <div className="card-title">The Vault · Net worth</div>
+      <Hinted tip={voice.hints.capital.vault}>
+        <div className="card-title">The Vault · Net worth</div>
+      </Hinted>
 
       {hasData ? (
         <>

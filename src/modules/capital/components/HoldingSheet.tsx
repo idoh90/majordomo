@@ -37,6 +37,8 @@ export function HoldingSheet({ open, editing, onClose, onAddAccount }: HoldingSh
   const [accountId, setAccountId] = useState('')
   const [confirming, setConfirming] = useState(false)
 
+  // Seed on OPEN only. Keyed on `eligible` too, adding an account from this
+  // sheet's own "Add account" button reset every field the user had typed.
   useEffect(() => {
     if (!open) return
     setSymbol(editing?.symbol ?? '')
@@ -44,14 +46,27 @@ export function HoldingSheet({ open, editing, onClose, onAddAccount }: HoldingSh
     setCurrency(editing?.currency ?? 'USD')
     setShares(editing ? String(editing.shares) : '')
     setCostBasis(editing ? String(editing.costBasis) : '')
-    setAccountId(editing?.accountId ?? eligible[0]?.id ?? '')
+    setAccountId(editing?.accountId ?? '')
     setConfirming(false)
-  }, [open, editing, eligible])
+  }, [open, editing]) // `eligible` deliberately absent — see above
+
+  // …but the account list is allowed to move under it: pick the first eligible
+  // account whenever the current pick is gone (or was never made)
+  useEffect(() => {
+    if (!open) return
+    setAccountId((id) => (eligible.some((a) => a.id === id) ? id : (eligible[0]?.id ?? '')))
+  }, [open, eligible])
 
   const sharesNum = parseFloat(shares)
   const costNum = parseFloat(costBasis)
   const canSave =
     symbol.trim().length > 0 && accountId && Number.isFinite(sharesNum) && sharesNum > 0 && Number.isFinite(costNum)
+  const isDirty =
+    symbol !== (editing?.symbol ?? '') ||
+    exchange !== (editing?.exchange ?? '') ||
+    currency !== (editing?.currency ?? 'USD') ||
+    shares !== (editing ? String(editing.shares) : '') ||
+    costBasis !== (editing ? String(editing.costBasis) : '')
 
   const save = () => {
     if (!canSave) return
@@ -72,7 +87,7 @@ export function HoldingSheet({ open, editing, onClose, onAddAccount }: HoldingSh
   }
 
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={onClose} dirty={isDirty}>
       <h2 className="mb-4 font-display text-xl font-bold tracking-wide">
         {editing ? 'Edit holding' : 'Add holding'}
       </h2>

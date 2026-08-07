@@ -32,9 +32,11 @@ interface CapitalState {
 
   /* Twelve Data — user's own free read-only key, stored locally, never in git */
   apiKey: string
-  /** UPPERCASE symbol → last quote (cache, so prices show while refetching) */
+  /** listingKey (EXCHANGE:SYMBOL, or bare SYMBOL when there is no exchange)
+   *  → last quote. A cache, so prices show while refetching. Keyed by LISTING
+   *  because one ticker can be two securities — see prices.ts listingKey. */
   prices: Record<string, Quote>
-  /** UPPERCASE symbol → recent daily closes, oldest-first (for 10-day P/L) */
+  /** listingKey → recent daily closes, oldest-first (for 10-day P/L) */
   history: Record<string, Candle[]>
   /** currency → ILS rate */
   fx: Record<string, number>
@@ -66,6 +68,9 @@ interface CapitalState {
 }
 
 const byDateAsc = (a: Snapshot, b: Snapshot) => a.takenAt.localeCompare(b.takenAt)
+
+/** set when refreshPrices is asked for mid-flight; the running one re-runs once */
+let refreshQueued = false
 
 export const useCapitalStore = create<CapitalState>()(
   persist(
@@ -182,7 +187,14 @@ export const useCapitalStore = create<CapitalState>()(
         const { apiKey, holdings, pricesLoading } = get()
         // no key still refreshes FX (keyless fallback) so ₪ conversion works;
         // quotes/history need the Twelve Data key
-        if (pricesLoading || holdings.length === 0) return
+        if (holdings.length === 0) return
+        // a refresh asked for while one is in flight is DEFERRED, not dropped:
+        // adding a holding mid-refresh used to leave it unpriced, which — the
+        // live sum being strict — silently degraded its whole account
+        if (pricesLoading) {
+          refreshQueued = true
+          return
+        }
         set({ pricesLoading: true, pricesError: null })
         try {
           const { quotes, errors } = apiKey
@@ -201,8 +213,13 @@ export const useCapitalStore = create<CapitalState>()(
           const fxPrimary = apiKey
             ? await fetchFxToILS(currencies, apiKey)
             : { fx: { ILS: 1 }, errors: [] }
-          // fill any gaps from the keyless source; report only what BOTH missed
-          const have = { ...get().fx, ...fxPrimary.fx }
+          // Gaps are measured against THIS cycle's primary result, never against
+          // the cache: counting a rate we already hold as "have" meant that once
+          // a rate landed the fallback was never called again and a stale ₪ rate
+          // was quietly re-blessed on every refresh, for months, under an
+          // "updated just now" stamp. The final merge below still keeps the old
+          // rate on screen when both sources fail — it just says so now.
+          const have: Record<string, number> = { ...fxPrimary.fx }
           const gaps = currencies.filter((c) => c.toUpperCase() !== 'ILS' && have[c.toUpperCase()] == null)
           const fxFallback = gaps.length ? await fetchFxFallback(gaps) : { fx: {}, errors: [] }
           const fxErrors = gaps
@@ -222,6 +239,10 @@ export const useCapitalStore = create<CapitalState>()(
           }))
         } catch (e) {
           set({ pricesLoading: false, pricesError: e instanceof Error ? e.message : 'fetch failed' })
+        }
+        if (refreshQueued) {
+          refreshQueued = false
+          await get().refreshPrices()
         }
       },
     }),

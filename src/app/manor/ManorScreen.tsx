@@ -11,6 +11,7 @@ import { voice } from '../../core/voice'
 import type { CalendarEvent, EventKind } from '../../core/events/types'
 import { useWorkoutStore } from '../../modules/training/store'
 import { CONSOLES } from '../consoles'
+import { entryStage, useOnboarding } from '../onboarding/store'
 import { BriefingStrip } from './BriefingStrip'
 import { KIND_META } from './kinds'
 import { MonthView, monthCells, monthLabel } from './MonthView'
@@ -62,6 +63,11 @@ export function ManorScreen() {
     },
     [],
   )
+
+  // nothing anywhere, and no interview running to explain the emptiness — the
+  // Manor is then the only surface that can offer the way in
+  const onboardStage = useOnboarding((s) => s.stage)
+  const ghost = events.length === 0 && onboardStage === null
 
   const activeEvents = sandbox?.events ?? events
   const columns = useMemo(() => weekColumns(anchor, weekStart), [anchor, weekStart])
@@ -218,9 +224,29 @@ export function ManorScreen() {
           <div className="min-w-0 flex-1">
             {/* An empty week keeps its structure: the grid IS the room, and
                 the only way to build a week on desktop. The butler's line is
-                demoted to a caption rather than replacing the calendar. */}
+                demoted to a caption rather than replacing the calendar.
+
+                A wholly empty ESTATE is a different claim from an empty week,
+                and it is the one place the house has to offer a way in: the
+                setup was waved off (or has never run) and there is no lit path
+                anywhere. Note the condition is the whole store, not the viewed
+                week — paging to a quiet fortnight must not summon a setup
+                prompt at someone who is plainly already living here. */}
             {weekEvents.length === 0 && !sandbox && (
-              <p className="mb-2 text-[12.5px] text-ink-dim">{voice.manor.empty}</p>
+              ghost ? (
+                <div className="mb-3 flex flex-col items-start gap-2">
+                  <p className="text-[13px] text-ink-dim">{voice.onboarding.ghost.line}</p>
+                  <button
+                    type="button"
+                    onClick={() => useOnboarding.getState().begin(entryStage())}
+                    className="btn-soft px-4 py-2 text-[11.5px] tracking-[0.14em]"
+                  >
+                    {voice.onboarding.ghost.cta}
+                  </button>
+                </div>
+              ) : (
+                <p className="mb-2 text-[12.5px] text-ink-dim">{voice.manor.empty}</p>
+              )
             )}
             <WeekGrid
               columns={columns}

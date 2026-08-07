@@ -6,6 +6,7 @@ import { StudyBriefing } from './Briefing'
 import type { CalendarEvent } from '../../core/events/types'
 import { useShellStore } from '../../core/store/shell'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
+import { Hinted } from '../../core/ui/Hint'
 import { Sheet } from '../../core/ui/Sheet'
 import { useNow } from '../../core/useNow'
 import { voice } from '../../core/voice'
@@ -176,7 +177,9 @@ function ExamsPanel({
 
   return (
     <section className="panel px-5 py-5 sm:px-6">
-      <h2 className="card-title">{voice.study.mattersPending}</h2>
+      <Hinted tip={voice.hints.study.pending}>
+        <h2 className="card-title">{voice.study.mattersPending}</h2>
+      </Hinted>
       {upcoming.length === 0 ? (
         <div className="mt-2 text-[13px] italic text-ink-dim">{voice.study.noExams}</div>
       ) : (
@@ -255,7 +258,9 @@ function Dossier({
 
   return (
     <section className="panel p-5">
-      <h2 className="card-title">{voice.study.dossier}</h2>
+      <Hinted tip={voice.hints.study.dossier}>
+        <h2 className="card-title">{voice.study.dossier}</h2>
+      </Hinted>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {subjects.map((s) => {
           const on = s.id === sel.id
@@ -442,6 +447,7 @@ function RingsPanel({
 
   return (
     <section className="panel px-5 py-5 sm:px-6">
+      <Hinted tip={voice.hints.study.readingWeek}>
       <div className="flex flex-wrap items-baseline gap-2.5">
         <h2 className="card-title">{voice.study.readingWeek}</h2>
         <span className="ml-auto text-[11.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
@@ -453,6 +459,7 @@ function RingsPanel({
           })}
         </span>
       </div>
+      </Hinted>
       {/* the rings stand in a recess, with the selected subject read off the
           stage rather than only out of the Dossier far below */}
       <div className="trough relative mt-4 overflow-hidden px-3 pb-4 pt-3">
@@ -599,6 +606,7 @@ function SubjectLedger({
 }) {
   return (
     <section className="panel px-5 py-5 sm:px-6">
+      <Hinted tip={voice.hints.study.subjectLedger}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 className="card-title">{voice.study.subjectLedger.title}</h2>
         <span className="ml-auto flex items-center gap-3 text-[10px] tracking-[0.12em] text-ink-faint">
@@ -621,6 +629,7 @@ function SubjectLedger({
           </span>
         </span>
       </div>
+      </Hinted>
 
       {subjects.length === 0 ? (
         <p className="mt-3 text-sm text-ink-dim">{voice.study.subjectLedger.empty}</p>
@@ -728,7 +737,9 @@ function Desk({
   return (
     <div className="flex flex-col gap-4">
       <section className="panel p-5">
+        <Hinted tip={voice.hints.study.desk}>
         <h2 className="card-title">{voice.study.desk}</h2>
+      </Hinted>
         <button type="button" onClick={onBook} className="btn-cta mt-3 w-full py-3 text-[13px] tracking-[0.16em]">
           {voice.study.book}
         </button>
@@ -833,7 +844,9 @@ function Desk({
       </section>
 
       <section className="panel p-5">
+        <Hinted tip={voice.hints.study.weekLedger}>
         <h2 className="card-title">{voice.study.weekLedger}</h2>
+      </Hinted>
         <div className="mt-1.5 flex flex-col">
           {ledger.length === 0 && (
             <div className="py-2 text-[13px] text-ink-dim">{voice.study.noLedger}</div>

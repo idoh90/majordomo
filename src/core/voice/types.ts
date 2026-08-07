@@ -107,8 +107,13 @@ export interface VoicePack {
     /** load-bearing: it licenses each row to show its OWN headline metric
      *  rather than one normalised number nobody would recognise */
     subtitle: string
-    /** what each row's figure means, in that wing's own terms */
-    rowLabel: Record<'manor' | 'watch' | 'grounds' | 'study' | 'capital', string>
+    /** what each row's figure means, in that wing's own terms. `capitalSpent`
+     *  replaces `capital` when no budget is set — the figure is then what has
+     *  gone out, not what is left of a target that does not exist. */
+    rowLabel: Record<
+      'manor' | 'watch' | 'grounds' | 'study' | 'capital' | 'capitalSpent',
+      string
+    >
     /** the wing's own signal card, shown only on that wing */
     signal: {
       dutyLoad: string
@@ -662,6 +667,10 @@ export interface VoicePack {
     stampHeldTitle: string
     /** recent one-off spends card title */
     recentEntries: string
+    /** the 10-day P/L covers only the positions whose history actually arrived */
+    tenDayPartial: (covered: number, positions: number) => string
+    /** the portfolio total omits rows with no ₪ rate — it cannot sum currencies */
+    totalsPartial: (currencies: string[]) => string
     /** the net-worth trend chart */
     trend: {
       /** the selected range holds fewer than two points — say so, don't widen it */
@@ -814,5 +823,225 @@ export interface VoicePack {
     /** the same, signed in: "on this device" stops being true */
     clearWorkoutsBodySynced: (n: number) => string
     clearWorkoutsYes: string
+  }
+  /**
+   * The first-time setup — the butler, scripted.
+   *
+   * The stages below are named after the Bell's concierge script (assistant
+   * spec §3.4) on purpose: when the summonable butler can run the interview
+   * himself, the ENGINE changes and this script does not. Every stage is
+   * skippable in one tap, so no line here may pressure — it offers, it does
+   * not ask twice.
+   */
+  onboarding: {
+    welcome: {
+      /** who is speaking, and what he keeps */
+      intro: string
+      /** how long this takes, and that none of it is compulsory */
+      promise: string
+      /** under the registry button — the strongest nudge the door is allowed */
+      googleHint: string
+      /** the equal, offline path */
+      localCta: string
+      localHint: string
+      /** decline the whole thing — the Manor's ghost structure picks it up */
+      later: string
+    }
+    registry: {
+      /** waiting for the estate to come down after the redirect */
+      checking: string
+      /** it came down populated: this is a returning user, not a new one */
+      welcomeBack: string
+      welcomeBackBody: string
+      welcomeBackCta: string
+      /** the registry never answered — fact, then remedy, then carry on */
+      checkFailed: string
+    }
+    /**
+     * The house presents itself — three beats before a single question is
+     * asked, because "complicated as hell" begins with being asked to
+     * configure a thing nobody has explained. Exactly three: what it is,
+     * how the wings work, whose it is.
+     */
+    intro: {
+      lines: [string, string, string]
+    }
+    /**
+     * The butler takes the measure of the user before asking anything — which
+     * concerns actually fill their week. Every question after this exists
+     * only if its chip was picked; a student without a job is never asked
+     * what shape their working day is.
+     */
+    composition: {
+      title: string
+      prompt: string
+      chips: {
+        shift: string
+        dayJob: string
+        training: string
+        study: string
+        money: string
+      }
+      /** under the chips: nothing picked is allowed, and what that means */
+      hint: string
+    }
+    /** the setup panel's own furniture */
+    chrome: {
+      /** "1 OF 4" */
+      step: (v: { n: number; of: number }) => string
+      next: string
+      skip: string
+      back: string
+    }
+    work: {
+      title: string
+      prompt: string
+      /** the day-job flavour of the same question — one shape, five taps */
+      dayJobPrompt: string
+      /** one-tap fill: Mon–Fri, this week and next */
+      weekdaysCta: string
+      /** says plainly that tapping a day POSTS it — the grid moves behind this */
+      hint: string
+      daysLabel: string
+      /** the running tally under the day strip */
+      posted: (n: number) => string
+      /** only shown once a cross-midnight shape is picked */
+      nightNote: string
+    }
+    training: {
+      title: string
+      prompt: string
+      /** the optional fold — the silent default build made visible */
+      profileLabel: string
+      profileHint: string
+      weightLabel: string
+      weightUnit: string
+      heightLabel: string
+      heightUnit: string
+      ageLabel: string
+      ageUnit: string
+      sexLabel: string
+      sexMale: string
+      sexFemale: string
+    }
+    study: {
+      title: string
+      prompt: string
+      goalLabel: string
+      add: string
+      enrolled: (n: number) => string
+      /** the same name again — a re-run of the setup must not double the roster */
+      duplicate: string
+      /** enrolling nothing is a real answer, and the line must not sulk */
+      none: string
+    }
+    preset: {
+      title: string
+      prompt: string
+    }
+    /**
+     * The walk: one stop per wing, three beats at each. `meaning` says what
+     * the wing is FOR, `dashboard` narrates what is on screen (the sample,
+     * when the room was dressed), `use` closes with how it is best used —
+     * composed from the user's OWN choices wherever they made any.
+     */
+    walk: {
+      /** small chip on the card while a dressed sample is on screen */
+      sampleTag: string
+      /** the honest footnote: this is for show, and it is swept on advance */
+      sampleNote: string
+      watch: {
+        meaning: string
+        dashboard: string
+        use: (v: { count: number; next: { h: number; m: number } | null }) => string
+      }
+      grounds: {
+        meaning: string
+        dashboard: string
+        use: (v: { goal: number }) => string
+      }
+      study: {
+        meaning: string
+        dashboard: string
+        use: (v: { subjects: number }) => string
+      }
+      /** the Ledger still asks for nothing on a first run — its beats say so */
+      ledger: {
+        meaning: string
+        dashboard: string
+        use: string
+      }
+      skipRest: string
+    }
+    close: {
+      line: string
+      cta: string
+    }
+    /** the Manor with an empty estate and the interview declined */
+    ghost: {
+      line: string
+      cta: string
+    }
+    /** the gear-menu row that runs the whole thing again */
+    settingsRerun: string
+  }
+  /**
+   * THE `?` MARKS — one line per panel saying what the thing is FOR.
+   *
+   * Every other string in this pack states a fact about the estate; these
+   * state a fact about the HOUSE, and that difference sets their register.
+   * They are instructions, not readings: present tense, no figures, no "sir"
+   * (a room does not address anyone), and each answers the same question —
+   * why would a person come to this panel, and what should they do with it.
+   */
+  hints: {
+    /** the `?` button's accessible name */
+    buttonLabel: string
+    /** the gear-menu switch and its blurb */
+    settingsToggle: string
+    settingsBlurb: string
+    /** the cross-wing furniture every screen carries */
+    house: {
+      rail: string
+      signal: string
+      pattern: string
+      briefing: string
+    }
+    watch: {
+      onDuty: string
+      post: string
+      week: string
+      cycle: string
+    }
+    grounds: {
+      bodyMap: string
+      ledger: string
+      weekGoal: string
+      weekChart: string
+      topMuscles: string
+      scheduled: string
+      recovery: string
+      fuel: string
+      calendar: string
+      summary: string
+    }
+    study: {
+      pending: string
+      dossier: string
+      readingWeek: string
+      subjectLedger: string
+      desk: string
+      weekLedger: string
+    }
+    capital: {
+      vault: string
+      trend: string
+      allocation: string
+      accounts: string
+      portfolio: string
+      tenDay: string
+      spend: string
+      recent: string
+    }
   }
 }

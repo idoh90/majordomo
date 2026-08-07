@@ -28,13 +28,15 @@ export function CapitalSettingsSheet({ open, onClose }: CapitalSettingsSheetProp
   const [reveal, setReveal] = useState(false)
   const [paydayDraft, setPaydayDraft] = useState('')
 
+  // seed on OPEN only — re-seeding on a store write would overwrite a key being
+  // pasted the moment anything else touched the Ledger
   useEffect(() => {
     if (open) {
       setDraft(apiKey)
       setReveal(false)
       setPaydayDraft(paydayDay > 0 ? String(paydayDay) : '')
     }
-  }, [open, apiKey, paydayDay])
+  }, [open]) // `open` alone, deliberately — see above
 
   /**
    * Clamp as the user types, so the field always shows the day that will be
@@ -49,6 +51,11 @@ export function CapitalSettingsSheet({ open, onClose }: CapitalSettingsSheetProp
     return String(Math.min(31, n))
   }
 
+  // a pasted API key is expensive to lose — one scrim tap used to bin it and
+  // send the user back to Twelve Data for another
+  const isDirty =
+    draft !== apiKey || Number(clampDay(paydayDraft) || 0) !== paydayDay
+
   const save = () => {
     setApiKey(draft)
     if (draft.trim()) void refreshPrices()
@@ -61,7 +68,7 @@ export function CapitalSettingsSheet({ open, onClose }: CapitalSettingsSheetProp
   const sectionTitle = 'mb-1 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint'
 
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={onClose} dirty={isDirty}>
       <h2 className="mb-4 font-display text-xl font-bold tracking-wide">
         {voice.capital.settings.title}
       </h2>

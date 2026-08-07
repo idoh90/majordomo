@@ -30,7 +30,11 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
 
   const [balances, setBalances] = useState<Record<string, string>>({})
 
-  // prefill: the snapshot being edited, else the latest as a starting point
+  // Prefill on OPEN only. It used to re-seed whenever `accounts` or `snapshots`
+  // changed — and this sheet has a "+ Add account" button of its own, so adding
+  // an account mid-entry silently reset every field to the previous snapshot's
+  // numbers. Since a prefilled field looks normal, the next Save then stamped
+  // last week's balances as today's point.
   useEffect(() => {
     if (!open) return
     const source = editing ?? latestSnapshot(snapshots)
@@ -40,11 +44,22 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
       seed[a.id] = v != null ? String(v) : ''
     }
     setBalances(seed)
-  }, [open, editing, accounts, snapshots])
+  }, [open, editing]) // `accounts`/`snapshots` deliberately absent — see above
+
+  // an account added while the sheet is open gets a field; nothing else moves
+  useEffect(() => {
+    if (!open) return
+    setBalances((b) => {
+      const next = { ...b }
+      for (const a of accounts) if (!(a.id in next)) next[a.id] = ''
+      return next
+    })
+  }, [open, accounts])
 
   const parsed = useMemo(() => {
     const out: Record<string, number> = {}
     const held: Record<string, boolean> = {}
+    const manual: Record<string, boolean> = {}
     const prev = latestSnapshot(snapshots)
     for (const a of accounts) {
       // live-stamp priced accounts only for NEW snapshots — editing an old
@@ -53,19 +68,39 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
       // rate-1 currency mixup into history (updating only the cash used to
       // silently rewrite the portfolio stamp with garbage) — hold the last
       // saved value instead and say so.
-      if (!editing && isPriced(a.id, holdings)) {
-        const live = accountLiveValueILSStrict(a.id, holdings, prices, fx)
+      const live = !editing && isPriced(a.id, holdings)
+        ? accountLiveValueILSStrict(a.id, holdings, prices, fx)
+        : null
+      const prior = prev?.balances[a.id]
+      // …but "hold the last saved value" needs there to BE one. With no quote
+      // and no prior snapshot the old code held ₪0 — a number nobody entered,
+      // written permanently into history, with no field to correct it. Such an
+      // account gets an ordinary input instead.
+      if (!editing && isPriced(a.id, holdings) && (live != null || prior != null)) {
         held[a.id] = live == null
-        out[a.id] = live ?? prev?.balances[a.id] ?? 0
+        out[a.id] = live ?? prior ?? 0
       } else {
+        manual[a.id] = true
         const n = parseFloat(balances[a.id] ?? '')
         out[a.id] = Number.isFinite(n) ? n : 0
       }
     }
-    return { out, held }
+    return { out, held, manual }
   }, [balances, accounts, holdings, prices, fx, editing, snapshots])
 
   const stamped = parsed.out
+
+  // differs-from-the-store, so a backdrop brush asks before binning a column of
+  // retyped balances. Live-stamped rows are excluded — they have no input, and
+  // a live figure differing from the stored one is not something the user typed.
+  const isDirty = useMemo(() => {
+    const source = editing ?? latestSnapshot(snapshots)
+    return accounts.some((a) => {
+      if (!parsed.manual[a.id]) return false
+      const stored = source?.balances[a.id]
+      return (balances[a.id] ?? '') !== (stored != null ? String(stored) : '')
+    })
+  }, [accounts, balances, editing, snapshots, parsed])
 
   const previewNetWorth = netWorthOf({ id: '', takenAt: '', balances: stamped }, accounts)
 
@@ -83,7 +118,7 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
   }
 
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={onClose} dirty={isDirty}>
       <h2 className="mb-1 font-display text-xl font-bold tracking-wide">
         {editing ? 'Edit snapshot' : 'Update balances'}
       </h2>
@@ -104,7 +139,7 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
         <>
           <div className="flex flex-col gap-2">
             {accounts.map((a) => {
-              const liveStamped = !editing && isPriced(a.id, holdings)
+              const liveStamped = !parsed.manual[a.id]
               const isHeld = liveStamped && parsed.held[a.id]
               return (
                 <div key={a.id} className="flex items-center gap-3">

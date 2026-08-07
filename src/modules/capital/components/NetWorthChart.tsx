@@ -4,6 +4,7 @@ import { voice } from '../../../core/voice'
 import type { NetWorthPoint } from '../lib/networth'
 import { formatCompact } from '../lib/money'
 import { Amount } from './Amount'
+import { Hinted } from '../../../core/ui/Hint'
 
 type Range = 'all' | '1y' | '6m' | '3m'
 const RANGE_MONTHS: Record<Range, number | null> = { all: null, '1y': 12, '6m': 6, '3m': 3 }
@@ -39,8 +40,15 @@ export function NetWorthChart({
   const pts = useMemo(() => {
     const months = RANGE_MONTHS[range]
     if (months == null) return full
+    // setMonth alone overflows on month-end days — six months back from Aug 31
+    // lands on Mar 3, so a Mar 1 snapshot fell OUT of a 6M window and the pill
+    // claimed the range was empty. Step the month from the 1st, then restore
+    // the day clamped to the target month's length.
     const cutoff = new Date()
+    const day = cutoff.getDate()
+    cutoff.setDate(1)
     cutoff.setMonth(cutoff.getMonth() - months)
+    cutoff.setDate(Math.min(day, new Date(cutoff.getFullYear(), cutoff.getMonth() + 1, 0).getDate()))
     return full.filter((p) => new Date(p.takenAt) >= cutoff)
   }, [full, range])
 
@@ -76,6 +84,7 @@ export function NetWorthChart({
     <Shell>
       {/* below md the controls take their own row — 'NET WORTH · TREND' plus a
           4-pill control does not fit 390px and the title wraps a word per line */}
+      <Hinted tip={voice.hints.capital.trend}>
       <div className="mb-3 flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
         <h3 className="card-title">Net worth · trend</h3>
         <div className="flex w-full items-center justify-between gap-2.5 md:w-auto md:justify-end">
@@ -103,6 +112,7 @@ export function NetWorthChart({
           />
         </div>
       </div>
+      </Hinted>
 
       {geometry ? (
         <div className="relative">

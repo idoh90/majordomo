@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { Workout } from '../../types'
 import { useShellStore } from '../../../../core/store/shell'
 import { SKINS } from '../../../../core/ui/skins'
+import { Hinted } from '../../../../core/ui/Hint'
 import { voice } from '../../../../core/voice'
 import { recoveryOutlook } from '../../lib/recovery'
 import { strainToColor } from '../../lib/strainColor'
@@ -28,7 +29,9 @@ export function RecoveryCard({ workouts, now }: { workouts: Workout[]; now: numb
 
   return (
     <section className="panel px-4 pb-4 pt-3 lg:hidden">
-      <h2 className="card-title">{voice.grounds.recoveryTitle}</h2>
+      <Hinted tip={voice.hints.grounds.recovery}>
+        <h2 className="card-title">{voice.grounds.recoveryTitle}</h2>
+      </Hinted>
       <div className="mt-2.5 flex flex-col gap-2">
         {rows.map((r) => {
           const color = strainToColor(r.strain, skin.heatRamp)

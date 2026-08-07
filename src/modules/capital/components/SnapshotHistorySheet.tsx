@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sheet } from '../../../core/ui/Sheet'
 import { ConfirmDialog } from '../../../core/ui/ConfirmDialog'
 import { relativeDayLabel, timeLabel } from '../../../core/dates'
@@ -21,6 +21,15 @@ export function SnapshotHistorySheet({ open, onClose, onEdit }: SnapshotHistoryS
   const snapshots = useCapitalStore((s) => s.snapshots)
   const deleteSnapshot = useCapitalStore((s) => s.deleteSnapshot)
   const [deleting, setDeleting] = useState<Snapshot | null>(null)
+
+  // Esc over the confirm closes the whole sheet (Sheet only guards Esc when
+  // `dirty`), leaving `deleting` armed — the next open then greeted the user
+  // with a pre-loaded delete confirm for a snapshot chosen hours earlier, one
+  // click from gone. Note: NOT a `dirty` prop, which would stack a second
+  // confirm on top of this one.
+  useEffect(() => {
+    if (!open) setDeleting(null)
+  }, [open])
 
   const rows = [...snapshots].reverse() // stored oldest-first
   const now = new Date()

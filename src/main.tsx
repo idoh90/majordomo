@@ -15,6 +15,7 @@ import { applySkin } from './core/ui/skins'
 import { voice } from './core/voice'
 import { initAuth } from './core/auth/store'
 import { initSync } from './app/sync/init'
+import { initOnboarding } from './app/onboarding/store'
 import { useShellStore } from './core/store/shell'
 
 // Founder-only assets (the seven original skins + their typefaces) load
@@ -37,6 +38,9 @@ initAuth()
 // takes the estate as its baseline and watches for edits. Records nothing as
 // deleted, ever — only the actions that delete may say that (core/sync/intent).
 initSync()
+// …and only then decide whether this boot is somebody's first: the setup reads
+// the estate to know whether there is anything here already.
+initOnboarding()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

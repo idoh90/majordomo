@@ -459,14 +459,25 @@ function DateCell({ date, month, onDate }: { date: string; month: string; onDate
       min={min}
       max={max}
       onChange={(e) => {
-        const [y, m, d] = e.target.value.split('-').map(Number)
-        if (!y || !m || !d) return
-        // keep the day inside the viewed month, and keep the original time of
-        // day so items logged on the same date hold their order
+        const d = Number(e.target.value.split('-')[2])
+        if (!d) return
+        // The PAGER owns the year and month — only the day is in play here.
+        // Taking them from the input let a mistyped year move the row out of
+        // the month the sheet was still showing it under: the total said one
+        // thing before Save and another after, and the spend turned up in a
+        // month the pager would not have offered.
+        // The original time of day is kept so same-date items hold their order.
         const prev = new Date(date)
         const day = Math.min(Math.max(d, 1), lastDay)
         onDate(
-          new Date(y, m - 1, day, prev.getHours(), prev.getMinutes(), prev.getSeconds()).toISOString(),
+          new Date(
+            first.getFullYear(),
+            first.getMonth(),
+            day,
+            prev.getHours(),
+            prev.getMinutes(),
+            prev.getSeconds(),
+          ).toISOString(),
         )
       }}
       className="card w-[104px] shrink-0 px-1.5 py-2 text-center text-[11px] tabular-nums text-ink-dim outline-none focus:border-accent/60"

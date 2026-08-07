@@ -5,6 +5,7 @@ import type { StrainMap } from '../../lib/strain'
 import { VISUAL_FLOOR, lastTrained } from '../../lib/strain'
 import { glowOpacity, strainToColor } from '../../lib/strainColor'
 import { SKINS } from '../../../../core/ui/skins'
+import { Hinted } from '../../../../core/ui/Hint'
 import { useShellStore } from '../../../../core/store/shell'
 import {
   VOLUME_COLORS,
@@ -89,17 +90,19 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
 
   return (
     <section className="panel panel-hero px-4 pb-4 pt-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="card-title">Muscle Status</h2>
-        <SegmentedControl
-          options={[
-            { value: 'strain', label: 'Strain' },
-            { value: 'volume', label: 'Volume' },
-          ]}
-          value={mode}
-          onChange={(m) => setMode(m as MapMode)}
-        />
-      </div>
+      <Hinted tip={voice.hints.grounds.bodyMap} className="mb-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="card-title">Muscle Status</h2>
+          <SegmentedControl
+            options={[
+              { value: 'strain', label: 'Strain' },
+              { value: 'volume', label: 'Volume' },
+            ]}
+            value={mode}
+            onChange={(m) => setMode(m as MapMode)}
+          />
+        </div>
+      </Hinted>
 
       <div className="mb-1 flex justify-center lg:hidden">
         <SegmentedControl

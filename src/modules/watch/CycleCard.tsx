@@ -1,3 +1,4 @@
+import { Hinted } from '../../core/ui/Hint'
 import { voice } from '../../core/voice'
 import type { CycleStats } from './lib'
 
@@ -14,7 +15,9 @@ export function CycleCard({ stats }: { stats: CycleStats }) {
 
   return (
     <section className="panel p-5">
-      <div className="card-title">{voice.watch.cycle.title}</div>
+      <Hinted tip={voice.hints.watch.cycle}>
+        <div className="card-title">{voice.watch.cycle.title}</div>
+      </Hinted>
 
       {posted === 0 ? (
         <p className="mt-3 text-[13px] leading-relaxed text-ink-dim">{voice.watch.cycle.empty}</p>

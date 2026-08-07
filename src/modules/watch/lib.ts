@@ -1,6 +1,7 @@
 import { addDays, atHour, startOfWeek, type WeekStart } from '../../core/dates'
 import { hoursOf, overlaps, rangeFree } from '../../core/events/lib'
 import type { CalendarEvent } from '../../core/events/types'
+import { voice } from '../../core/voice'
 
 // atHour / rangeFree moved to core when the Study became their second
 // consumer (extract-on-contact); re-exported so existing imports hold.
@@ -67,6 +68,94 @@ export function sleepOverlaps(events: CalendarEvent[], start: Date, end: Date): 
     (e) =>
       e.kind === 'sleep' && !e.allDay && overlaps(new Date(e.start), new Date(e.end), start, end),
   )
+}
+
+/** minutes since local midnight; `endMin > DAY_MIN` ends on the next date */
+export interface WatchShape {
+  startMin: number
+  endMin: number
+}
+
+/** a draft the caller commits, or a refusal it reports */
+export type WatchPostPlan =
+  | { ok: false; message: string }
+  | {
+      ok: true
+      /** the watch, and the recovery sleep when a cross-midnight shape earned
+       *  one — in the order they should be written */
+      events: Omit<CalendarEvent, 'id' | 'updatedAt'>[]
+      /** a recovery block came with it */
+      pencilled: boolean
+      /** it lies over sleep the estate had already pencilled in */
+      overSleep: boolean
+      /** what the butler says about the outcome */
+      message: string
+    }
+
+/**
+ * What posting `shape` on `day` would do — decided here, written by the caller.
+ *
+ * Two surfaces post watches now (the Watch's roster and the first-time setup),
+ * and the two rules that make a posted watch correct are easy to lose in the
+ * copy: a watch may not lie on another, and one that runs through the night
+ * earns its recovery sleep whenever the morning after is free. Both live here
+ * so a second caller cannot quietly ship a third set of rules.
+ *
+ * Deliberately pure: it reads `events` and returns drafts, so a caller may
+ * plan without writing (and the refusal costs nothing).
+ */
+export function planWatchPost(
+  events: CalendarEvent[],
+  day: Date,
+  shape: WatchShape,
+  title: string,
+): WatchPostPlan {
+  const start = atMinutes(day, shape.startMin)
+  const end = atMinutes(day, shape.endMin)
+  if (shiftOverlaps(events, start, end)) return { ok: false, message: voice.watch.overlap }
+
+  // pencilled sleep is a suggestion, not a booking — a watch may lie over it,
+  // and the estate says so rather than quietly trimming what it drew
+  const overSleep = sleepOverlaps(events, start, end)
+  const planned: Omit<CalendarEvent, 'id' | 'updatedAt'>[] = [
+    {
+      source: 'watch',
+      kind: 'shift',
+      title,
+      start: start.toISOString(),
+      end: end.toISOString(),
+    },
+  ]
+
+  // sleep after a watch that ran through the night is first-class: pencil the
+  // recovery block when free. Derived from the SHAPE, so a 21:00 → 05:00 gets
+  // the same courtesy the old 19:00 → 08:00 preset used to get by name.
+  let pencilled = false
+  if (shape.endMin > DAY_MIN) {
+    const rest = recoveryWindow(end)
+    if (rangeFree(events, rest.start, rest.end)) {
+      planned.push({
+        source: 'watch',
+        kind: 'sleep',
+        title: voice.watch.sleepTitle,
+        start: rest.start.toISOString(),
+        end: rest.end.toISOString(),
+      })
+      pencilled = true
+    }
+  }
+
+  return {
+    ok: true,
+    events: planned,
+    pencilled,
+    overSleep,
+    message: pencilled
+      ? voice.watch.postedWithSleep
+      : overSleep
+        ? voice.watch.postedOverSleep
+        : voice.watch.posted,
+  }
 }
 
 export interface WatchStats {

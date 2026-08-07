@@ -52,8 +52,20 @@ technical version.
 ## Commands
 
 - `npm run dev` — Vite dev server on port 5173 (also via `.claude/launch.json`)
-- `npm run build` — typecheck (`tsc --noEmit`) + production build
-- `npm run lint` — ESLint, **import-boundary rules only** (no style rules)
+- `npm run build` — **two** typechecks then the production build: `tsc --noEmit` over
+  `src` and `tsc --noEmit -p tsconfig.api.json` over `api`. Two projects because
+  `api/` is Node and the app is a browser — `@types/node` declares `fetch`/`Request`
+  as globals and collides with the DOM lib, so the main tsconfig pins `"types": []`
+  and the server's config pins `"types": ["node"]`. A function that only fails at
+  deploy time is a function nobody typechecked.
+- `npm run lint` — ESLint, **import-boundary rules only** (no style rules).
+  Scoped to `src`; `api/` is outside it (nothing there may import the app anyway).
+- `npm run bell:probe` — the **Bell probe** (`scripts/bell-probe.mjs`): rings
+  `/api/bell` with a real session token, streams the reply to the terminal, and
+  prints the token counts the model actually charged against the estimates in
+  `majordomo-assistant-spec.md` Appendix C. Needs `BELL_TOKEN` (a live Supabase
+  access token) and the function runtime up — `npx vercel dev`, **not** `npm run
+  dev`, which serves the app but not `api/`. `BELL_BASE` overrides the origin.
 - `npm run check:manor` — the **Manor harness** (`scripts/manor-harness.mjs`): drives
   a real headless Chromium through the running dev server and asserts the calendar's
   numeric contract — a 13 h watch survives a drag, the mobile hour rail agrees with
@@ -90,8 +102,10 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   project resumes in ~2 minutes. `.github/workflows/keep-supabase-awake.yml` runs
   one real query a day to stop it happening (needs the `SUPABASE_ANON_KEY` repo
   secret; it fails loudly rather than silently if that is unset). The anon key is
-  **public by design** — it ships in the bundle and RLS is the only guard, so
-  never put `service_role` anywhere near the client.
+  **public by design** — it ships in the bundle and RLS is the only guard.
+  `service_role` now has exactly one legitimate home — `api/bell.ts`, server-side,
+  read from Vercel env (see the Bell section below). Anywhere else, and especially
+  anywhere under `src/`, is still a bug.
 - **`vercel.json` rationale** (the schema rejects `comment` keys, so it lives here):
   hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
   cached** or the app can't learn it's stale; `noindex` + frame/sniff headers
@@ -102,6 +116,63 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   different estates. Moving between them is gear → **Export/Import an estate**
   (`core/backup.ts`) — the M0 backup ritual. That file carries the Twelve Data
   **API key**; treat an export as a secret.
+
+## The Bell — the server seam (`api/`)
+
+The summonable butler: natural-language questions and commands over the estate.
+Spec is `majordomo-assistant-spec.md` (stages B0–B6). **B0 is built** — `api/bell.ts`
+verifies a session, checks a daily ceiling, streams a reply, records what it cost.
+Everything else in that document (chat UI, context pack, read tools, write tools,
+the sandbox bridge, the concierge, tiers and trials) is **not built**; do not
+describe it as existing.
+
+- **`api/` is the only place in this project that holds a secret**, and the only
+  reason it exists. Server env, Vercel project settings, never in git, never in the
+  bundle: `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `BELL_ENABLED`.
+  The Supabase URL and anon key are reused from the `VITE_*` pair the client build
+  already needs, so arming the Bell adds two secrets and one switch. Tuning knobs,
+  all optional: `BELL_MODEL`, `BELL_MAX_TOKENS`, `BELL_MAX_CHARS`, `BELL_MAX_TURNS`,
+  `BELL_DAILY_FREE`, `BELL_DAILY_STAFF`.
+- **Never prefix any of these with `VITE_`.** Vite inlines every `VITE_*` variable
+  into the client bundle as a literal string — that is the whole point of the
+  prefix, and it is why the anon key carries it. A `VITE_ANTHROPIC_API_KEY` would
+  be published to anyone who opens devtools, and `check-brand`-style greps would
+  not catch it. For local runs put the unprefixed names in `.env.local` (gitignored,
+  and `.vercelignore`'d) and use `npx vercel dev`.
+- **`BELL_ENABLED` defaults to OFF.** Deploying this file must not by itself open a
+  door that spends money; arming is a separate deliberate act, and it is also the
+  kill switch when something goes wrong.
+- **Tools will execute on the CLIENT, not here.** The estate's source of truth is the
+  device, and posting a watch pencils sleep, saving a workout resolves PPL and
+  matches its block, a delete records tombstone intent — all of that lives in the
+  store actions. The server stays what the backend has always been in this project:
+  dumb, opaque, replaceable. Resist every temptation to put domain logic in `api/`.
+- **The provider shape stops at the endpoint.** Callers see `text` / `done` / `error`
+  SSE events and nothing that names a model vendor, so swapping providers is a change
+  to one file. Never forward raw upstream events to the browser.
+- **`verifyUser` is the whole auth seam.** It currently asks the Supabase auth server
+  (`getUser`), which means the Bell dies while the project is paused. Verifying
+  against the project's JWKS instead is the spec's plan (§8.4) and belongs with B6's
+  fail-open/fail-closed rules — replace that function's body, nothing else.
+- **A cheap prompt can cost more than a fat one.** The cost model in §6 assumes the
+  system prompt is served from cache at a tenth of the input price, but a model will
+  not cache a prefix under its own minimum and **says nothing when it declines** —
+  ~4,096 tokens on Haiku 4.5, 512 on Opus 5. So trimming the prompt below the
+  threshold silently loses the discount entirely. `bell_usage` records cached and
+  uncached input in separate columns precisely so this is visible rather than assumed;
+  the probe shouts about it when both are zero.
+- **Reading the meter: input above zero with output at zero means the ring was cut
+  short**, not that the butler said nothing. Output tokens arrive exactly once, in
+  the last event before the reply ends, so a hang-up or an upstream drop records
+  the whole input and none of the output. A ring that produced nothing at all is
+  not recorded and does not spend an allowance.
+- **`supabase/migrations/0003_bell.sql` has to be pasted into the SQL editor** like
+  every other migration here, and **in full** — the tables can land while the
+  increment function or its grant does not, and in that state the endpoint serves
+  happily while the ceiling quietly stops counting. The reply carries whether it
+  was metered so the probe can say so; the standing fix is B6's reserve-before-spend.
+  Until the tables exist at all, every ring is refused — which is the correct
+  direction for that error to run: a broken meter is not an unlimited allowance.
 
 ## Stack
 

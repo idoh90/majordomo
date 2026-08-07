@@ -1,0 +1,29 @@
+// The server's own typecheck.
+//
+// `api/` is Node, not a browser: no DOM, no `import.meta.env`, no Vite. Keeping
+// it in a separate project is not tidiness — `@types/node` declares `fetch`,
+// `Request`, `Response` and friends as globals, and loading those alongside the
+// DOM lib produces duplicate-identifier errors. One runtime per project, and the
+// main tsconfig pins `"types": []` so Node's globals can never leak into the app.
+//
+// Both projects run in `npm run build`. A serverless function that only fails at
+// deploy time is a function nobody typechecked.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true
+  },
+  "include": ["api"]
+}

@@ -42,13 +42,24 @@ export function LedgerBriefing({ className = '' }: { className?: string } = {}) 
   const pace = spendPace(breakdown, monthlyBudget, nowDate)
   const latest = latestSnapshot(snapshots)
   const live = liveNetWorth(accounts, holdings, prices, fx, latest)
+  const series = netWorthSeries(snapshots, accounts)
   const delta = displayDelta({
     live,
-    series: netWorthSeries(snapshots, accounts),
+    series,
     latest,
     snapshotNetWorth: latest ? netWorthOf(latest, accounts) : 0,
     hasHoldings: holdings.length > 0,
   })
+  // The delta's basis is where it STARTS. With holdings that's the last
+  // snapshot (live has moved since); without, it's the one BEFORE the last —
+  // naming the last there had the sentence claim a gain since the very figure
+  // it had just quoted. The year has to be checked too, or a comparison eleven
+  // months old prints as "since September".
+  const basisAt = holdings.length > 0 ? latest?.takenAt : series[series.length - 2]?.takenAt
+  const basisDate = basisAt ? new Date(basisAt) : null
+  const basisIsOtherMonth =
+    basisDate != null &&
+    (basisDate.getFullYear() !== nowDate.getFullYear() || basisDate.getMonth() !== nowDate.getMonth())
 
   const rows = holdings.map((h) => holdingRow(h, prices, fx))
   const port = portfolioTotals(rows)
@@ -67,10 +78,14 @@ export function LedgerBriefing({ className = '' }: { className?: string } = {}) 
           up: delta.absolute >= 0,
           // naming the month is only informative once the month has turned;
           // "down since July" in July reads as a broken sentence
-          basis:
-            latest && new Date(latest.takenAt).getMonth() !== nowDate.getMonth()
-              ? new Date(latest.takenAt).toLocaleDateString('en-US', { month: 'long' })
-              : 'the last snapshot',
+          basis: basisIsOtherMonth
+            ? basisDate!.toLocaleDateString('en-US', {
+                month: 'long',
+                ...(basisDate!.getFullYear() !== nowDate.getFullYear() ? { year: 'numeric' } : {}),
+              })
+            : holdings.length > 0
+              ? 'the last snapshot'
+              : 'the previous snapshot',
         }
       : null,
     spent: formatILS(spent),
@@ -84,11 +99,16 @@ export function LedgerBriefing({ className = '' }: { className?: string } = {}) 
     // side over the days actually elapsed. No projection — budgetPace was
     // retired for scaling fixed costs with the calendar, and dividing rent by
     // the day of the month was the same distortion pointed the other way.
-    perDay: spent > 0 ? formatILS(Math.round(pace.perDay)) : null,
+    // gated on the figure printed, not the month's total: a refund early in the
+    // month is divided by a tiny day count and swamps the fixed term, so a
+    // spent-above-zero month happily printed "runs at -₪82 a day"
+    perDay: pace.perDay > 0 ? formatILS(Math.round(pace.perDay)) : null,
     fixed: breakdown.fixed > 0 ? formatILS(breakdown.fixed) : null,
     underPace: pace.underPace,
+    // dropped entirely when some row has no ₪ rate: the totals then cover only
+    // the converted rows, and this panel has nowhere to say so
     portfolio:
-      holdings.length > 0
+      holdings.length > 0 && port.unconverted.length === 0
         ? {
             value: formatCompact(port.marketValue),
             dayPL: formatILS(Math.abs(port.dayChange)),

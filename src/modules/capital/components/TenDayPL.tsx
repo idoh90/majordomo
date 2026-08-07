@@ -3,6 +3,8 @@ import { useCapitalStore } from '../store'
 import { tenDayPL } from '../lib/holdings'
 import { formatPercent } from '../lib/money'
 import { Amount } from './Amount'
+import { Hinted } from '../../../core/ui/Hint'
+import { voice } from '../../../core/voice'
 
 const H = 72 // chart height (px); baseline at the middle
 
@@ -11,15 +13,23 @@ export function TenDayPL() {
   const holdings = useCapitalStore((s) => s.holdings)
   const history = useCapitalStore((s) => s.history)
   const fx = useCapitalStore((s) => s.fx)
+  const prices = useCapitalStore((s) => s.prices)
 
-  const data = useMemo(() => tenDayPL(holdings, history, fx), [holdings, history, fx])
+  const data = useMemo(
+    () => tenDayPL(holdings, history, fx, prices),
+    [holdings, history, fx, prices],
+  )
   if (!data.hasData) return null
+  // a rate-limited refresh leaves some symbols with no candles at all; the
+  // figure is then a subset's, and saying which beats implying it's everything
+  const partial = data.covered < data.positions
 
   const maxAbs = Math.max(1, ...data.days.map((d) => Math.abs(d.pl)))
   const label = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { day: 'numeric' })
 
   return (
     <div className="panel p-4">
+      <Hinted tip={voice.hints.capital.tenDay}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="card-title">Last 10 days</h3>
         <span className={`text-sm font-semibold ${data.total >= 0 ? 'text-accent' : 'text-danger'}`}>
@@ -29,6 +39,7 @@ export function TenDayPL() {
           )}
         </span>
       </div>
+      </Hinted>
 
       <div className="relative flex items-stretch gap-1.5" style={{ height: H }}>
         {/* zero baseline */}
@@ -49,6 +60,7 @@ export function TenDayPL() {
 
       <div className="mt-1.5 flex justify-between border-t border-line pt-1.5 text-[10px] text-ink-faint">
         <span>{label(data.days[0].date)}</span>
+        {partial && <span>{voice.capital.tenDayPartial(data.covered, data.positions)}</span>}
         <span>{label(data.days[data.days.length - 1].date)}</span>
       </div>
     </div>

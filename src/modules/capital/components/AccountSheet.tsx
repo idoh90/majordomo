@@ -29,6 +29,7 @@ export function AccountSheet({ open, editing, onClose }: AccountSheetProps) {
   }, [open, editing])
 
   const canSave = name.trim().length > 0
+  const isDirty = name !== (editing?.name ?? '') || assetClass !== (editing?.assetClass ?? 'cash')
 
   const save = () => {
     if (!canSave) return
@@ -38,7 +39,7 @@ export function AccountSheet({ open, editing, onClose }: AccountSheetProps) {
   }
 
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={onClose} dirty={isDirty}>
       <h2 className="mb-4 font-display text-xl font-bold tracking-wide">
         {editing ? 'Edit account' : 'Add account'}
       </h2>

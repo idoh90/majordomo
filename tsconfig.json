@@ -15,7 +15,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    // The app is a browser. `@types/node` arrived for `api/` (see
+    // tsconfig.api.json) and TypeScript would otherwise auto-include it here,
+    // handing every file in src a `process` and a Node `setTimeout` that do not
+    // exist at runtime. Vite's own types still load — src/vite-env.d.ts
+    // references them directly — and React's arrive through its imports.
+    "types": []
   },
   "include": ["src", "vite.config.ts"]
 }

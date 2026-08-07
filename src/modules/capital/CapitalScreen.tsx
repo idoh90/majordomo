@@ -23,6 +23,10 @@ import { SpendSheet } from './components/SpendSheet'
 import { AccountSheet } from './components/AccountSheet'
 import { HoldingSheet } from './components/HoldingSheet'
 import { CapitalSettingsSheet } from './components/CapitalSettingsSheet'
+import { Hinted } from '../../core/ui/Hint'
+
+/** how long a cached quote set counts as current for the open-console refresh */
+const PRICE_TTL_MS = 10 * 60_000
 
 export function CapitalScreen() {
   const accounts = useCapitalStore((s) => s.accounts)
@@ -52,10 +56,17 @@ export function CapitalScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [addChooserOpen, setAddChooserOpen] = useState(false)
 
-  // refresh quotes once when the console opens (store no-ops without
-  // key/holdings; user-gated — the manual button always works)
+  // Refresh quotes when the console opens, but only if what we hold is stale.
+  // A refresh is 2 + one /time_series per symbol, and the free tier allows 8 a
+  // minute / 800 a day: unthrottled, flipping to the Ledger and back twice
+  // rate-limited the batch, and a 429'd /time_series left symbols with no
+  // candles at all, which the 10-day card then quietly reported as the
+  // portfolio's. The manual button in the board stays unconditional.
   useEffect(() => {
-    if (autoRefreshPrices) void refreshPrices()
+    if (!autoRefreshPrices) return
+    const at = useCapitalStore.getState().pricesUpdatedAt
+    const fresh = at != null && Date.now() - new Date(at).getTime() < PRICE_TTL_MS
+    if (!fresh) void refreshPrices()
   }, [refreshPrices, autoRefreshPrices])
 
   // payday marker heal pass on wing mount (Study's dual-mount precedent)
@@ -107,8 +118,15 @@ export function CapitalScreen() {
   }, [snapshots, accounts, holdings, prices, fx])
 
   const breakdown = spendBreakdown(monthKey(new Date(now)), spends, recurring, spendItems)
-  const hasData = derived.latest != null || holdings.length > 0
+  // holdings alone are not data the hero can speak for: with no snapshot and no
+  // quote yet, liveNetWorth is 0 across the board, so the Vault shouted "₪0"
+  // while the portfolio board on the same screen showed the position's value.
+  // The hero appears the moment either a snapshot or a live figure exists.
+  const hasData = derived.latest != null || derived.live.netWorth !== 0
   const hasHoldings = holdings.length > 0
+  // the caveat says those accounts show their LAST SAVED balance — which is
+  // only true once a snapshot exists to have saved one
+  const degradedShown = derived.latest ? derived.live.degraded : []
 
   return (
     <>
@@ -146,7 +164,7 @@ export function CapitalScreen() {
         liabilities={derived.live.liabilities}
         delta={derived.delta}
         hasData={hasData}
-        degraded={derived.live.degraded}
+        degraded={degradedShown}
         chart={
           <NetWorthChart
             variant="bare"
@@ -263,7 +281,9 @@ function RecentEntries({ items }: { items: SpendItem[] }) {
   if (recent.length === 0) return null
   return (
     <section className="panel mt-4 px-4 pb-4 pt-3 md:hidden">
-      <h2 className="card-title">{voice.capital.recentEntries}</h2>
+      <Hinted tip={voice.hints.capital.recent}>
+        <h2 className="card-title">{voice.capital.recentEntries}</h2>
+      </Hinted>
       <div className="mt-2 flex flex-col gap-1.5">
         {recent.map((it) => {
           const d = new Date(it.date)

@@ -1,6 +1,8 @@
 import type { Workout } from '../../types'
 import { weeklyCounts } from '../../lib/insights'
 import { useShellStore } from '../../../../core/store/shell'
+import { Hinted } from '../../../../core/ui/Hint'
+import { voice } from '../../../../core/voice'
 
 interface WeeklyChartProps {
   workouts: Workout[]
@@ -15,7 +17,9 @@ export function WeeklyChart({ workouts, now }: WeeklyChartProps) {
 
   return (
     <div className="panel p-4">
-      <h3 className="card-title">Workouts / Week</h3>
+      <Hinted tip={voice.hints.grounds.weekChart}>
+        <h3 className="card-title">Workouts / Week</h3>
+      </Hinted>
       <div className="mt-3 flex items-end justify-between gap-1.5" style={{ height: 96 }}>
         {buckets.map((b) => (
           <div

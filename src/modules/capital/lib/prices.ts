@@ -6,18 +6,36 @@ import type { Quote } from '../types'
 
 const BASE = 'https://api.twelvedata.com'
 
+/**
+ * Cache key for a LISTING, not a ticker. VOD is a $9 ADR on NASDAQ and a 7200p
+ * line on the LSE; keyed by bare symbol they overwrite each other and one
+ * position gets priced — and stamped into net worth — with the other's quote.
+ * Exchange-less symbols keep the bare-symbol key, so US listings already in the
+ * cache stay valid.
+ */
+export function listingKey(symbol: string, exchange?: string): string {
+  const sym = symbol.trim().toUpperCase()
+  const ex = exchange?.trim().toUpperCase()
+  return ex ? `${ex}:${sym}` : sym
+}
+
 /** Some listings quote in fractional units — LSE in pence (GBp/GBX), TASE in
  *  agorot (ILA). Convert to the major unit so FX conversion stays sane. */
+export function minorUnitDivisor(currency: string): number {
+  const c = currency.toUpperCase()
+  return c === 'GBX' || currency === 'GBp' || c === 'ILA' ? 100 : 1
+}
+
 function toMajorUnit(price: number, prevClose: number, currency: string) {
   const c = currency.toUpperCase()
-  if (c === 'GBX' || currency === 'GBp' || c === 'ILA') {
+  if (minorUnitDivisor(currency) === 100) {
     return { price: price / 100, prevClose: prevClose / 100, currency: c === 'ILA' ? 'ILS' : 'GBP' }
   }
   return { price, prevClose, currency }
 }
 
 export interface QuoteFetch {
-  quotes: Record<string, Quote> // key = UPPERCASE symbol
+  quotes: Record<string, Quote> // key = listingKey(symbol, exchange)
   errors: string[]
 }
 
@@ -85,7 +103,7 @@ export async function fetchQuotes(refs: SymbolRef[], apiKey: string): Promise<Qu
         Number.isFinite(rawPrev) ? rawPrev : rawPrice,
         String(q.currency ?? 'USD'),
       )
-      quotes[sym] = {
+      quotes[listingKey(sym, ex)] = {
         price: norm.price,
         prevClose: norm.prevClose,
         currency: norm.currency,
@@ -105,7 +123,7 @@ export interface Candle {
 }
 
 export interface TimeSeriesFetch {
-  history: Record<string, Candle[]> // UPPERCASE symbol → oldest-first daily closes
+  history: Record<string, Candle[]> // listingKey → oldest-first daily closes
   errors: string[]
 }
 
@@ -121,8 +139,9 @@ export async function fetchTimeSeries(
 
   for (const r of refs) {
     const sym = r.symbol.trim().toUpperCase()
-    if (!sym || seen.has(sym)) continue
-    seen.add(sym)
+    const key = listingKey(sym, r.exchange)
+    if (!sym || seen.has(key)) continue
+    seen.add(key)
     const params = new URLSearchParams({
       symbol: sym,
       interval: '1day',
@@ -132,16 +151,25 @@ export async function fetchTimeSeries(
     if (r.exchange?.trim()) params.set('exchange', r.exchange.trim())
     try {
       const res = await fetch(`${BASE}/time_series?${params.toString()}`)
-      const json = (await res.json()) as { status?: string; message?: string; values?: unknown[] }
+      const json = (await res.json()) as {
+        status?: string
+        message?: string
+        meta?: { currency?: string }
+        values?: unknown[]
+      }
       if (json.status === 'error' || !Array.isArray(json.values)) {
         errors.push(`${sym}: ${json.message ?? 'no history'}`)
         continue
       }
+      // the SAME normalization /quote applies: an LSE series comes back in
+      // pence, a TASE one in agorot. Without this the closes are 100× the
+      // quote they sit beside, and the 10-day P/L reads 100× the real move.
+      const div = minorUnitDivisor(String(json.meta?.currency ?? ''))
       const candles = (json.values as { datetime: string; close: string }[])
-        .map((v) => ({ date: v.datetime, close: parseFloat(v.close) }))
+        .map((v) => ({ date: v.datetime, close: parseFloat(v.close) / div }))
         .filter((c) => Number.isFinite(c.close))
         .reverse() // API returns newest-first; store oldest-first
-      history[sym] = candles
+      history[key] = candles
     } catch {
       errors.push(`${sym}: history network error`)
     }

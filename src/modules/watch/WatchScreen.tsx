@@ -5,18 +5,15 @@ import { hoursOf } from '../../core/events/lib'
 import { useNavStore } from '../../core/store/nav'
 import { useShellStore } from '../../core/store/shell'
 import { useNow } from '../../core/useNow'
+import { Hinted } from '../../core/ui/Hint'
 import { voice } from '../../core/voice'
 import {
-  DAY_MIN,
-  atMinutes,
   countdownLabel,
   cycleStats,
   hhmmOfMin,
-  rangeFree,
-  recoveryWindow,
-  shiftOverlaps,
-  sleepOverlaps,
+  planWatchPost,
   watchStats,
+  type WatchShape,
 } from './lib'
 import { useWatchUi } from './uiStore'
 import { useWatchStore } from './store'
@@ -75,51 +72,19 @@ export function WatchScreen() {
   }, [postRequested])
 
   /** false when the watch was refused — the caller keeps whatever it holds */
-  const post = (shape: { startMin: number; endMin: number }, title: string): boolean => {
+  const post = (shape: WatchShape, title: string): boolean => {
     if (pickedDay === null) return false
-    const day = stripDays[pickedDay]
-    const start = atMinutes(day, shape.startMin)
-    const end = atMinutes(day, shape.endMin)
+    // the rules of a legal post (overlap, the pencilled recovery block) live in
+    // lib — the setup interview posts watches too, and one of us would drift
+    const plan = planWatchPost(events, stripDays[pickedDay], shape, title)
     // the day stays picked on a refusal: the answer is usually another shape,
     // and clearing the selection makes the user find the column again
-    if (shiftOverlaps(events, start, end)) {
-      butler(voice.watch.overlap)
+    if (!plan.ok) {
+      butler(plan.message)
       return false
     }
-    // pencilled sleep is a suggestion, not a booking — a watch may lie over it,
-    // and the estate says so rather than quietly trimming what it drew
-    const overSleep = sleepOverlaps(events, start, end)
-    addEvent({
-      source: 'watch',
-      kind: 'shift',
-      title,
-      start: start.toISOString(),
-      end: end.toISOString(),
-    })
-    // sleep after a watch that ran through the night is first-class: pencil the
-    // recovery block when free. Derived from the SHAPE, so a 21:00 → 05:00 gets
-    // the same courtesy the old 19:00 → 08:00 preset used to get by name.
-    let pencilled = false
-    if (shape.endMin > DAY_MIN) {
-      const rest = recoveryWindow(end)
-      if (rangeFree(events, rest.start, rest.end)) {
-        addEvent({
-          source: 'watch',
-          kind: 'sleep',
-          title: voice.watch.sleepTitle,
-          start: rest.start.toISOString(),
-          end: rest.end.toISOString(),
-        })
-        pencilled = true
-      }
-    }
-    butler(
-      pencilled
-        ? voice.watch.postedWithSleep
-        : overSleep
-          ? voice.watch.postedOverSleep
-          : voice.watch.posted,
-    )
+    for (const e of plan.events) addEvent(e)
+    butler(plan.message)
     setPickedDay(null)
     return true
   }
@@ -160,7 +125,9 @@ export function WatchScreen() {
           className="panel panel-lit p-5 text-center"
           style={{ ['--lit-accent' as string]: 'var(--color-w-watch)' }}
         >
-          <div className="card-title justify-center">{voice.watch.onDuty}</div>
+          <Hinted tip={voice.hints.watch.onDuty}>
+            <div className="card-title justify-center">{voice.watch.onDuty}</div>
+          </Hinted>
           <div className="trough relative mx-auto mt-4 flex h-[196px] w-full items-center justify-center">
             <svg width="176" height="176" viewBox="0 0 176 176" aria-hidden>
               <circle cx="88" cy="88" r="72" fill="none" stroke="var(--color-panel-2)" strokeWidth="10" />
@@ -236,16 +203,18 @@ export function WatchScreen() {
           this grid column's minimum width and pushes the whole page sideways */}
       <div className="flex min-w-0 flex-col gap-4">
         <div ref={rosterRef} className="panel scroll-mt-4 p-5">
-          <div className="flex items-baseline gap-3">
-            <div className="card-title">{voice.watch.post}</div>
-            <button
-              type="button"
-              onClick={() => setSheet('shapes')}
-              className="ml-auto text-[11px] text-accent transition-colors hover:underline"
-            >
-              {voice.watch.manage}
-            </button>
-          </div>
+          <Hinted tip={voice.hints.watch.post}>
+            <div className="flex items-baseline gap-3">
+              <div className="card-title">{voice.watch.post}</div>
+              <button
+                type="button"
+                onClick={() => setSheet('shapes')}
+                className="ml-auto text-[11px] text-accent transition-colors hover:underline"
+              >
+                {voice.watch.manage}
+              </button>
+            </div>
+          </Hinted>
           <p className="mt-1 text-[12px] text-ink-dim">{voice.watch.bandNote}</p>
           <DutyBand
             events={events}
@@ -288,6 +257,7 @@ export function WatchScreen() {
         </div>
 
         <div className="panel p-5">
+          <Hinted tip={voice.hints.watch.week}>
           <div className="flex items-baseline gap-3">
             <div className="card-title">{voice.watch.weekList}</div>
             {/* posting next week used to leave this panel saying "No watch
@@ -302,6 +272,7 @@ export function WatchScreen() {
               </span>
             )}
           </div>
+          </Hinted>
           <div className="mt-2 flex flex-col">
             {stats.weekShifts.length === 0 && (
               <div className="py-2 text-sm text-ink-dim">{voice.watch.noneThisWeek}</div>

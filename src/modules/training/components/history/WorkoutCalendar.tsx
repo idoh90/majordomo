@@ -3,6 +3,8 @@ import type { Workout } from '../../types'
 import { MUSCLES, PPL_LABELS } from '../../data/muscles'
 import { localDayKey, relativeDayLabel, timeLabel } from '../../../../core/dates'
 import { useShellStore } from '../../../../core/store/shell'
+import { Hinted } from '../../../../core/ui/Hint'
+import { voice } from '../../../../core/voice'
 
 interface WorkoutCalendarProps {
   workouts: Workout[]
@@ -62,7 +64,9 @@ export function WorkoutCalendar({ workouts, now, onOpen }: WorkoutCalendarProps)
   return (
     <section className="panel px-4 pb-4 pt-3">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="card-title">Calendar</h2>
+        <Hinted tip={voice.hints.grounds.calendar}>
+          <h2 className="card-title">Calendar</h2>
+        </Hinted>
         <div className="flex items-center gap-1">
           <button
             type="button"

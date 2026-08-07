@@ -1,12 +1,17 @@
 import type { Holding, Quote } from '../types'
-import type { Candle } from './prices'
+import { listingKey, type Candle } from './prices'
 
 export type Prices = Record<string, Quote>
 export type Fx = Record<string, number>
 export type History = Record<string, Candle[]>
 
+/** Both caches are keyed by LISTING, not ticker — see prices.ts listingKey. */
+export function cacheKey(h: Holding): string {
+  return listingKey(h.symbol, h.exchange)
+}
+
 export function quoteFor(h: Holding, prices: Prices): Quote | undefined {
-  return prices[h.symbol.trim().toUpperCase()]
+  return prices[cacheKey(h)]
 }
 
 /** currency → ILS rate; 1 when the rate is missing (see missingFxCurrencies). */
@@ -182,19 +187,31 @@ export interface PortfolioTotals {
   unrealized: number
   unrealizedPct: number | null
   dayChange: number
+  /** currencies whose rows could NOT be converted to ₪ and are therefore left
+   *  out of every figure above — non-empty means the totals are partial and
+   *  callers must say so instead of printing a ₪ sign over them */
+  unconverted: string[]
 }
 
+/**
+ * Σ over the rows that are actually in ₪. A row the board renders in its own
+ * currency (no ₪ rate) is honest BECAUSE the row names its currency — a single
+ * summed figure can't, and adding francs to shekels under a ₪ sign is exactly
+ * the rate-1 masquerade the strict live rule exists to stop.
+ */
 export function portfolioTotals(rows: HoldingRow[]): PortfolioTotals {
-  const marketValue = rows.reduce((s, r) => s + r.marketValue, 0)
-  const costValue = rows.reduce((s, r) => s + r.costValue, 0)
+  const conv = rows.filter((r) => r.unconvertedCurrency == null)
+  const marketValue = conv.reduce((s, r) => s + r.marketValue, 0)
+  const costValue = conv.reduce((s, r) => s + r.costValue, 0)
   const unrealized = marketValue - costValue
-  const dayChange = rows.reduce((s, r) => s + r.dayChange, 0)
+  const dayChange = conv.reduce((s, r) => s + r.dayChange, 0)
   return {
     marketValue,
     costValue,
     unrealized,
     unrealizedPct: costValue !== 0 ? unrealized / costValue : null,
     dayChange,
+    unconverted: [...new Set(rows.flatMap((r) => (r.unconvertedCurrency ? [r.unconvertedCurrency] : [])))].sort(),
   }
 }
 
@@ -209,44 +226,76 @@ export interface TenDayPL {
   total: number
   totalPct: number | null
   hasData: boolean
+  /** positions the window actually covers, and how many there are in total —
+   *  a rate-limited refresh leaves some symbols with no candles, and a figure
+   *  drawn from six of ten positions must not be presented as the portfolio's */
+  covered: number
+  positions: number
 }
+
+const EMPTY: TenDayPL = { days: [], total: 0, totalPct: null, hasData: false, covered: 0, positions: 0 }
 
 /**
  * Portfolio ₪ P/L for each of the last ~10 trading days, from cached daily
  * closes. Days missing a close for some symbol carry that symbol's last known
- * close forward. FX uses current rates (a small approximation over 10 days).
+ * close forward — and, crucially, BACKWARD too: a symbol whose history starts
+ * mid-window used to contribute ₪0 until its first candle and then appear all
+ * at once, printing its entire position value as a single day's profit. It
+ * holds its earliest close flat instead, so it contributes no movement over
+ * the stretch it has no data for, which is the truth.
+ *
+ * FX uses current rates (a small approximation over 10 days) and the QUOTE's
+ * currency, matching marketValueILS — converting at the holding's declared
+ * currency put this card and the portfolio board on different rates for the
+ * same position.
  */
-export function tenDayPL(holdings: Holding[], history: History, fx: Fx): TenDayPL {
-  // per-symbol date→close, and the union of all dates
-  const priced = holdings.filter((h) => (history[h.symbol.trim().toUpperCase()]?.length ?? 0) >= 2)
-  if (priced.length === 0) return { days: [], total: 0, totalPct: null, hasData: false }
+export function tenDayPL(holdings: Holding[], history: History, fx: Fx, prices: Prices = {}): TenDayPL {
+  // per-listing date→close, and the union of all dates
+  const priced = holdings.filter((h) => (history[cacheKey(h)]?.length ?? 0) >= 2)
+  if (priced.length === 0) return { ...EMPTY, positions: holdings.length }
 
   const maps = new Map<string, Map<string, number>>()
   const allDates = new Set<string>()
   for (const h of priced) {
-    const sym = h.symbol.trim().toUpperCase()
-    if (!maps.has(sym)) {
+    const key = cacheKey(h)
+    if (!maps.has(key)) {
       const m = new Map<string, number>()
-      for (const c of history[sym]) {
+      for (const c of history[key]) {
         m.set(c.date, c.close)
         allDates.add(c.date)
       }
-      maps.set(sym, m)
+      maps.set(key, m)
     }
   }
   const dates = [...allDates].sort().slice(-11) // 11 closes → 10 daily deltas
-  if (dates.length < 2) return { days: [], total: 0, totalPct: null, hasData: false }
+  if (dates.length < 2) return { ...EMPTY, positions: holdings.length }
 
-  // portfolio ₪ value at each date (carry each symbol's last close forward)
+  // seed every listing with its EARLIEST cached close (history is oldest-first,
+  // so Map insertion order gives it) — this is the backward carry
   const lastClose = new Map<string, number>()
+  for (const [key, m] of maps) {
+    const first = m.values().next().value
+    if (first != null) lastClose.set(key, first)
+  }
+
+  // the rate is per listing, resolved once — not once per date
+  const rates = new Map<string, number>()
+  for (const h of priced) {
+    const key = cacheKey(h)
+    if (rates.has(key)) continue
+    const q = prices[key]
+    rates.set(key, rateFor(q ? q.currency || h.currency : h.currency, fx))
+  }
+
+  // portfolio ₪ value at each date
   const values = dates.map((d) => {
     let v = 0
     for (const h of priced) {
-      const sym = h.symbol.trim().toUpperCase()
-      const close = maps.get(sym)!.get(d) ?? lastClose.get(sym)
+      const key = cacheKey(h)
+      const close = maps.get(key)!.get(d) ?? lastClose.get(key)
       if (close != null) {
-        lastClose.set(sym, close)
-        v += h.shares * close * rateFor(h.currency, fx)
+        lastClose.set(key, close)
+        v += h.shares * close * (rates.get(key) ?? 1)
       }
     }
     return v
@@ -255,5 +304,12 @@ export function tenDayPL(holdings: Holding[], history: History, fx: Fx): TenDayP
   const days: DailyPL[] = []
   for (let i = 1; i < dates.length; i++) days.push({ date: dates[i], pl: values[i] - values[i - 1] })
   const total = values[values.length - 1] - values[0]
-  return { days, total, totalPct: values[0] !== 0 ? total / values[0] : null, hasData: true }
+  return {
+    days,
+    total,
+    totalPct: values[0] !== 0 ? total / values[0] : null,
+    hasData: true,
+    covered: priced.length,
+    positions: holdings.length,
+  }
 }

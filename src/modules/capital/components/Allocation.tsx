@@ -1,6 +1,8 @@
 import type { AllocationSlice } from '../lib/networth'
 import { ASSET_CLASSES } from '../lib/money'
 import { Amount } from './Amount'
+import { Hinted } from '../../../core/ui/Hint'
+import { voice } from '../../../core/voice'
 
 interface AllocationProps {
   slices: AllocationSlice[]
@@ -13,13 +15,21 @@ export function Allocation({ slices, liabilities }: AllocationProps) {
 
   return (
     <div className="panel p-4">
-      <h3 className="card-title">Allocation</h3>
+      <Hinted tip={voice.hints.capital.allocation}>
+        <h3 className="card-title">Allocation</h3>
+      </Hinted>
 
       <div className="mt-3 flex h-3 w-full overflow-hidden rounded-pill bg-panel-3">
         {slices.map((s) => (
+          // clamped: a negative fraction is invalid CSS, the declaration is
+          // dropped, and the segment silently disappears instead of reading as
+          // the debt it is. The legend row below still shows the signed value.
           <div
             key={s.assetClass}
-            style={{ width: `${s.fraction * 100}%`, background: ASSET_CLASSES[s.assetClass].color }}
+            style={{
+              width: `${Math.max(0, s.fraction) * 100}%`,
+              background: ASSET_CLASSES[s.assetClass].color,
+            }}
             title={`${ASSET_CLASSES[s.assetClass].label} · ${(s.fraction * 100).toFixed(0)}%`}
           />
         ))}

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Collapsible } from './Collapsible'
 import { CollapseToggle } from './CollapseToggle'
+import { Hinted } from './Hint'
 import { voice } from '../voice'
 import type { BriefingChip } from '../voice/types'
 
@@ -73,25 +74,27 @@ export function BriefingPanel({
         </span>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span
-              className="card-title min-w-0 truncate"
-              style={{ color: `color-mix(in srgb, ${accent} 62%, var(--color-ink-dim))` }}
-            >
-              {voice.briefing.label} · {scope}
-            </span>
-            {/* Desktop used to render a second, inert '⌃' here to balance the
-                row. It looked exactly like the control beside it and did
-                nothing when pressed, so it is gone rather than enlarged. */}
-            {hasMore && (
-              <CollapseToggle
-                expanded={expanded}
-                onToggle={() => setExpanded((x) => !x)}
-                hint={expanded ? voice.briefing.collapse : voice.briefing.expand}
-                className="ml-auto md:hidden"
-              />
-            )}
-          </div>
+          <Hinted tip={voice.hints.house.briefing}>
+            <div className="flex items-center gap-2">
+              <span
+                className="card-title min-w-0 truncate"
+                style={{ color: `color-mix(in srgb, ${accent} 62%, var(--color-ink-dim))` }}
+              >
+                {voice.briefing.label} · {scope}
+              </span>
+              {/* Desktop used to render a second, inert '⌃' here to balance the
+                  row. It looked exactly like the control beside it and did
+                  nothing when pressed, so it is gone rather than enlarged. */}
+              {hasMore && (
+                <CollapseToggle
+                  expanded={expanded}
+                  onToggle={() => setExpanded((x) => !x)}
+                  hint={expanded ? voice.briefing.collapse : voice.briefing.expand}
+                  className="ml-auto md:hidden"
+                />
+              )}
+            </div>
+          </Hinted>
 
           {chips.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">

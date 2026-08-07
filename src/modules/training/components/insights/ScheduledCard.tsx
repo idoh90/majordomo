@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useEventsStore } from '../../../../core/events/store'
 import { addDays, localDayKey, timeLabel } from '../../../../core/dates'
+import { Hinted } from '../../../../core/ui/Hint'
 import { voice } from '../../../../core/voice'
 import { useWorkoutStore } from '../../store'
 import { linkedEventIds } from '../../lib/fulfillment'
@@ -50,7 +51,9 @@ export function ScheduledCard({ now }: { now: number }) {
 
   return (
     <div className="panel p-4">
-      <div className="card-title">{voice.grounds.scheduledTitle}</div>
+      <Hinted tip={voice.hints.grounds.scheduled}>
+        <div className="card-title">{voice.grounds.scheduledTitle}</div>
+      </Hinted>
       <ul className="mt-2.5 flex flex-col">
         {shown.map((e) => {
           const inProgress = new Date(e.start).getTime() <= now

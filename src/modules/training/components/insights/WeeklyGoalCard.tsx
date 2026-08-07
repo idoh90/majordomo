@@ -4,6 +4,7 @@ import { GROUP_LABELS } from '../../data/muscles'
 import { slackingGroups, thisWeekCount } from '../../lib/insights'
 import { MAX_WEEKLY_GOAL, useWorkoutStore } from '../../store'
 import { useShellStore } from '../../../../core/store/shell'
+import { Hinted } from '../../../../core/ui/Hint'
 import { voice } from '../../../../core/voice'
 
 interface WeeklyGoalCardProps {
@@ -28,6 +29,7 @@ export function WeeklyGoalCard({ workouts, now }: WeeklyGoalCardProps) {
     <div
       className={`panel p-4 transition-colors ${met ? 'border-accent/60' : ''}`}
     >
+      <Hinted tip={voice.hints.grounds.weekGoal}>
       <div className="flex items-start justify-between">
         <div>
           <div className="card-title">{voice.grounds.weekTitle}</div>
@@ -49,6 +51,7 @@ export function WeeklyGoalCard({ workouts, now }: WeeklyGoalCardProps) {
           {hasGoal ? 'Goal' : 'Set goal'}
         </button>
       </div>
+      </Hinted>
 
       {hasGoal && (
         <>

@@ -15,6 +15,7 @@ import { voice } from '../core/voice'
 import { useAuthStore } from '../core/auth/store'
 import { offReason } from '../core/sync/gate'
 import { useAuthUi } from './authUi'
+import { entryStage, useOnboarding } from './onboarding/store'
 import { useShellStore } from '../core/store/shell'
 import { useWorkoutStore } from '../modules/training/store'
 import { ConfirmDialog } from '../core/ui/ConfirmDialog'
@@ -25,6 +26,8 @@ export function SettingsMenu() {
   const workouts = useWorkoutStore((s) => s.workouts)
   const weekStart = useShellStore((s) => s.weekStart)
   const setWeekStart = useShellStore((s) => s.setWeekStart)
+  const panelTips = useShellStore((s) => s.panelTips)
+  const setPanelTips = useShellStore((s) => s.setPanelTips)
   const replaceAll = useWorkoutStore((s) => s.replaceAll)
   const clearAll = useWorkoutStore((s) => s.clearAll)
 
@@ -133,6 +136,51 @@ export function SettingsMenu() {
                 {authStatus === 'signedIn' ? voice.sync.accountItem : voice.sync.connectItem}
               </MenuItem>
             )}
+            {/* the `?` marks, house-wide. A switch rather than a menu item:
+                it states its own condition, which a row reading "Panel tips…"
+                could not. */}
+            <div className="px-3.5 py-2.5">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={panelTips}
+                onClick={() => setPanelTips(!panelTips)}
+                className="flex w-full items-center gap-2.5 text-left"
+              >
+                <span className="flex-1 text-sm text-ink">{voice.hints.settingsToggle}</span>
+                <span
+                  aria-hidden
+                  className="relative h-5 w-9 flex-none rounded-pill border transition-colors"
+                  style={{
+                    borderColor: panelTips ? 'var(--color-accent)' : 'var(--color-line)',
+                    background: panelTips
+                      ? 'color-mix(in srgb, var(--color-accent) 22%, transparent)'
+                      : 'var(--color-panel-2)',
+                  }}
+                >
+                  <span
+                    className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-[left]"
+                    style={{
+                      left: panelTips ? 'calc(100% - 17px)' : '3px',
+                      background: panelTips ? 'var(--color-accent)' : 'var(--color-ink-faint)',
+                    }}
+                  />
+                </span>
+              </button>
+              <p className="mt-1 pr-11 text-[11px] leading-snug text-ink-faint">
+                {voice.hints.settingsBlurb}
+              </p>
+            </div>
+            {/* the interview again, from wherever it makes sense to start it —
+                signed in, the door has nothing left to ask */}
+            <MenuItem
+              onClick={() => {
+                setMenuOpen(false)
+                useOnboarding.getState().begin(entryStage())
+              }}
+            >
+              {voice.onboarding.settingsRerun}
+            </MenuItem>
             <MenuItem onClick={exportEstate}>{voice.backup.estate.exportItem}</MenuItem>
             <MenuItem
               onClick={() => {

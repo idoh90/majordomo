@@ -1,6 +1,7 @@
 import { monthLabel, spendPace, type SpendBreakdown } from '../lib/budget'
 import { voice } from '../../../core/voice'
 import { Amount } from './Amount'
+import { Hinted } from '../../../core/ui/Hint'
 
 interface SpendCardProps {
   /** fixed / variable / total — the card needs the split, not just the sum */
@@ -32,6 +33,7 @@ export function SpendCard({ breakdown, budget, now, onEdit, onHistory }: SpendCa
 
   return (
     <div className="panel p-4">
+      <Hinted tip={voice.hints.capital.spend}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="card-title">Spending · {monthLabel(now)}</h3>
         <div className="flex items-center gap-2.5">
@@ -49,6 +51,7 @@ export function SpendCard({ breakdown, budget, now, onEdit, onHistory }: SpendCa
           </button>
         </div>
       </div>
+      </Hinted>
 
       {hasBudget ? (
         <>

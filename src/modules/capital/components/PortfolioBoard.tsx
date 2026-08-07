@@ -5,6 +5,7 @@ import { holdingRow, missingFxCurrencies, portfolioTotals } from '../lib/holding
 import { formatPercent } from '../lib/money'
 import { voice } from '../../../core/voice'
 import { Amount } from './Amount'
+import { Hinted } from '../../../core/ui/Hint'
 
 interface PortfolioBoardProps {
   onAddHolding: () => void
@@ -27,11 +28,18 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
     [holdings, prices, fx],
   )
   const totals = useMemo(() => portfolioTotals(rows), [rows])
+  // A row without a ₪ rate is honest because the row names its currency. The
+  // total can't — so it sums only the converted rows, and says so. When NOTHING
+  // converted there is no ₪ figure to print at all and the cells read '—',
+  // rather than a ₪0 that looks like a portfolio worth nothing.
+  const partialTotals = totals.unconverted.length > 0
+  const noTotals = partialTotals && rows.every((r) => r.unconvertedCurrency != null)
   const anyClosed = rows.some((r) => r.quote && r.quote.marketOpen === false)
   const missingFx = useMemo(() => missingFxCurrencies(holdings, prices, fx), [holdings, prices, fx])
 
   return (
     <div className="panel p-4">
+      <Hinted tip={voice.hints.capital.portfolio}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="card-title">Portfolio</h3>
         <div className="flex items-center gap-2 text-[11px] text-ink-faint">
@@ -61,6 +69,7 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
           )}
         </div>
       </div>
+      </Hinted>
 
       {holdings.length === 0 ? (
         <div className="card p-5 text-center">
@@ -147,14 +156,14 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
             ))}
             <div className="flex items-baseline gap-2 border-t border-line pt-2 text-[11.5px] font-semibold tabular-nums">
               <span className="text-ink-dim">Total</span>
-              <span className={sign(totals.dayChange)}>
-                <Amount value={totals.dayChange} kind="delta" />
+              <span className={noTotals ? 'text-ink-faint' : sign(totals.dayChange)}>
+                {noTotals ? '—' : <Amount value={totals.dayChange} kind="delta" />}
               </span>
-              <span className="ml-auto text-ink">
-                <Amount value={totals.marketValue} kind="compact" />
+              <span className={`ml-auto ${noTotals ? 'text-ink-faint' : 'text-ink'}`}>
+                {noTotals ? '—' : <Amount value={totals.marketValue} kind="compact" />}
               </span>
-              <span className={sign(totals.unrealized)}>
-                <Amount value={totals.unrealized} kind="delta" />
+              <span className={noTotals ? 'text-ink-faint' : sign(totals.unrealized)}>
+                {noTotals ? '—' : <Amount value={totals.unrealized} kind="delta" />}
               </span>
             </div>
           </div>
@@ -223,18 +232,24 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
                 <tr className="border-t border-line font-semibold">
                   <td className="pt-2 text-ink-dim">Total</td>
                   <td />
-                  <td className={`pt-2 text-right tabular-nums ${sign(totals.dayChange)}`}>
-                    <Amount value={totals.dayChange} kind="delta" />
+                  <td className={`pt-2 text-right tabular-nums ${noTotals ? 'text-ink-faint' : sign(totals.dayChange)}`}>
+                    {noTotals ? '—' : <Amount value={totals.dayChange} kind="delta" />}
                   </td>
-                  <td className="pt-2 text-right tabular-nums text-ink">
-                    <Amount value={totals.marketValue} kind="compact" />
+                  <td className={`pt-2 text-right tabular-nums ${noTotals ? 'text-ink-faint' : 'text-ink'}`}>
+                    {noTotals ? '—' : <Amount value={totals.marketValue} kind="compact" />}
                   </td>
-                  <td className={`pt-2 text-right tabular-nums ${sign(totals.unrealized)}`}>
-                    <Amount value={totals.unrealized} kind="delta" />
-                    {totals.unrealizedPct != null && (
-                      <span className="ml-1 text-[11px] font-normal text-ink-faint">
-                        {formatPercent(totals.unrealizedPct)}
-                      </span>
+                  <td className={`pt-2 text-right tabular-nums ${noTotals ? 'text-ink-faint' : sign(totals.unrealized)}`}>
+                    {noTotals ? (
+                      '—'
+                    ) : (
+                      <>
+                        <Amount value={totals.unrealized} kind="delta" />
+                        {totals.unrealizedPct != null && (
+                          <span className="ml-1 text-[11px] font-normal text-ink-faint">
+                            {formatPercent(totals.unrealizedPct)}
+                          </span>
+                        )}
+                      </>
                     )}
                   </td>
                 </tr>
@@ -244,6 +259,11 @@ export function PortfolioBoard({ onAddHolding, onEditHolding, onOpenSettings }: 
           {missingFx.length > 0 && (
             <p className="mt-2.5 text-[11px] leading-relaxed text-danger">
               {voice.capital.fxMissing(missingFx)}
+            </p>
+          )}
+          {partialTotals && !noTotals && (
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-faint">
+              {voice.capital.totalsPartial(totals.unconverted)}
             </p>
           )}
           <div className="mt-3 flex items-center justify-between">

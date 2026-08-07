@@ -116,7 +116,12 @@ export function computeBriefing(i: HeadsUpInputs): { greeting: string | null; he
 
   /* ---- 5 · payday passed, no snapshot this month ---- */
   {
-    const payday = i.paydayDay > 0 ? i.paydayDay : 1
+    // clamped to THIS month's length, exactly as the Manor's payday marker is
+    // (payday.ts paydayKeyFor). Unclamped, a payday of 31 put the window past
+    // the end of every 30-day month, so the marker sat on the 30th while the
+    // nudge that belongs with it never fired all month.
+    const lastDay = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0).getDate()
+    const payday = Math.min(i.paydayDay > 0 ? i.paydayDay : 1, lastDay)
     const dayOfMonth = nowD.getDate()
     const inWindow = dayOfMonth >= payday && dayOfMonth < payday + 7 // never-begs: a week, then rest
     const monthKey = localDayKey(nowD).slice(0, 7)

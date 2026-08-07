@@ -3,6 +3,7 @@ import { ASSET_CLASSES } from '../lib/money'
 import { accountLiveValue, isDegraded, isPriced, type Fx, type Prices } from '../lib/holdings'
 import { voice } from '../../../core/voice'
 import { Amount } from './Amount'
+import { Hinted } from '../../../core/ui/Hint'
 
 interface AccountsPanelProps {
   accounts: Account[]
@@ -21,12 +22,14 @@ export function AccountsPanel({ accounts, latest, holdings, prices, fx, onEdit, 
 
   return (
     <div className="panel p-4">
+      <Hinted tip={voice.hints.capital.accounts}>
       <div className="mb-3 flex items-center justify-between">
         <h3 className="card-title">Accounts</h3>
         <button type="button" onClick={onAdd} className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] text-sm text-accent transition-opacity hover:opacity-80">
           + Add
         </button>
       </div>
+      </Hinted>
 
       {rows.length === 0 ? (
         <p className="py-4 text-center text-sm text-ink-faint">No accounts yet.</p>

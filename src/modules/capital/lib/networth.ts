@@ -77,7 +77,12 @@ export function allocation(snapshot: Snapshot, accounts: Account[]): AllocationS
 }
 
 function allocationFromTotals(totals: Map<AssetClass, number>): AllocationSlice[] {
-  const assets = [...totals.values()].reduce((s, v) => s + v, 0)
+  // the base is the POSITIVE holdings only. Netting an overdraft out of the
+  // denominator made the remaining classes sum past 100% — an account at −5,000
+  // beside one at 20,000 read "Investments 133%" against a net worth panel that
+  // was itself correct. The legend keeps the signed value, which is the honest
+  // reading; only the share it claims of the whole is bounded.
+  const assets = [...totals.values()].reduce((s, v) => s + (v > 0 ? v : 0), 0)
   return [...totals.entries()]
     .map(([assetClass, value]) => ({ assetClass, value, fraction: assets > 0 ? value / assets : 0 }))
     .sort((a, b) => b.value - a.value)

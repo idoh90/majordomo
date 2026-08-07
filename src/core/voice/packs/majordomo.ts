@@ -64,6 +64,7 @@ export const majordomoPack: VoicePack = {
       grounds: 'workouts',
       study: 'read',
       capital: 'budget left',
+      capitalSpent: 'spent this month',
     },
     signal: {
       dutyLoad: 'DUTY LOAD · 8 WEEKS',
@@ -804,6 +805,11 @@ export const majordomoPack: VoicePack = {
     stampHeldTitle:
       'No fresh quote or ₪ rate, sir — keeping the last saved value rather than writing a wrong one.',
     recentEntries: 'RECENT ENTRIES',
+    tenDayPartial: (covered, positions) => `${covered} of ${positions} positions`,
+    totalsPartial: (currencies) =>
+      `Totals cover the converted rows only, sir — ${currencies.join(', ')} ${
+        currencies.length === 1 ? 'awaits' : 'await'
+      } a ₪ rate.`,
     trend: {
       rangeEmpty: (months) => `Not enough points in the last ${months} months, sir — two make a line.`,
       showAll: 'Show all',
@@ -921,5 +927,224 @@ export const majordomoPack: VoicePack = {
     clearWorkoutsBodySynced: (n) =>
       `All ${n} workout${n === 1 ? '' : 's'} are struck — on this device and on every other, sir. The other wings keep their records.`,
     clearWorkoutsYes: 'Clear the log',
+  },
+  onboarding: {
+    welcome: {
+      intro:
+        'I am the Majordomo, sir. I keep one calendar for all of it — work, training, study, money.',
+      promise: 'Three minutes to set things up. Skip anything you like.',
+      googleHint: 'Recommended — your data follows you to other devices.',
+      localCta: 'Start on this device',
+      localHint: 'Everything stays on this device. You can sign in later.',
+      later: 'Not now',
+    },
+    registry: {
+      checking: 'Checking your account…',
+      welcomeBack: 'Welcome back, sir.',
+      welcomeBackBody: 'Everything is where you left it.',
+      welcomeBackCta: 'TO THE MANOR',
+      checkFailed: "I could not reach your account. We can carry on — it will catch up later.",
+    },
+    intro: {
+      lines: [
+        'Majordomo puts your whole life on one calendar — work, training, study, money. One week, all of it in view.',
+        'Each part gets its own wing: the Watch for work shifts, the Grounds for training, the Study for coursework, the Ledger for money. All four write to the same week.',
+        'Everything is kept on this device and works offline. No account needed.',
+      ],
+    },
+    composition: {
+      title: 'ABOUT YOU',
+      prompt: 'What fills your week?',
+      chips: {
+        shift: 'Shift work',
+        dayJob: 'A day job',
+        training: 'Training',
+        study: 'Studying',
+        money: 'Money to track',
+      },
+      hint: "I only ask about what you pick. Pick nothing and I'll skip ahead.",
+    },
+    chrome: {
+      step: ({ n, of }) => `${n} OF ${of}`,
+      next: 'NEXT',
+      skip: 'Skip',
+      back: 'Back',
+    },
+    work: {
+      title: 'YOUR WORK WEEK',
+      prompt: 'When do you work?',
+      dayJobPrompt: 'Which days do you work? The usual five are one tap.',
+      weekdaysCta: 'MON – FRI, BOTH WEEKS',
+      hint: 'Pick your hours, then tap the days you work. Watch them land on the calendar behind.',
+      daysLabel: 'THIS WEEK AND NEXT',
+      posted: (n) =>
+        n === 0
+          ? 'Nothing added yet.'
+          : n === 1
+            ? 'One shift added — it is on the calendar behind this panel.'
+            : `${word(n)} shifts added.`,
+      nightNote: 'An overnight shift books your sleep for the next morning too.',
+    },
+    training: {
+      title: 'YOUR TRAINING',
+      prompt: 'How many sessions a week?',
+      profileLabel: 'YOUR BUILD — OPTIONAL',
+      profileHint:
+        'Calories and protein are worked out from these. Leave them and I use rough defaults.',
+      weightLabel: 'Weight',
+      weightUnit: 'kg',
+      heightLabel: 'Height',
+      heightUnit: 'cm',
+      ageLabel: 'Age',
+      ageUnit: 'yr',
+      sexLabel: 'Sex',
+      sexMale: 'male',
+      sexFemale: 'female',
+    },
+    study: {
+      title: 'YOUR STUDIES',
+      prompt: "Studying anything? Name it and I'll keep track of the hours.",
+      goalLabel: 'HOURS A WEEK',
+      add: 'ADD',
+      enrolled: (n) => `${word(n)} ${plural(n, 'subject', 'subjects')} added.`,
+      duplicate: 'That one is already on the list.',
+      none: 'Nothing to study is a perfectly good answer.',
+    },
+    preset: {
+      title: 'THE LOOK',
+      prompt: 'Three themes. Tap one to try it — it changes straight away.',
+    },
+    walk: {
+      sampleTag: 'SAMPLE DATA',
+      sampleNote: 'These numbers are only an example. I clear them when we move on.',
+      watch: {
+        meaning:
+          'The Watch is where your work shifts live. Add one here and it lands on the calendar. An overnight shift books sleep the next morning too.',
+        dashboard:
+          'The ring is hours worked against hours planned this week. Under it, a countdown to your next shift — and a two-week strip for adding more.',
+        use: ({ count, next }) =>
+          count > 0
+            ? `Your shifts are already on the calendar.${
+                next ? ` The first starts in ${untilLabel(next.h, next.m)}.` : ''
+              }`
+            : 'Best used when a new schedule comes out: add two weeks in a dozen taps, and everything else plans around it.',
+      },
+      grounds: {
+        meaning:
+          'The Grounds is for training. Log a session and the body map shows what it cost you, muscle by muscle, cooling off over the days after.',
+        dashboard:
+          'The figure glows where you trained and fades as you recover. Beside it, the week against your goal, and what to eat today.',
+        use: ({ goal }) =>
+          goal > 0
+            ? `Your goal is ${lower(goal)} a week. Log the first session with the + and the map lights up.`
+            : 'Best used right after training: two taps to log it, and the map remembers the rest.',
+      },
+      study: {
+        meaning:
+          'The Study is for coursework — subjects, weekly hours, homework and exams. Book sessions ahead, then say how they went.',
+        dashboard:
+          'One ring per subject, filling as you put the hours in. Below that, what is due — and for each exam, days left against hours booked.',
+        use: ({ subjects }) =>
+          subjects > 0
+            ? `${word(subjects)} ${plural(subjects, 'subject is', 'subjects are')} set up. Book a session and it lands on the calendar.`
+            : 'Add subjects here whenever you have coursework to keep track of.',
+      },
+      ledger: {
+        meaning:
+          'The Ledger is for money — your accounts, what they are worth over time, and this month\u2019s spending against a budget.',
+        dashboard:
+          'The Vault is your total in one number. The chart is its history, the bars show where the money sits, and the spending card paces the month.',
+        use: 'Only as often as you like. Update a balance now and then and the chart stays honest. Nothing is needed today.',
+      },
+      skipRest: 'Skip the rest',
+    },
+    close: {
+      line: 'You are all set, sir.',
+      cta: 'TO THE MANOR',
+    },
+    ghost: {
+      line: 'An empty week. Shall we set things up?',
+      cta: 'SET THINGS UP',
+    },
+    settingsRerun: 'Run first-time setup again',
+  },
+  hints: {
+    buttonLabel: 'What is this panel for?',
+    settingsToggle: 'Panel tips',
+    settingsBlurb: 'Marks each panel with a ? explaining what it is for.',
+    house: {
+      rail:
+        'The whole estate at a glance — one figure per wing, each in that wing’s own terms. Tap a row to go there.',
+      signal:
+        'The one thing this wing most wants noticed today, stated as a sentence rather than a number to interpret.',
+      pattern:
+        'Where two wings are treading on one another — training booked hard against a watch, a subject with a goal and nothing booked. The remedy is one tap.',
+      briefing:
+        'The butler’s reading of this wing right now. Folded, it gives the headline; opened, the detail behind it.',
+    },
+    watch: {
+      onDuty:
+        'The week’s duty as a ring: hours already stood against hours on the books, with the countdown to the next watch beneath it.',
+      post:
+        'Where a roster becomes a calendar. Pick a shape, tap the days it falls on — a watch running past midnight pencils its recovery sleep automatically.',
+      week:
+        'Every watch this week in order, with the hours each one costs, and what is booked beyond it.',
+      cycle:
+        'The shape of the week rather than its total: how many nights, how much pencilled sleep, the tightest turnaround between two watches, and how much of the 168 hours is left to you.',
+    },
+    grounds: {
+      bodyMap:
+        'Each muscle coloured by what it is still carrying — hot where the work landed, cooling over days. Tap one for its own reading. The toggle swaps recent strain for the week’s volume against training landmarks.',
+      ledger:
+        'The body map as a table: every muscle’s current strain beside its estimated hard sets this week, so a warm colour can be read as a figure.',
+      weekGoal:
+        'Sessions logged this week against the target you set. Runs feed the strain engine but are not counted here — this counts lifting.',
+      weekChart:
+        'Lifting sessions per week over the recent stretch, for spotting a habit slipping before the body reports it.',
+      topMuscles:
+        'What has actually been trained over the last thirty days, ranked. Usually the fastest way to find the thing you have been avoiding.',
+      scheduled:
+        'Training already booked on the Manor. Logging a session matches it to the block it fulfils.',
+      recovery:
+        'When each still-warm muscle is expected to settle, so the next session can be aimed at something that is ready.',
+      fuel:
+        'What today asks for, computed from your build and the load actually logged. Training days carry more; rest days less.',
+      calendar:
+        'Every logged session by date. Tap a day to open what was done.',
+      summary:
+        'The day in one paragraph: what the body is carrying, what the week still owes, and what to eat for it.',
+    },
+    study: {
+      pending:
+        'What the docket is holding — homework due and exams approaching, soonest first.',
+      dossier:
+        'One subject in full: its syllabus, its homework, its exams. The syllabus percentage is of this subject alone.',
+      readingWeek:
+        'A ring per subject, filling as hours are actually read against the weekly goal you set for it.',
+      subjectLedger:
+        'Fulfilled against booked against the goal, per subject — three different questions the rings answer as one.',
+      desk:
+        'Where a session is booked ahead, and where past sessions still awaiting a report are answered for.',
+      weekLedger:
+        'Every study session this week and what became of it — done, partial, or struck.',
+    },
+    capital: {
+      vault:
+        'The estate in one figure: assets less debts. Priced accounts read live; everything else reads its last saved balance.',
+      trend:
+        'Net worth across the saved snapshots. The line is history and only moves when balances are updated — the live figure above it can differ.',
+      allocation:
+        'Where the money actually sits, by class. The fastest way to see a concentration you did not intend.',
+      accounts:
+        'Every account and what it currently holds. A priced account reads live; one whose quotes are missing says so.',
+      portfolio:
+        'Each holding with its price, its move today, and its profit or loss. Rows are stated in their own currency.',
+      tenDay:
+        'The portfolio’s recent shape — enough to tell a bad day from a bad fortnight.',
+      spend:
+        'This month’s spending against its budget, with the pace so far. History opens the same sheet month by month.',
+      recent:
+        'The individual purchases entered this month, newest first. A minus is a refund and subtracts.',
+    },
   },
 }

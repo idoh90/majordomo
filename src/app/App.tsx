@@ -16,6 +16,7 @@ import { SyncButton } from './SyncButton'
 import { useAuthUi } from './authUi'
 import { offReason } from '../core/sync/gate'
 import { TabBar } from './TabBar'
+import { Onboarding } from './onboarding/Onboarding'
 
 export default function App() {
   const skin = useShellStore((s) => s.skin)
@@ -95,6 +96,9 @@ export default function App() {
 
       {/* a door, not a wall — renders nothing until asked for */}
       <LoginScreen />
+
+      {/* the first-time setup, the same way: null until a stage is running */}
+      <Onboarding />
     </>
   )
 }

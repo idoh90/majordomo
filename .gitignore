@@ -5,3 +5,7 @@ dist
 
 .vercel
 .env*
+
+# agent scratch: throwaway worktrees and design-hook cache, not project state
+.claude/worktrees
+.impeccable

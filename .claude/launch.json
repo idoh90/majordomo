@@ -20,6 +20,12 @@
       "port": 5211
     },
     {
+      "name": "majordomo-dev-3",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5223", "--strictPort"],
+      "port": 5223
+    },
+    {
       "name": "majordomo-preview",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "preview", "--", "--port", "4173", "--strictPort", "--host"],

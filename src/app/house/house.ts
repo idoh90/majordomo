@@ -61,6 +61,11 @@ export interface HouseRow {
   good: boolean | null
   /** oldest first; empty when the wing cannot honestly draw one */
   series: number[]
+  /** the Ledger's figure is what's LEFT of a budget, unless there is no budget
+   *  — then it's what's been spent, and the label has to change with it. The
+   *  copy stays in the voice pack; this is the flag the card reads (the same
+   *  split `pattern` uses: the model names the case, the component words it). */
+  figureIsSpend?: boolean
 }
 
 export type PatternId = 'train-after-watch' | 'study-untouched' | 'none'
@@ -170,24 +175,19 @@ export function computeHouse(i: HouseInputs): HouseModel {
   // put the burn rate at three times its true figure on the 5th and let it sag
   // back down as the month caught up with it. The month just gone is complete,
   // so its own rate is the same expression with every day elapsed.
-  const burn =
-    spentNow > 0
-      ? {
-          perDay: dailyBurn(
-            spendBreakdown(thisMonth, i.spends, i.recurring, i.spendItems),
-            dayOfMonth,
-            daysInMonthOf(nowDate),
-          ),
-          prevPerDay:
-            prevMonthSpent != null && prevMonthSpent > 0
-              ? dailyBurn(
-                  spendBreakdown(prevMonth, i.spends, i.recurring, i.spendItems),
-                  prevDays,
-                  prevDays,
-                )
-              : null,
-        }
+  // gated on the figure actually printed, not on the month's total: a refund
+  // logged in the first days of a month is divided by a tiny elapsed-day count
+  // and swamps the fixed term, so "spent > 0" happily printed −₪82 a day
+  const perDayNow = dailyBurn(
+    spendBreakdown(thisMonth, i.spends, i.recurring, i.spendItems),
+    dayOfMonth,
+    daysInMonthOf(nowDate),
+  )
+  const prevPerDay =
+    prevMonthSpent != null && prevMonthSpent > 0
+      ? dailyBurn(spendBreakdown(prevMonth, i.spends, i.recurring, i.spendItems), prevDays, prevDays)
       : null
+  const burn = perDayNow > 0 ? { perDay: perDayNow, prevPerDay } : null
 
   /* ----------------------------------------------------------------- manor */
   // intersected: the convention the Manor's own week line prints
@@ -216,13 +216,19 @@ export function computeHouse(i: HouseInputs): HouseModel {
       counts,
     ),
     row('study', `${studyNow.toFixed(1)} h`, studyNow, studyPrev, studySeries),
-    row(
-      'capital',
-      leftNow == null ? i.formatMoney(spentNow) : i.formatMoney(leftNow),
-      leftNow ?? spentNow,
-      null, // last month's "left" is not a comparable quantity to this month's
-      spendMonths,
-    ),
+    // with no budget the figure is SPEND, not what's left of one — the row has
+    // to say which, or the default estate reads '₪6,440 budget left' about a
+    // budget that does not exist
+    {
+      ...row(
+        'capital',
+        leftNow == null ? i.formatMoney(spentNow) : i.formatMoney(leftNow),
+        leftNow ?? spentNow,
+        null, // last month's "left" is not a comparable quantity to this month's
+        spendMonths,
+      ),
+      figureIsSpend: leftNow == null,
+    },
   ]
 
   return { rows, readiness: ready, dutyLoad, watchBooked, examRunway, burn, pattern: findPattern(i) }
