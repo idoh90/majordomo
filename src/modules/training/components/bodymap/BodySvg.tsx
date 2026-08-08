@@ -1,9 +1,20 @@
-import { useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useState, type FocusEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import type { BodyView, MuscleId } from '../../types'
 import { MUSCLES } from '../../data/muscles'
 import { BACK_PLATES, FRONT_PLATES, SILHOUETTE_HALF } from './paths'
 
 const MIRROR = 'translate(200 0) scale(-1 1)'
+
+/** Did this element take focus the keyboard way? `:focus-visible` is the
+ *  browser's own answer; if it can't be asked, show the ring — a missing
+ *  indicator is the worse failure. */
+function isKeyboardFocus(el: Element): boolean {
+  try {
+    return el.matches(':focus-visible')
+  } catch {
+    return true
+  }
+}
 
 interface BodySvgProps {
   view: BodyView
@@ -32,6 +43,11 @@ export function BodySvg({
 }: BodySvgProps) {
   const plates = view === 'front' ? FRONT_PLATES : BACK_PLATES
   const [focused, setFocused] = useState<MuscleId | null>(null)
+  // Hover is a MOUSE affordance and nothing else. A touch pointer also fires
+  // enter/leave, and honouring it would leave a ring stranded on the last
+  // plate a thumb crossed — so the pointer type is the gate, not a media query
+  // (a hybrid laptop is both, per-event).
+  const [hovered, setHovered] = useState<MuscleId | null>(null)
 
   const fillFor = (muscle: MuscleId, i: number) =>
     debugRainbow ? `hsl(${(i * 137.5) % 360} 75% 55%)` : colorFor(muscle)
@@ -79,7 +95,8 @@ export function BodySvg({
           mirrored pair is one muscle and must be one tab stop, announced once. */}
       {plates.map((p, i) => {
         const isSelected = selected === p.muscle
-        const isFocused = focused === p.muscle
+        // one ring, two ways in: keyboard focus and mouse hover
+        const isRinged = focused === p.muscle || hovered === p.muscle
         const toggle = () => onSelect(isSelected ? null : p.muscle)
         const handleDown = (e: PointerEvent) => {
           e.stopPropagation()
@@ -95,12 +112,12 @@ export function BodySvg({
         const shared = {
           fill: fillFor(p.muscle, i),
           stroke:
-            isSelected || isFocused
+            isSelected || isRinged
               ? 'var(--color-accent)'
               : 'var(--plate-stroke, rgb(10 11 14 / 0.55))',
-          strokeWidth: isSelected ? 1.75 : isFocused ? 2.25 : 0.75,
-          // focus reads as a dashed ring so it never masquerades as selection
-          strokeDasharray: isFocused && !isSelected ? '5 3' : undefined,
+          strokeWidth: isSelected ? 1.75 : isRinged ? 2.25 : 0.75,
+          // hover/focus reads as a dashed ring so it never masquerades as selection
+          strokeDasharray: isRinged && !isSelected ? '5 3' : undefined,
           strokeLinejoin: 'round' as const,
           className: 'muscle-plate',
           style: { transition: 'fill 500ms ease' },
@@ -114,8 +131,19 @@ export function BodySvg({
               'aria-label': MUSCLES[p.muscle].label,
               'aria-pressed': isSelected,
               onKeyDown: handleKey,
-              onFocus: () => setFocused(p.muscle),
+              // A press focuses the plate too, and a ring that outlives the tap
+              // is what made this look like it needed two presses: press one
+              // selected (solid ring), press two deselected and left the focus
+              // ring behind. Only a KEYBOARD focus earns the indicator.
+              onFocus: (e: FocusEvent<SVGGElement>) => {
+                if (!isKeyboardFocus(e.currentTarget)) return
+                setFocused(p.muscle)
+              },
               onBlur: () => setFocused(null),
+              onPointerEnter: (e: PointerEvent) => {
+                if (e.pointerType === 'mouse') setHovered(p.muscle)
+              },
+              onPointerLeave: () => setHovered(null),
               style: { outline: 'none' }, // the dashed plate ring IS the indicator
             }
         return (
