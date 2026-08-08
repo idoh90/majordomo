@@ -811,10 +811,34 @@ export interface VoicePack {
     takeLocalYes: string
   }
   settings: {
-    /** gear-menu headings: the estate's own settings vs the Grounds' own, which
+    /** the settings screen itself */
+    title: string
+    close: string
+    /** section headings: the estate's own settings vs the Grounds' own, which
      *  sat in one flat list where a workout export read as an estate concern */
+    groupAppearance: string
+    groupGuidance: string
+    groupAccount: string
     groupEstate: string
     groupGrounds: string
+    /** appearance */
+    themeLabel: string
+    weekStartLabel: string
+    weekStartBlurb: string
+    weekSun: string
+    weekMon: string
+    /** guidance */
+    rerunBlurb: string
+    /** the estate backup pair */
+    exportBlurb: string
+    /** the Grounds' own rows */
+    profileLabel: string
+    profileBlurb: string
+    exportWorkouts: string
+    exportWorkoutsBlurb: string
+    copyWorkouts: string
+    copied: string
+    importWorkouts: string
     /** gear menu item: strike the workout log (and ONLY the workout log) */
     clearWorkouts: string
     clearWorkoutsTitle: string

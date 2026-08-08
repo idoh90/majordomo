@@ -47,10 +47,15 @@ interface ShellState {
   /** has the first-time setup been answered on this device? */
   onboarded: boolean
   /**
-   * Show the `?` beside every panel heading. Off by default and deliberately
-   * NOT version-bumped: a v4 blob simply lacks the key, and persist's shallow
-   * merge leaves the initializer's `false` standing. Adding a defaulted
-   * boolean needs no migration; only a CHANGED meaning would.
+   * Show the `?` beside every panel heading. ON by default — the marks exist
+   * for the person who has not learned the house yet, and a switch they have
+   * to find first cannot help them.
+   *
+   * Deliberately NOT version-bumped: a blob that predates the key simply lacks
+   * it, and persist's shallow merge leaves the initializer's `true` standing.
+   * A blob that CARRIES `false` was written by someone who turned the marks
+   * off, and their choice wins. Adding a defaulted boolean needs no migration;
+   * only a changed meaning would.
    */
   panelTips: boolean
   setSkin: (skin: SkinId) => void
@@ -65,7 +70,7 @@ export const useShellStore = create<ShellState>()(
       skin: seedSkin(),
       weekStart: 1,
       onboarded: false,
-      panelTips: false,
+      panelTips: true,
       setSkin: (skin) => set({ skin: normalizeSkin(skin) }),
       setWeekStart: (ws) => {
         setWeekStartDefault(ws) // keep core/dates in sync before the re-render
@@ -96,7 +101,9 @@ export const useShellStore = create<ShellState>()(
           // a blob older than v4 predates the interview, so its owner has been
           // living here for a while — never greet them as a new arrival
           onboarded: version < 4 ? true : p.onboarded === true,
-          panelTips: p.panelTips === true,
+          // absent means "never asked", which is the default; only an explicit
+          // false is somebody having turned the marks off
+          panelTips: p.panelTips !== false,
         }
       },
       // re-apply the persisted week-start into core/dates once rehydrated

@@ -233,7 +233,7 @@ async function desktopChecks(browser) {
       await page.waitForTimeout(400)
 
       const dlg = await page.evaluate(() => document.body.innerText)
-      if (/Move to another day/i.test(dlg)) {
+      if (/Move (?:it )?to another day/i.test(dlg)) {
         ok('A2b cross-day drag asks first', dlg.match(/would run[^.]*\./)?.[0]?.slice(0, 70) ?? '')
         await page.getByText('Move it', { exact: true }).click()
         await page.waitForTimeout(350)
@@ -277,7 +277,7 @@ async function desktopChecks(browser) {
         await page.locator('button', { hasText: /^Edit$/ }).first().click()
         await page.waitForTimeout(400)
         const editorOpen = await page.evaluate(() =>
-          /A SMALL CORRECTION/i.test(document.body.innerText),
+          /A SMALL CORRECTION|QUICK EDIT/i.test(document.body.innerText),
         )
         editorOpen
           ? ok('E2 Edit opens the editor on desktop')
@@ -288,7 +288,7 @@ async function desktopChecks(browser) {
           await page.getByLabel('DURATION down').click()
           await page.getByLabel('DURATION down').click()
           await page.waitForTimeout(150)
-          await page.locator('button', { hasText: /^SO NOTED$/ }).first().click()
+          await page.locator('button', { hasText: /^(?:SO NOTED|SAVE)$/ }).first().click()
           await page.waitForTimeout(400)
           const ed = (await readEvents(page)).find((e) => e.id === target.id)
           ed && near(ed.hours, 12, 0.001) && ed.startHour + ed.hours > 24
@@ -349,7 +349,7 @@ async function desktopChecks(browser) {
       await page.mouse.move(tail.x + tail.width / 2, tail.y + 30, { steps: 4 })
       await page.mouse.up()
       await page.waitForTimeout(400)
-      const said = await page.evaluate(() => /begins last week/i.test(document.body.innerText))
+      const said = await page.evaluate(() => /(?:begins|starts) last week/i.test(document.body.innerText))
       said
         ? ok("E5 last week's tail explains itself")
         : bad("E5 last week's tail explains itself", 'drag still fails silently')
@@ -381,11 +381,11 @@ async function desktopChecks(browser) {
       // grow 09:00–15:00 past the 19:00 watch on the same day
       for (let i = 0; i < 22; i++) await q.getByLabel('DURATION up').click()
       await q.waitForTimeout(150)
-      await q.locator('button', { hasText: /^SO NOTED$/ }).first().click()
+      await q.locator('button', { hasText: /^(?:SO NOTED|SAVE)$/ }).first().click()
       await q.waitForTimeout(450)
 
-      const stillOpen = await q.evaluate(() => /A SMALL CORRECTION/i.test(document.body.innerText))
-      const said = await q.evaluate(() => /already spoken for/i.test(document.body.innerText))
+      const stillOpen = await q.evaluate(() => /A SMALL CORRECTION|QUICK EDIT/i.test(document.body.innerText))
+      const said = await q.evaluate(() => /already (?:spoken for|taken)/i.test(document.body.innerText))
       const after = (await readEvents(q)).find((e) => e.id === sleep.id)
       stillOpen && said
         ? ok('E6 a clash keeps the editor open, with a word')
@@ -450,7 +450,14 @@ async function desktopChecks(browser) {
       // Q2: an ENABLED template must never bounce with "occupied, sir"
       const enabled = state.find((s) => !s.disabled)
       if (enabled) {
-        await q.locator('button', { hasText: new RegExp(`^${enabled.label.slice(0, 8)}`) })
+        // scope to the popover for the same reason Q1 does: an event BLOCK on
+        // the grid is also a button whose text starts with the template title,
+        // and the first page-wide match can be one sitting UNDER the popover —
+        // which Playwright waits 30 s to become clickable, taking the suite
+        // down with it
+        await q.locator('[data-manor-popover] button', {
+          hasText: new RegExp(`^${enabled.label.slice(0, 8)}`),
+        })
           .first()
           .click()
         await q.waitForTimeout(450)
@@ -476,7 +483,7 @@ async function desktopChecks(browser) {
       await q.locator('input[type="text"]').first().fill('Dentist')
       await q.getByLabel('DURATION down').click() // 1.0 h → 0.5 h
       await q.waitForTimeout(150)
-      await q.locator('button', { hasText: /^ON THE BOOKS$/ }).first().click()
+      await q.locator('button', { hasText: /^(?:ON THE BOOKS|ADD IT)$/ }).first().click()
       await q.waitForTimeout(450)
       const booked = (await readEvents(q)).find((e) => e.title === 'Dentist')
       booked && near(booked.hours, 0.5, 0.001)
@@ -604,14 +611,14 @@ async function briefingChecks(browser) {
       const text = document.body.innerText
       return {
         // the Manor's heads-up appears ONLY when nothing is booked ahead
-        headsUpNothing: /exam is .* with nothing on the books/i.test(text),
+        headsUpNothing: /exam is .*(?:with nothing on the books|and you have no study booked)/i.test(text),
         // …and the Study briefing's own trailing clause must say the same
-        briefingNothing: /and nothing further on the books/i.test(text),
+        briefingNothing: /and (?:nothing further on the books|nothing more booked)/i.test(text),
         // the greedy prefix forces the LAST "and": the sentence can contain an
         // earlier one inside a spelled-out figure ("one and a half hours
         // behind you and three more on the books"), and anchoring on the first
         // captured half the clause
-        briefingAhead: text.match(/.*\band ([^.]+?) more on the books/i)?.[1] ?? null,
+        briefingAhead: text.match(/.*\band ([^.]+?) more (?:on the books|booked)/i)?.[1] ?? null,
       }
     })
 
@@ -726,7 +733,7 @@ async function briefingChecks(browser) {
     )
     return {
       saysLedger: /ledger is sandboxed/i.test(t),
-      rehearsal: /rehearsal/i.test(t),
+      rehearsal: /rehearsal|draft/i.test(t),
       applyDisabled: apply ? apply.disabled : null,
       noChanges: /no changes yet/i.test(t),
     }
@@ -758,9 +765,9 @@ async function briefingChecks(browser) {
   await page.waitForTimeout(700)
   const panelSaid = await page.evaluate(() => {
     const panel = [...document.querySelectorAll('div')].find((d) =>
-      /THE DIFFERENCE/.test(d.textContent ?? ''),
+      /THE DIFFERENCE|WHAT CHANGES/.test(d.textContent ?? ''),
     )
-    return /minutes (before|after) the watch/i.test(panel?.textContent ?? '')
+    return /minutes (?:before|after) (?:the watch|your shift)/i.test(panel?.textContent ?? '')
   })
   panelSaid
     ? ok('B7 the desktop Difference panel names the conflict')
