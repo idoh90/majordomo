@@ -154,6 +154,9 @@ if (import.meta.env.DEV) {
     })
     useWorkoutStore.getState().replaceAll([
       demoRun(30, 8, 44, 7),
+      // 26:12 — a clock with seconds in it, so the Runs panel isn't demoed
+      // exclusively on whole minutes
+      demoRun(2 * D + 3, 5.2, 26.2, 6),
       demoRun(4 * D + 6, 12, 70, 8),
       // this calendar week (recent) — note: no legs this week → legs should read "slacking"
       demo(2, 'push', ['chest'], ['front-delts', 'side-delts', 'triceps'], 9, 8, 'heavy'),

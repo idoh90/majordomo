@@ -463,6 +463,40 @@ export interface VoicePack {
     runPace: (v: { pace: string }) => string
     runPaceWalking: string
     runOptional: string
+    /** run step: a clock can be typed OUTRIGHT or arrived at through a pace,
+     *  so the two entries name themselves and each reads the other back */
+    runEntryTime: string
+    runEntryPace: string
+    runDurationLabel: string
+    runPaceLabel: string
+    /** unit suffixes on the minute/second boxes, and on a pace */
+    runUnitMin: string
+    runUnitSec: string
+    runUnitPerKm: string
+    /** pace mode's read-out: the time it works out to, or what it still wants */
+    runTotal: (v: { time: string; km: string }) => string
+    runNeedsDistance: string
+    /** RUNS panel — conditioning for the calendar week, then the last few out */
+    runs: {
+      title: string
+      weekLabel: string
+      /** the week's headline figure is distance; these label the two beside it */
+      timeLabel: string
+      paceLabel: string
+      /** "3 runs" under the week's distance */
+      count: (n: number) => string
+      /** distance against the week before, when that week held any */
+      vsLast: (v: { km: string; up: boolean }) => string
+      vsLastLevel: string
+      /** heading over the short list of the most recent runs */
+      recent: string
+      /** a run that recorded one side only — no pace can be quoted for it */
+      paceUnknown: string
+      /** the week is empty, but runs exist further back */
+      quietWeek: string
+      /** no run has ever been logged */
+      empty: string
+    }
     /** weekly-goal card + its dialog */
     weekTitle: string
     goalMet: string
@@ -1043,6 +1077,7 @@ export interface VoicePack {
       weekGoal: string
       weekChart: string
       topMuscles: string
+      runs: string
       scheduled: string
       recovery: string
       fuel: string

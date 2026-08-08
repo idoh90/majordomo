@@ -340,6 +340,28 @@ export const majordomoPack: VoicePack = {
     runPace: ({ pace }) => `That's ${pace} per kilometre.`,
     runPaceWalking: 'Walking pace.',
     runOptional: 'Both optional. Effort is what drives strain.',
+    runEntryTime: 'Time',
+    runEntryPace: 'Pace',
+    runDurationLabel: 'Duration',
+    runPaceLabel: 'Pace',
+    runUnitMin: 'min',
+    runUnitSec: 'sec',
+    runUnitPerKm: '/km',
+    runTotal: ({ time, km }) => `That's ${time} for ${km} km.`,
+    runNeedsDistance: 'A pace needs a distance before it can become a time.',
+    runs: {
+      title: 'Runs',
+      weekLabel: 'This week',
+      timeLabel: 'Time',
+      paceLabel: 'Avg pace',
+      count: (n) => `${n} ${n === 1 ? 'run' : 'runs'}`,
+      vsLast: ({ km, up }) => `${up ? 'Up' : 'Down'} ${km} km on last week.`,
+      vsLastLevel: 'Level with last week.',
+      recent: 'Lately',
+      paceUnknown: '—',
+      quietWeek: 'No runs this week.',
+      empty: 'No runs logged yet. Log a workout as a run and it lands here.',
+    },
     weekTitle: 'This week',
     goalMet: "You've hit this week's goal.",
     goalRemaining: (n) => `${n} more to hit this week's goal.`,
@@ -1123,6 +1145,8 @@ export const majordomoPack: VoicePack = {
         'Lifting sessions per week over recent weeks. Good for catching a habit slipping before your body tells you.',
       topMuscles:
         'What you’ve actually trained over the last thirty days, ranked. Usually the quickest way to find what you’ve been avoiding.',
+      runs:
+        'Distance, time and average pace for this calendar week, then your last few runs. Pace is averaged over the runs that recorded both sides.',
       scheduled:
         'Training already on the Manor calendar. Log a session and it gets matched to the block it fills.',
       recovery:

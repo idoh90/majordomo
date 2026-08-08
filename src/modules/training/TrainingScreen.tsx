@@ -10,6 +10,7 @@ import { WorkoutList } from './components/history/WorkoutList'
 import { NutritionCard } from './components/insights/NutritionCard'
 import { MuscleLedger } from './components/insights/MuscleLedger'
 import { RecoveryCard } from './components/insights/RecoveryCard'
+import { RunsCard } from './components/insights/RunsCard'
 import { ScheduledCard } from './components/insights/ScheduledCard'
 import { StatTiles } from './components/insights/StatTiles'
 import { TopMusclesChart } from './components/insights/TopMusclesChart'
@@ -89,6 +90,10 @@ export function TrainingScreen() {
           <ScheduledCard now={now} />
           <NutritionCard workouts={workouts} now={now} />
           <StatTiles workouts={workouts} now={now} />
+          {/* conditioning sits beside the goal that refuses to count it — the
+              only place in the Grounds where a run is the subject, not a
+              footnote on a lifting figure */}
+          <RunsCard workouts={workouts} now={now} />
           <div className="grid gap-4 sm:grid-cols-2">
             <WeeklyChart workouts={workouts} now={now} />
             <TopMusclesChart workouts={workouts} now={now} />

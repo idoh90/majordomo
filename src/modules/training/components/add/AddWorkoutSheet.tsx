@@ -12,7 +12,8 @@ import { EffortStep } from './EffortStep'
 import { MethodStep } from './MethodStep'
 import { MuscleStep } from './MuscleStep'
 import { PplStep } from './PplStep'
-import { RunStep } from './RunStep'
+import { EMPTY_RUN_FIELDS, RunStep, runFieldSeconds, splitClock, type RunFields } from './RunStep'
+import { secondsToMinutes } from '../../lib/runs'
 
 export type Selection = Partial<Record<MuscleId, 'primary' | 'secondary'>>
 
@@ -29,8 +30,7 @@ interface Draft {
   ppl: PplType | null
   selection: Selection
   /** run fields kept as strings — empty means "not recorded" */
-  distanceKm: string
-  durationMin: string
+  run: RunFields
   effort: number
   strainFeel: number
   repStyle: RepStyle
@@ -46,8 +46,7 @@ type Action =
   | { type: 'cycle'; muscle: MuscleId }
   | { type: 'continue' }
   | { type: 'back' }
-  | { type: 'distanceKm'; value: string }
-  | { type: 'durationMin'; value: string }
+  | { type: 'run'; patch: Partial<RunFields> }
   | { type: 'effort'; value: number }
   | { type: 'strainFeel'; value: number }
   | { type: 'repStyle'; value: RepStyle }
@@ -91,10 +90,8 @@ function reducer(d: Draft, a: Action): Draft {
       if (d.step === 'ppl' || d.step === 'muscles' || d.step === 'run')
         return { ...d, step: 'method' }
       return d
-    case 'distanceKm':
-      return { ...d, distanceKm: a.value }
-    case 'durationMin':
-      return { ...d, durationMin: a.value }
+    case 'run':
+      return { ...d, run: { ...d.run, ...a.patch } }
     case 'effort':
       return { ...d, effort: a.value }
     case 'strainFeel':
@@ -116,8 +113,7 @@ const freshDraft = (): Draft => ({
   method: null,
   ppl: null,
   selection: {},
-  distanceKm: '',
-  durationMin: '',
+  run: EMPTY_RUN_FIELDS,
   effort: 7,
   strainFeel: 6,
   repStyle: 'mixed',
@@ -130,13 +126,21 @@ function draftFromWorkout(w: Workout): Draft {
   const selection: Selection = {}
   for (const m of w.primary) selection[m] = 'primary'
   for (const m of w.secondary) selection[m] = 'secondary'
+  // a stored clock is minutes, fraction and all — it re-enters the sheet as the
+  // minute/second pair it was typed as, never as "24.583"
+  const storedSec = w.run?.durationMin != null ? Math.round(w.run.durationMin * 60) : 0
+  const clock = storedSec > 0 ? splitClock(storedSec) : { min: '', sec: '' }
   return {
     step: 'effort',
     method: w.method,
     ppl: w.ppl ?? null,
     selection,
-    distanceKm: w.run?.distanceKm != null ? String(w.run.distanceKm) : '',
-    durationMin: w.run?.durationMin != null ? String(w.run.durationMin) : '',
+    run: {
+      ...EMPTY_RUN_FIELDS,
+      distanceKm: w.run?.distanceKm != null ? String(w.run.distanceKm) : '',
+      durationMin: clock.min,
+      durationSec: clock.sec,
+    },
     effort: w.effort,
     strainFeel: w.strainFeel,
     repStyle: w.repStyle ?? 'mixed',
@@ -146,8 +150,21 @@ function draftFromWorkout(w: Workout): Draft {
   }
 }
 
-/** every field the user can change — the step they stand on is not one */
-const fingerprint = (d: Draft) => JSON.stringify({ ...d, step: undefined })
+/** the clock a run's fields state, in the minutes the store holds */
+const runDurationMin = (f: RunFields): number | undefined => {
+  const sec = runFieldSeconds(f)
+  return sec > 0 ? secondsToMinutes(sec) : undefined
+}
+
+/** every field the user can change — the step they stand on is not one, and
+ *  neither is HOW a run's clock was typed: a time and a pace are two ways of
+ *  stating one number, so dirty compares the number, not the boxes. */
+const fingerprint = (d: Draft) =>
+  JSON.stringify({
+    ...d,
+    step: undefined,
+    run: { distanceKm: d.run.distanceKm, seconds: runFieldSeconds(d.run) },
+  })
 
 const TITLES: Record<Step, string> = {
   method: 'Log Workout',
@@ -280,7 +297,7 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
       ppl: draft.method === 'ppl' ? (draft.ppl ?? undefined) : undefined,
       run:
         draft.method === 'run'
-          ? { distanceKm: num(draft.distanceKm), durationMin: num(draft.durationMin) }
+          ? { distanceKm: num(draft.run.distanceKm), durationMin: runDurationMin(draft.run) }
           : undefined,
       primary,
       secondary,
@@ -344,10 +361,8 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
         )}
         {draft.step === 'run' && (
           <RunStep
-            distanceKm={draft.distanceKm}
-            durationMin={draft.durationMin}
-            onDistance={(value) => dispatch({ type: 'distanceKm', value })}
-            onDuration={(value) => dispatch({ type: 'durationMin', value })}
+            fields={draft.run}
+            onChange={(patch) => dispatch({ type: 'run', patch })}
             onContinue={() => dispatch({ type: 'continue' })}
           />
         )}

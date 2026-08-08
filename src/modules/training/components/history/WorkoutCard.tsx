@@ -4,14 +4,7 @@ import { MUSCLES, PPL_LABELS } from '../../data/muscles'
 import { timeLabel } from '../../../../core/dates'
 import { useWorkoutStore } from '../../store'
 import { ConfirmDialog } from '../../../../core/ui/ConfirmDialog'
-
-/** "8 km", "45 min", "8 km · 45 min", or '' when neither was recorded */
-function runLabel(w: Workout): string {
-  const parts: string[] = []
-  if (w.run?.distanceKm) parts.push(`${w.run.distanceKm} km`)
-  if (w.run?.durationMin) parts.push(`${w.run.durationMin} min`)
-  return parts.join(' · ')
-}
+import { runLabel } from '../../lib/runs'
 
 interface WorkoutCardProps {
   workout: Workout
