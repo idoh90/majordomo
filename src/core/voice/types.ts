@@ -496,6 +496,13 @@ export interface VoicePack {
       quietWeek: string
       /** no run has ever been logged */
       empty: string
+      /** detail sheet: the badge that names a run, and its three figures —
+       *  `paceOne` is one run's pace, not the week's average */
+      badge: string
+      distanceLabel: string
+      paceOne: string
+      /** the run was logged on effort alone, with neither side recorded */
+      detailNone: string
     }
     /** weekly-goal card + its dialog */
     weekTitle: string

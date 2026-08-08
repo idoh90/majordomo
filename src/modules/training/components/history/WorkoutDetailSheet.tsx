@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import type { MuscleId, Workout } from '../../types'
+import { isRun, type MuscleId, type Workout } from '../../types'
 import { MUSCLES, PPL_LABELS } from '../../data/muscles'
+import { formatClock, formatKm, runPaceSeconds, runTotalSeconds } from '../../lib/runs'
+import { voice } from '../../../../core/voice'
 import { hoursBetween, relativeDayLabel, timeLabel } from '../../../../core/dates'
 import {
   MAX_STRAIN,
@@ -54,7 +56,9 @@ export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDet
     <Sheet open onClose={onClose}>
       <div className="mb-1 flex items-center gap-2">
         <span className="rounded-md border border-accent/60 px-1.5 py-px font-display text-[11px] font-bold uppercase tracking-[0.14em] text-accent">
-          {w.ppl ? PPL_LABELS[w.ppl] : 'Custom'}
+          {/* a run is neither a PPL day nor a custom pick of muscles — it read
+              'Custom' here while its own figures went unmentioned */}
+          {isRun(w) ? voice.grounds.runs.badge : w.ppl ? PPL_LABELS[w.ppl] : 'Custom'}
         </span>
         <h2 className="font-display text-xl font-bold tracking-wide">
           {relativeDayLabel(w.performedAt, new Date(now))}
@@ -63,9 +67,15 @@ export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDet
           </span>
         </h2>
       </div>
-      <p className="mb-4 text-xs text-ink-faint">
-        {REP_STYLES[style].title} · {REP_STYLES[style].caption}
-      </p>
+      {/* a run's rep style is always 'light' — a fixed word says nothing, where
+          what it covered does */}
+      {isRun(w) ? (
+        <RunFigures workout={w} />
+      ) : (
+        <p className="mb-4 text-xs text-ink-faint">
+          {REP_STYLES[style].title} · {REP_STYLES[style].caption}
+        </p>
+      )}
 
       <div className="mb-5 grid grid-cols-2 gap-2">
         <ScoreTile label="Effort given" value={w.effort} barClass="bg-accent" />
@@ -151,6 +161,49 @@ export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDet
         }}
       />
     </Sheet>
+  )
+}
+
+/** what a run actually covered — pace is derived, so it reads '—' unless both
+ *  sides were recorded, rather than quoting a figure off one of them */
+function RunFigures({ workout }: { workout: Workout }) {
+  const km = workout.run?.distanceKm ?? 0
+  const seconds = runTotalSeconds(workout)
+  const pace = runPaceSeconds(workout)
+
+  if (km === 0 && seconds === 0) {
+    return <p className="mb-4 text-xs text-ink-faint">{voice.grounds.runs.detailNone}</p>
+  }
+
+  return (
+    <div className="mb-4 grid grid-cols-3 gap-2">
+      <Figure
+        label={voice.grounds.runs.distanceLabel}
+        value={km > 0 ? formatKm(km) : '—'}
+        unit={km > 0 ? 'km' : undefined}
+      />
+      <Figure
+        label={voice.grounds.runs.timeLabel}
+        value={seconds > 0 ? formatClock(seconds) : '—'}
+      />
+      <Figure
+        label={voice.grounds.runs.paceOne}
+        value={pace > 0 ? formatClock(pace) : '—'}
+        unit={pace > 0 ? voice.grounds.runUnitPerKm : undefined}
+      />
+    </div>
+  )
+}
+
+function Figure({ label, value, unit }: { label: string; value: string; unit?: string }) {
+  return (
+    <div className="card px-3 py-2.5">
+      <div className="text-[10px] uppercase tracking-[0.12em] text-ink-faint">{label}</div>
+      <div className="stat-num mt-1 flex items-baseline gap-1 leading-none text-ink">
+        <span className="text-xl">{value}</span>
+        {unit && <span className="text-xs text-ink-dim">{unit}</span>}
+      </div>
+    </div>
   )
 }
 
