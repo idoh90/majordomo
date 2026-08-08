@@ -1,0 +1,159 @@
+# Did the push actually deploy?
+#
+# Vercel's GitHub integration is connected and works: 39 of the last 40
+# deployments were git-triggered, on main and on feature branches, going back
+# weeks. This job is not here because it is broken.
+#
+# It is here because of HOW it fails. On 8 August a push to main produced no
+# deployment at all — no build, no error, no cancelled build, no record of any
+# kind. Everything either side of it deployed normally. One webhook was simply
+# dropped, and nothing anywhere said so. The site quietly served the previous
+# commit, and the way that was eventually noticed was somebody loading the app
+# and finding it stale — after an hour spent misdiagnosing the integration as
+# disconnected and hand-deploying from the CLI to work around a fault that did
+# not exist.
+#
+# That is the whole problem: a missed webhook is INDISTINGUISHABLE from a
+# successful deploy unless you go and look. Vercel emails about builds that
+# fail; nothing at all happens for a build that was never created. So this job
+# asks the one question nobody was asking — "is there a deployment for the
+# commit I just pushed?" — and goes red when the answer is no.
+#
+# It needs a VERCEL_TOKEN repo secret (Settings → Secrets and variables →
+# Actions). Create it at https://vercel.com/account/tokens, scoped to the
+# ido-s-projects8 team. Without it this job fails loudly rather than passing
+# vacuously — a green check that proves nothing is exactly the failure mode
+# this workflow exists to eliminate.
+
+name: Verify deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for a deployment matching this commit
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # Identifiers, not secrets: they name the project, they grant nothing,
+          # and unlike a key they never rotate. The token above is the thing
+          # that has to stay private.
+          PROJECT_ID: prj_ymWpWmAzoGMdWpjSKZluxSYidqqf
+          TEAM_ID: team_yM9FFCoxMmmq3y2RbEr0nz3z
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${VERCEL_TOKEN}" ]; then
+            echo "::error::VERCEL_TOKEN is not set. Add it under Settings → Secrets and variables → Actions."
+            echo "Create one at https://vercel.com/account/tokens, scoped to the ido-s-projects8 team."
+            exit 1
+          fi
+
+          # Vercel deliberately skips commits carrying a skip directive, so the
+          # absence of a deployment is the CORRECT outcome for those and must
+          # not be reported as a dropped webhook.
+          case "${COMMIT_MSG}" in
+            *'[skip ci]'*|*'[ci skip]'*|*'[skip vercel]'*|*'[vercel skip]'*)
+              echo "Commit asks to skip CI. Vercel will not deploy it, so there is nothing to verify."
+              exit 0
+              ;;
+          esac
+
+          API="https://api.vercel.com/v6/deployments?projectId=${PROJECT_ID}&teamId=${TEAM_ID}&limit=30"
+          echo "Looking for a deployment of ${COMMIT_SHA}"
+
+          # Two separate waits, because they are two different questions.
+          #
+          # APPEAR is the one this job exists for: did the webhook arrive at
+          # all? Builds here start within seconds and finish in under a minute,
+          # so eight minutes is far past generous — long enough that a red mark
+          # means something genuinely went wrong rather than that Vercel was
+          # briefly busy.
+          #
+          # FINISH is the cheap bonus: once a build exists, watch it land.
+          appear_deadline=$(( $(date +%s) + 8 * 60 ))
+          finish_deadline=$(( $(date +%s) + 20 * 60 ))
+
+          state=""
+          found=0
+
+          while [ "$(date +%s)" -lt "${appear_deadline}" ]; do
+            body=$(curl -sS --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" "${API}") || body=""
+
+            if [ -z "${body}" ]; then
+              echo "  …no answer from the Vercel API, retrying"
+            elif echo "${body}" | jq -e '.error' >/dev/null 2>&1; then
+              # A bad or expired token is a fault in THIS job, not in the
+              # deploy, and must not be reported as a missing deployment.
+              echo "::error::The Vercel API refused the request: $(echo "${body}" | jq -r '.error.message // .error.code')"
+              echo "The token may be expired, or scoped to the wrong team."
+              exit 1
+            else
+              state=$(echo "${body}" \
+                | jq -r --arg sha "${COMMIT_SHA}" \
+                  'first(.deployments[] | select(.meta.githubCommitSha == $sha) | .state) // empty')
+              if [ -n "${state}" ]; then found=1; break; fi
+            fi
+
+            sleep 15
+          done
+
+          if [ "${found}" -ne 1 ]; then
+            echo "::error::No deployment exists for ${COMMIT_SHA}. The push did not reach Vercel."
+            echo ""
+            echo "This is the dropped-webhook case. main is pushed but production is still serving"
+            echo "the previous commit, and nothing else would have told you."
+            echo ""
+            echo "To ship it now:      npx vercel deploy --prod   (from a clean checkout of this commit)"
+            echo "To re-push the hook: git commit --allow-empty -m 'redeploy' && git push"
+            echo "If it keeps happening, check the Vercel GitHub App still has access to idoh90/majordomo:"
+            echo "  https://github.com/settings/installations"
+            exit 1
+          fi
+
+          echo "Deployment found for ${COMMIT_SHA} (state: ${state}). Waiting for it to land."
+
+          # READY / ERROR / CANCELED are terminal; everything else is in flight.
+          while [ "$(date +%s)" -lt "${finish_deadline}" ]; do
+            case "${state}" in
+              READY|ERROR|CANCELED) break ;;
+            esac
+            sleep 15
+            body=$(curl -sS --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" "${API}") || continue
+            next=$(echo "${body}" \
+              | jq -r --arg sha "${COMMIT_SHA}" \
+                'first(.deployments[] | select(.meta.githubCommitSha == $sha) | .state) // empty')
+            [ -n "${next}" ] && state="${next}"
+            echo "  …${state}"
+          done
+
+          case "${state}" in
+            READY)
+              echo "Deployed. Production is serving ${COMMIT_SHA}."
+              ;;
+            ERROR)
+              echo "::error::The build for ${COMMIT_SHA} failed. main is pushed but not live."
+              echo "Open the build log: https://vercel.com/ido-s-projects8/majordomo"
+              exit 1
+              ;;
+            CANCELED)
+              # Vercel cancels a build when a newer commit supersedes it. That is
+              # normal during a burst of pushes: the later commit carries this
+              # one's changes to production, so the tree still ships.
+              echo "::warning::The build for ${COMMIT_SHA} was cancelled, which normally means a newer push superseded it. Check that the newer commit deployed."
+              ;;
+            *)
+              echo "::warning::The build for ${COMMIT_SHA} is still ${state} after 20 minutes. It was created, so the webhook arrived — watch it at https://vercel.com/ido-s-projects8/majordomo"
+              ;;
+          esac
