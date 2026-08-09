@@ -6,6 +6,7 @@ import { voice } from '../../core/voice'
 import { useStudyStore } from '../../modules/study/store'
 import { useWorkoutStore } from '../../modules/training/store'
 import { shiftsOf, watchStats } from '../../modules/watch/lib'
+import { BeatDots, GroundsDemo, type GroundsDemoKind } from './GroundsDemo'
 import { dressWing, sampleDressed, sweepSample } from './sample'
 import { WALK_WING, useOnboarding, type OnboardStage } from './store'
 
@@ -18,6 +19,13 @@ import { WALK_WING, useOnboarding, type OnboardStage } from './store'
  * Beat one says what the wing is FOR, beat two narrates what is on screen,
  * beat three closes with how it is best used — composed from what the user
  * just built wherever they built anything.
+ *
+ * The Grounds stop runs two beats longer, and those two are not narration at
+ * all: they mount the wing's real run step and real muscle picker (see
+ * GroundsDemo). Entry is the best thing in that wing and a sentence about it
+ * is a waste of the stop. The demonstration replaces the card rather than
+ * sitting over it — one surface at a time, and a bottom-anchored card would
+ * land squarely on a bottom-anchored sheet.
  *
  * A wing the user left empty is DRESSED for its stop (see sample.ts): demo
  * records fill the room so beat two has something to point at, a SAMPLE tag
@@ -33,7 +41,14 @@ const WING_ACCENT: Record<string, string> = {
   capital: 'var(--color-w-ledger)',
 }
 
+/** every stop narrates in three beats */
 const BEATS = 3
+
+/** …and the Grounds adds two demonstrations after them, in this order */
+const GROUNDS_DEMOS: GroundsDemoKind[] = ['run', 'muscles']
+
+const beatsOf = (stage: OnboardStage) =>
+  stage === 'walk-grounds' ? BEATS + GROUNDS_DEMOS.length : BEATS
 
 export function WalkCard({ stage }: { stage: OnboardStage }) {
   const advance = useOnboarding((s) => s.advance)
@@ -64,16 +79,22 @@ export function WalkCard({ stage }: { stage: OnboardStage }) {
   // subscribing to the stores above keeps this honest through dress and sweep
   const dressed = !closing && sampleDressed()
   const accent = WING_ACCENT[wing] ?? 'var(--color-accent)'
+  const beats = closing ? 1 : beatsOf(stage)
 
-  let line: string
+  /** past the three narration beats, the Grounds stop is showing rather than
+   *  telling — and there is no card line to compose */
+  const demoKind =
+    stage === 'walk-grounds' ? (GROUNDS_DEMOS[beat - BEATS] ?? null) : null
+
+  let line = ''
   if (closing) {
     line = voice.onboarding.close.line
-  } else {
+  } else if (!demoKind) {
     const stop = walkStop(stage, { events, weekStart, goal, subjects })
     line = beat === 0 ? stop.meaning : beat === 1 ? stop.dashboard : stop.use
   }
 
-  const lastBeat = closing || beat >= BEATS - 1
+  const lastBeat = closing || beat >= beats - 1
 
   const next = () => {
     if (closing) {
@@ -85,6 +106,20 @@ export function WalkCard({ stage }: { stage: OnboardStage }) {
       return
     }
     advance()
+  }
+
+  // the demonstration IS the beat — it carries the dots and the way out itself
+  if (demoKind) {
+    return (
+      <GroundsDemo
+        kind={demoKind}
+        beat={beat}
+        beats={beats}
+        accent={accent}
+        onNext={next}
+        onSkip={() => go('close')}
+      />
+    )
   }
 
   return (
@@ -119,18 +154,7 @@ export function WalkCard({ stage }: { stage: OnboardStage }) {
         <div className="mt-3 flex items-center gap-3">
           {!closing && (
             <>
-              {/* beat dots — the stop's own progress, apart from the tour's */}
-              <span className="flex gap-1" aria-hidden>
-                {Array.from({ length: BEATS }, (_, i) => (
-                  <span
-                    key={i}
-                    className="h-1 w-4 rounded-full transition-colors"
-                    style={{
-                      background: i <= beat ? accent : 'var(--color-panel-2)',
-                    }}
-                  />
-                ))}
-              </span>
+              <BeatDots beat={beat} beats={beats} accent={accent} />
               <button
                 type="button"
                 onClick={() => go('close')}

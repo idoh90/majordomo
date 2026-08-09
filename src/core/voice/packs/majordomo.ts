@@ -1122,6 +1122,17 @@ export const majordomoPack: VoicePack = {
           goal > 0
             ? `Your goal is ${lower(goal)} a week. Log the first session with the + and the map lights up.`
             : 'Best used right after training: two taps to log it, and the map remembers the rest.',
+        demo: {
+          note: 'A demonstration — nothing here is logged. Continue when you have seen enough.',
+          run: {
+            title: 'How far?',
+            line: 'A run is a distance and a pace. Drag the band: the zone, the colour and the effort all follow it.',
+          },
+          muscles: {
+            title: 'What did you hit?',
+            line: 'Or name the muscles yourself. Every one you tap lights up on the figure — tap again for secondary, once more to clear.',
+          },
+        },
       },
       study: {
         meaning:

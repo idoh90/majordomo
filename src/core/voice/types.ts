@@ -1076,6 +1076,18 @@ export interface VoicePack {
         meaning: string
         dashboard: string
         use: (v: { goal: number }) => string
+        /**
+         * The two beats that close this stop by SHOWING the entry rather than
+         * describing it: the real run step and the real muscle picker, seeded
+         * and inert. `title` repeats each step's own heading so the tour
+         * teaches the screen the user will actually meet.
+         */
+        demo: {
+          /** the honest footnote inside both — this one writes nothing */
+          note: string
+          run: { title: string; line: string }
+          muscles: { title: string; line: string }
+        }
       }
       study: {
         meaning: string

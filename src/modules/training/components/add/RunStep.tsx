@@ -66,12 +66,22 @@ interface RunStepProps {
   onChange: (patch: Partial<RunFields>) => void
   /** fires with the effort the pace earned, or null when nothing was earned */
   onContinue: (effortPrefill: number | null) => void
+  /**
+   * The easy pace, HELD BY THE CALLER. Omitted — which is every real logging
+   * path — the step reads and writes `profile.easyPaceSec` as it always has.
+   * Supplied, the ± moves the caller's copy and the profile is never touched:
+   * the onboarding demonstration must write nothing at all, and a standing
+   * preference edited by someone who is only being shown the room is still a
+   * write nobody asked for.
+   */
+  easy?: { sec: number; onChange: (sec: number) => void }
 }
 
 /** Run detail, 1c: distance, then a pace on a band of the user's own zones. */
-export function RunStep({ fields, onChange, onContinue }: RunStepProps) {
-  const easy = useWorkoutStore((s) => s.profile.easyPaceSec)
+export function RunStep({ fields, onChange, onContinue, easy: held }: RunStepProps) {
+  const profileEasy = useWorkoutStore((s) => s.profile.easyPaceSec)
   const setProfile = useWorkoutStore((s) => s.setProfile)
+  const easy = held?.sec ?? profileEasy
   const ramp = SKINS[useShellStore((s) => s.skin)].heatRamp
 
   const km = Number(fields.distanceKm)
@@ -101,10 +111,11 @@ export function RunStep({ fields, onChange, onContinue }: RunStepProps) {
     onChange({ distanceKm: v, heldSec: 0 })
   }
   const setPace = (p: number) => onChange({ paceSec: clampPace(p), heldSec: 0 })
-  const setEasy = (delta: number) =>
-    setProfile({
-      easyPaceSec: Math.min(EASY_PACE_MAX, Math.max(EASY_PACE_MIN, easy + delta)),
-    })
+  const setEasy = (delta: number) => {
+    const next = Math.min(EASY_PACE_MAX, Math.max(EASY_PACE_MIN, easy + delta))
+    if (held) held.onChange(next)
+    else setProfile({ easyPaceSec: next })
+  }
 
   // the band's zone stripes: [fast edge, slow edge] in band percent, per zone
   const edges = [PACE_MIN, ...zoneEdges(easy), PACE_MAX]
