@@ -6,8 +6,9 @@
  * threshold, same prefill contract.
  */
 
-import type { MuscleId, PplType } from '../types'
+import type { MuscleId, PplType, RepStyle, Workout } from '../types'
 import { PPL_MAP } from '../data/muscles'
+import { computeStrains, type StrainMap } from './strain'
 import { EFFORT_LIVE } from './pace'
 
 /** structurally the add sheet's Selection — kept local so lib never imports a component */
@@ -37,6 +38,50 @@ export function gymEffortPrefill(sel: MuscleSelection): number | null {
   if (selectionCounts(sel).p === 0) return null
   const eff = gymEffort(sel)
   return eff > EFFORT_LIVE ? Math.round(Math.max(1, eff)) : null
+}
+
+/** the session being drafted, in the only terms the strain engine reads */
+export interface DraftSession {
+  performedAt: string
+  effort: number
+  strainFeel: number
+  repStyle: RepStyle
+}
+
+/**
+ * The body as this session would leave it: every muscle's CURRENT strain from
+ * the log, plus what the picks would add on top. Unpicked muscles are
+ * untouched, so the figure reads as the whole body's state and not as a
+ * drawing of the chips.
+ *
+ * `workouts` must already exclude the session being edited — otherwise its
+ * stored copy and its draft both land on the same muscles and the preview
+ * doubles them.
+ */
+export function projectedStrains(
+  workouts: Workout[],
+  sel: MuscleSelection,
+  draft: DraftSession,
+  nowMs: number,
+): StrainMap {
+  const ids = Object.keys(sel) as MuscleId[]
+  const primary = ids.filter((m) => sel[m] === 'primary')
+  const secondary = ids.filter((m) => sel[m] === 'secondary')
+  if (primary.length === 0 && secondary.length === 0) return computeStrains(workouts, nowMs)
+  // a draft is priced exactly like a saved session — same engine, same
+  // constants, so the preview can never disagree with the map it previews
+  const pending: Workout = {
+    id: '__draft__',
+    createdAt: draft.performedAt,
+    performedAt: draft.performedAt,
+    method: 'custom',
+    primary,
+    secondary,
+    effort: draft.effort,
+    strainFeel: draft.strainFeel,
+    repStyle: draft.repStyle,
+  }
+  return computeStrains([...workouts, pending], nowMs)
 }
 
 /** each PPL day's full spread (primary + secondary) — the shape test is a

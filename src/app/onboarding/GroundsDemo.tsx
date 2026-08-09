@@ -66,6 +66,19 @@ export function GroundsDemo({ kind, beat, beats, accent, onNext, onSkip }: Groun
   // read once, at mount: the zones open on the user's own easy pace, and the
   // ± moves this copy rather than the profile
   const [easySec, setEasySec] = useState(() => useWorkoutStore.getState().profile.easyPaceSec)
+  // the picker's twin draws the WHOLE body, so it reads the real log the same
+  // way — during setup that is usually empty, and a cold figure is the honest
+  // picture of a cold body. Frozen at mount, like the easy pace above.
+  const [twin] = useState(() => ({
+    workouts: useWorkoutStore.getState().workouts,
+    nowMs: Date.now(),
+    draft: {
+      performedAt: new Date().toISOString(),
+      effort: 7,
+      strainFeel: 6,
+      repStyle: 'mixed' as const,
+    },
+  }))
 
   const demo = voice.onboarding.walk.grounds.demo
   const copy = kind === 'run' ? demo.run : demo.muscles
@@ -109,6 +122,9 @@ export function GroundsDemo({ kind, beat, beats, accent, onNext, onSkip }: Groun
             <MuscleStep
               selection={selection}
               holdEffort={false}
+              workouts={twin.workouts}
+              draft={twin.draft}
+              nowMs={twin.nowMs}
               onCycle={(m) => setSelection((s) => ({ ...s, [m]: cycle(s[m]) }))}
               onContinue={onNext}
             />

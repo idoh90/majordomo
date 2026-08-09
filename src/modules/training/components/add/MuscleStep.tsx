@@ -1,10 +1,10 @@
-import type { CSSProperties } from 'react'
-import type { MuscleId } from '../../types'
+import { useMemo, type CSSProperties } from 'react'
+import type { MuscleId, Workout } from '../../types'
 import { GROUP_LABELS, MUSCLES, PICKER_GROUPS } from '../../data/muscles'
 import { useShellStore } from '../../../../core/store/shell'
 import { SKINS } from '../../../../core/ui/skins'
 import { EFFORT_LIVE } from '../../lib/pace'
-import { gymEffort, gymEffortPrefill } from '../../lib/gymEffort'
+import { gymEffort, gymEffortPrefill, type DraftSession } from '../../lib/gymEffort'
 import { strainToColor } from '../../lib/strainColor'
 import { MuscleGroupIcon } from '../icons'
 import { MuscleTwin } from './MuscleTwin'
@@ -16,19 +16,42 @@ interface MuscleStepProps {
    *  Continue prefills nothing until a chip actually changes (the run step's
    *  held-clock rule) */
   holdEffort: boolean
+  /** the log the twin draws, minus the session being edited */
+  workouts: Workout[]
+  /** the draft as the strain engine prices it — its `effort` is the recorded
+   *  one, superseded below by whatever the picks now earn */
+  draft: DraftSession
+  nowMs: number
   onCycle: (m: MuscleId) => void
   /** fires with the effort the picks earned, or null when nothing was earned */
   onContinue: (effortPrefill: number | null) => void
 }
 
 /** Muscle picker, 3a: every chip you tap ignites that muscle on a mini you. */
-export function MuscleStep({ selection, holdEffort, onCycle, onContinue }: MuscleStepProps) {
+export function MuscleStep({
+  selection,
+  holdEffort,
+  workouts,
+  draft,
+  nowMs,
+  onCycle,
+  onContinue,
+}: MuscleStepProps) {
   const ramp = SKINS[useShellStore((s) => s.skin)].heatRamp
   const hasPrimary = Object.values(selection).some((v) => v === 'primary')
   const eff = gymEffort(selection)
   const live = eff > EFFORT_LIVE
   const heat = live ? strainToColor(Math.max(eff, 1.2), ramp) : 'var(--color-accent)'
   const prefill = holdEffort ? null : gymEffortPrefill(selection)
+  // The twin is priced at the effort the PICKS earn, not at the rounded
+  // prefill — because the prefill is null until something primary is marked,
+  // and falling back to the draft's default there made a lone secondary
+  // (effort 7, halved) read hotter than a lone primary (effort 2). An
+  // untouched edit keeps its recorded effort, which is the one it would save.
+  const session = useMemo(
+    () => ({ ...draft, effort: holdEffort ? draft.effort : Math.max(1, eff) }),
+    [draft, holdEffort, eff],
+  )
 
   return (
     <div
@@ -42,7 +65,14 @@ export function MuscleStep({ selection, holdEffort, onCycle, onContinue }: Muscl
         } as CSSProperties
       }
     >
-      <MuscleTwin selection={selection} eff={eff} prefill={prefill} />
+      <MuscleTwin
+        selection={selection}
+        workouts={workouts}
+        draft={session}
+        nowMs={nowMs}
+        eff={eff}
+        prefill={prefill}
+      />
       <p className="mb-3 mt-3 text-xs text-ink-faint">
         Tap once ={' '}
         <span className="transition-colors duration-300" style={{ color: 'var(--heat)' }}>

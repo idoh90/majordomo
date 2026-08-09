@@ -24,6 +24,10 @@ interface BodySvgProps {
   glowFor: (m: MuscleId) => number
   selected: MuscleId | null
   onSelect: (m: MuscleId | null) => void
+  /** optional pick overlay: rings a plate to say it is CHOSEN, independent of
+   *  its fill (which always states strain). Two channels, because once the
+   *  plates carry real strain a sore muscle and a picked one look alike. */
+  markFor?: (m: MuscleId) => 'primary' | 'secondary' | null
   debugRainbow?: boolean
   className?: string
   /** a copy that is scenery (Ghost's floor reflection): no roles, no tab stops
@@ -37,6 +41,7 @@ export function BodySvg({
   glowFor,
   selected,
   onSelect,
+  markFor,
   debugRainbow,
   className,
   decorative = false,
@@ -109,15 +114,29 @@ export function BodySvg({
           e.stopPropagation()
           toggle()
         }
+        // a pick ring is the weakest claim on the outline — a live hover or
+        // keyboard focus still wins it, since those track the pointer
+        const mark = markFor?.(p.muscle) ?? null
         const shared = {
           fill: fillFor(p.muscle, i),
           stroke:
-            isSelected || isRinged
+            isSelected || isRinged || mark
               ? 'var(--color-accent)'
               : 'var(--plate-stroke, rgb(10 11 14 / 0.55))',
-          strokeWidth: isSelected ? 1.75 : isRinged ? 2.25 : 0.75,
-          // hover/focus reads as a dashed ring so it never masquerades as selection
-          strokeDasharray: isRinged && !isSelected ? '5 3' : undefined,
+          strokeWidth: isSelected
+            ? 1.75
+            : isRinged
+              ? 2.25
+              : mark === 'primary'
+                ? 4
+                : mark === 'secondary'
+                  ? 3
+                  : 0.75,
+          // hover/focus reads as a dashed ring so it never masquerades as
+          // selection; a SECONDARY pick is dashed for the same reason — it is
+          // a lesser claim than the solid ring a primary gets
+          strokeDasharray:
+            isRinged && !isSelected ? '5 3' : mark === 'secondary' ? '10 7' : undefined,
           strokeLinejoin: 'round' as const,
           className: 'muscle-plate',
           style: { transition: 'fill 500ms ease' },

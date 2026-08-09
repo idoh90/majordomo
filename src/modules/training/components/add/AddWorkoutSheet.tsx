@@ -386,6 +386,26 @@ export function AddWorkoutSheet({
   const muscleUntouched =
     editing !== null && selKey(draft.selection) === selKey(opened.current.selection)
 
+  /** the twin draws the whole body, so it needs the log this session lands on
+   *  — minus the session being edited, whose stored copy would otherwise be
+   *  counted alongside the draft that replaces it */
+  const priorWorkouts = useMemo(
+    () => (editing ? workouts.filter((w) => w.id !== editing.id) : workouts),
+    [workouts, editing],
+  )
+  /** one instant for the whole visit: a clock that ticks per render would
+   *  recompute every muscle's decay on every keystroke */
+  const nowMs = useMemo(() => Date.now(), [open])
+  const twinDraft = useMemo(
+    () => ({
+      performedAt: draft.performedAt,
+      effort: draft.effort,
+      strainFeel: draft.strainFeel,
+      repStyle: draft.repStyle,
+    }),
+    [draft.performedAt, draft.effort, draft.strainFeel, draft.repStyle],
+  )
+
   return (
     <Sheet open={open} onClose={onClose} dirty={dirty}>
       <div className="mb-4 flex items-center gap-2">
@@ -434,6 +454,9 @@ export function AddWorkoutSheet({
           <MuscleStep
             selection={draft.selection}
             holdEffort={muscleUntouched}
+            workouts={priorWorkouts}
+            draft={twinDraft}
+            nowMs={nowMs}
             onCycle={(muscle) => dispatch({ type: 'cycle', muscle })}
             onContinue={(effortPrefill) => {
               if (effortPrefill !== null) dispatch({ type: 'effort', value: effortPrefill })

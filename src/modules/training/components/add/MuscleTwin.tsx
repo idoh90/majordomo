@@ -1,23 +1,24 @@
-import type { MuscleId } from '../../types'
+import { useMemo } from 'react'
+import type { MuscleId, Workout } from '../../types'
 import { useShellStore } from '../../../../core/store/shell'
 import { SKINS } from '../../../../core/ui/skins'
 import { voice } from '../../../../core/voice'
-import { selectionCounts, selectionShape } from '../../lib/gymEffort'
-import { strainToColor } from '../../lib/strainColor'
+import { projectedStrains, selectionCounts, selectionShape, type DraftSession } from '../../lib/gymEffort'
+import { glowOpacity, strainToColor } from '../../lib/strainColor'
 import { BodySvg } from '../bodymap/BodySvg'
 import type { Selection } from './AddWorkoutSheet'
 
-/** the twin's plate temperatures: a primary reads like threshold work, a
- *  secondary like light work, everything else like the rested map */
-const PRIMARY_STRAIN = 7.6
-const SECONDARY_STRAIN = 4.0
-
 const noop = () => {}
-const glowNone = () => 0
 
 interface MuscleTwinProps {
   selection: Selection
-  /** the effort the picks currently earn — drives the figure glow */
+  /** the log this session lands on top of — WITHOUT the session being edited,
+   *  or its stored copy and its draft would both be counted */
+  workouts: Workout[]
+  /** the draft as the strain engine would price it */
+  draft: DraftSession
+  nowMs: number
+  /** the effort the picks currently earn — drives the ambient panel warmth */
   eff: number
   /** what Continue will hand the effort step, or null while resting/held */
   prefill: number | null
@@ -25,28 +26,40 @@ interface MuscleTwinProps {
 
 /**
  * The body-map twin ("Run Entry Explorations" 3a): the real front/back plates
- * in miniature, each pick igniting its muscle through the skin's own heat
- * ramp. Colors ride the `--heat*` vars the MuscleStep wrapper sets.
+ * in miniature. The plates carry the WHOLE body's strain — what the log
+ * already says you are carrying, plus what these picks would add — so the
+ * figure answers "what shape am I in" and not merely "what did I tap". The
+ * picks themselves read as accent rings over that, since a muscle sore from
+ * Tuesday and a muscle you just chose would otherwise look identical.
  */
-export function MuscleTwin({ selection, eff, prefill }: MuscleTwinProps) {
+export function MuscleTwin({
+  selection,
+  workouts,
+  draft,
+  nowMs,
+  eff,
+  prefill,
+}: MuscleTwinProps) {
   const skin = SKINS[useShellStore((s) => s.skin)]
   const twin = voice.grounds.muscleTwin
 
-  const colorFor = (m: MuscleId) =>
-    strainToColor(
-      selection[m] === 'primary'
-        ? PRIMARY_STRAIN
-        : selection[m] === 'secondary'
-          ? SECONDARY_STRAIN
-          : 0,
-      skin.heatRamp,
-    )
+  const strains = useMemo(
+    () => projectedStrains(workouts, selection, draft, nowMs),
+    [workouts, selection, draft, nowMs],
+  )
+
+  const glowScale = skin.glowScale ?? 1
+  const colorFor = (m: MuscleId) => strainToColor(strains[m], skin.heatRamp)
+  const glowFor = (m: MuscleId) => glowOpacity(strains[m]) * glowScale
+  const markFor = (m: MuscleId) => selection[m] ?? null
 
   const { p, s } = selectionCounts(selection)
   const shape = selectionShape(selection)
   const chipLabel =
     shape === null ? twin.shapeNone : shape === 'custom' ? twin.shapeCustom : twin.shape[shape]
-  const figGlow = Math.min(0.75, eff * 0.08) * (skin.glowScale ?? 1)
+  // the ambient wash is this SESSION's heat, not the body's — kept low so it
+  // never competes with the per-muscle glow, which is the truthful one
+  const figGlow = Math.min(0.4, eff * 0.045) * glowScale
 
   return (
     <div
@@ -66,7 +79,8 @@ export function MuscleTwin({ selection, eff, prefill }: MuscleTwinProps) {
             <BodySvg
               view={view}
               colorFor={colorFor}
-              glowFor={glowNone}
+              glowFor={glowFor}
+              markFor={markFor}
               selected={null}
               onSelect={noop}
               decorative
