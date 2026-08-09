@@ -17,6 +17,27 @@ export type MuscleId =
   | 'calves'
 
 export type PplType = 'push' | 'pull' | 'legs'
+
+/** the sports the OTHER SPORT flow offers — muscle maps live in data/sports.ts */
+export type SportId =
+  | 'mma'
+  | 'boxing'
+  | 'muaythai'
+  | 'wrestling'
+  | 'bjj'
+  | 'tennis'
+  | 'swimming'
+  | 'basketball'
+  | 'soccer'
+  | 'cycling'
+  | 'climbing'
+  | 'hiking'
+
+/** Sport-only detail. The kind is kept so history can name the session even
+    after SPORT_MAP tuning; muscles are still denormalized at save time. */
+export interface SportDetail {
+  kind: SportId
+}
 export type BodyView = 'front' | 'back'
 /** light = high reps / lower weight · heavy = low reps / higher weight */
 export type RepStyle = 'light' | 'mixed' | 'heavy'
@@ -40,10 +61,12 @@ export interface Workout {
   /** When the workout happened (ISO datetime, UTC). Bucketing is always done in local time. */
   performedAt: string
   createdAt: string
-  method: 'ppl' | 'custom' | 'run'
+  method: 'ppl' | 'custom' | 'run' | 'sport'
   ppl?: PplType
   /** present iff method === 'run' */
   run?: RunDetail
+  /** present iff method === 'sport' */
+  sport?: SportDetail
   /** Muscles are resolved and stored at save time, even for PPL workouts,
       so later tuning of PPL_MAP never rewrites history. */
   primary: MuscleId[]
@@ -66,6 +89,14 @@ export interface Workout {
  * or the RP-style set-volume landmarks (those are hypertrophy sets).
  */
 export const isRun = (w: Pick<Workout, 'method'>): boolean => w.method === 'run'
+
+/** Sport sessions (MMA, swimming, …) are conditioning like runs: they load the
+    body map and cost energy, but they are not lifting sessions either. */
+export const isSport = (w: Pick<Workout, 'method'>): boolean => w.method === 'sport'
+
+/** the sessions the weekly goal, the weekly chart and the set-volume
+    landmarks actually mean — everything that is not conditioning */
+export const isLift = (w: Pick<Workout, 'method'>): boolean => !isRun(w) && !isSport(w)
 
 export interface ExportFile {
   app: 'majordomo-training'

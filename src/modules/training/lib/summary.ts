@@ -1,11 +1,13 @@
-import { isRun, type MuscleId, type Workout } from '../types'
+import { isRun, isSport, type MuscleId, type Workout } from '../types'
 import { ALL_MUSCLE_IDS, MUSCLES, PPL_LABELS } from '../data/muscles'
+import { sportLabel } from '../data/sports'
 import type { StrainMap } from './strain'
 import { repStyleOf } from './strain'
 import { REP_STYLES } from './strain'
 import { dailyTargets, proteinGrams, proteinPerMeal, weeklyProtein, type Profile } from './nutrition'
 import { relativeDayLabel, type WeekStart } from '../../../core/dates'
-import { thisWeekCount, thisWeekRuns } from './insights'
+import { voice } from '../../../core/voice'
+import { thisWeekCount, thisWeekRuns, thisWeekSports } from './insights'
 
 export interface DailySummary {
   workoutsLine: string
@@ -25,6 +27,9 @@ function describeLastWorkout(workouts: Workout[], now: number): string {
   if (isRun(last)) {
     const km = last.run?.distanceKm
     return ` — last out was a ${km ? `${km} km ` : ''}run ${whenLabel}`
+  }
+  if (isSport(last)) {
+    return voice.grounds.sport.lastLine({ name: sportLabel(last), when: whenLabel })
   }
   const kind = last.ppl ? PPL_LABELS[last.ppl] : 'custom'
   const style = repStyleOf(last)
@@ -64,8 +69,10 @@ export function buildDailySummary(
   const week = weeklyProtein(profile)
   const macros = dailyTargets(profile, workouts, new Date(now))
 
-  const runCount = thisWeekRuns(workouts, new Date(now), weekStart)
-  const runsPart = runCount ? ` (plus ${runCount} run${runCount === 1 ? '' : 's'})` : ''
+  const runsPart = voice.grounds.sport.weekTally({
+    runs: thisWeekRuns(workouts, new Date(now), weekStart),
+    sports: thisWeekSports(workouts, new Date(now), weekStart),
+  })
 
   const workoutsLine =
     workouts.length === 0

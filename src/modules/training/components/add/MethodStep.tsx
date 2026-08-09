@@ -1,5 +1,7 @@
+import { voice } from '../../../../core/voice'
+
 interface MethodStepProps {
-  onChoose: (method: 'ppl' | 'custom' | 'run') => void
+  onChoose: (method: 'ppl' | 'custom' | 'run' | 'sport') => void
 }
 
 export function MethodStep({ onChoose }: MethodStepProps) {
@@ -19,6 +21,11 @@ export function MethodStep({ onChoose }: MethodStepProps) {
         title="RUN"
         caption="Distance and pace. Feeds recovery, not the weekly count."
         onClick={() => onChoose('run')}
+      />
+      <Choice
+        title={voice.grounds.sport.methodTitle}
+        caption={voice.grounds.sport.methodCaption}
+        onClick={() => onChoose('sport')}
       />
     </div>
   )

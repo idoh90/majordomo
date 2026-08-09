@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef } from 'react'
-import type { MuscleId, PplType, RepStyle, Workout } from '../../types'
+import type { MuscleId, PplType, RepStyle, SportId, Workout } from '../../types'
 import { PPL_MAP, RUN_MAP } from '../../data/muscles'
+import { SPORT_MAP } from '../../data/sports'
 import { makeId, useWorkoutStore } from '../../store'
 import { linkedEventIds, rankTrainingEventMatches } from '../../lib/fulfillment'
 import { useEventsStore } from '../../../../core/events/store'
@@ -12,8 +13,10 @@ import { EffortStep } from './EffortStep'
 import { MethodStep } from './MethodStep'
 import { MuscleStep } from './MuscleStep'
 import { PplStep } from './PplStep'
+import { SportStep } from './SportStep'
 import { DEFAULT_PACE, EMPTY_RUN_FIELDS, RunStep, runFieldSeconds, type RunFields } from './RunStep'
 import { secondsToMinutes } from '../../lib/runs'
+import { gymEffort } from '../../lib/gymEffort'
 import { clampPace, EFFORT_LIVE, runEffort } from '../../lib/pace'
 import { strainToColor } from '../../lib/strainColor'
 import { SKINS } from '../../../../core/ui/skins'
@@ -21,8 +24,8 @@ import { useShellStore } from '../../../../core/store/shell'
 
 export type Selection = Partial<Record<MuscleId, 'primary' | 'secondary'>>
 
-type Step = 'method' | 'ppl' | 'muscles' | 'run' | 'effort'
-type Method = 'ppl' | 'custom' | 'run'
+type Step = 'method' | 'ppl' | 'muscles' | 'run' | 'sport' | 'effort'
+type Method = 'ppl' | 'custom' | 'run' | 'sport'
 
 /** log-fulfills-block aim: follow the ranked match, claim a named block, or
  *  claim none. Any change of time re-ranks, so the override dies with it. */
@@ -32,6 +35,7 @@ interface Draft {
   step: Step
   method: Method | null
   ppl: PplType | null
+  sportKind: SportId | null
   selection: Selection
   /** run fields kept as strings — empty means "not recorded" */
   run: RunFields
@@ -47,6 +51,7 @@ interface Draft {
 type Action =
   | { type: 'method'; method: Method }
   | { type: 'ppl'; ppl: PplType }
+  | { type: 'sport'; kind: SportId }
   | { type: 'cycle'; muscle: MuscleId }
   | { type: 'continue' }
   | { type: 'back' }
@@ -73,12 +78,22 @@ function reducer(d: Draft, a: Action): Draft {
       if (a.method === 'ppl') return { ...d, method: 'ppl', step: 'ppl' }
       if (a.method === 'run')
         return { ...d, method: 'run', selection: runSelection(), repStyle: 'light', step: 'run' }
+      if (a.method === 'sport') return { ...d, method: 'sport', step: 'sport' }
       return { ...d, method: 'custom', step: 'muscles' }
     case 'ppl': {
       const selection: Selection = {}
       for (const m of PPL_MAP[a.ppl].primary) selection[m] = 'primary'
       for (const m of PPL_MAP[a.ppl].secondary) selection[m] = 'secondary'
       return { ...d, ppl: a.ppl, selection, step: 'effort' }
+    }
+    case 'sport': {
+      // resolved at save time like PPL and runs — tuning SPORT_MAP later never
+      // rewrites history; the rep character is the sport's, not the user's
+      const map = SPORT_MAP[a.kind]
+      const selection: Selection = {}
+      for (const m of map.primary) selection[m] = 'primary'
+      for (const m of map.secondary) selection[m] = 'secondary'
+      return { ...d, sportKind: a.kind, selection, repStyle: map.repStyle }
     }
     case 'cycle': {
       const current = d.selection[a.muscle]
@@ -90,8 +105,18 @@ function reducer(d: Draft, a: Action): Draft {
       return { ...d, step: 'effort' }
     case 'back':
       if (d.step === 'effort')
-        return { ...d, step: d.method === 'ppl' ? 'ppl' : d.method === 'run' ? 'run' : 'muscles' }
-      if (d.step === 'ppl' || d.step === 'muscles' || d.step === 'run')
+        return {
+          ...d,
+          step:
+            d.method === 'ppl'
+              ? 'ppl'
+              : d.method === 'run'
+                ? 'run'
+                : d.method === 'sport'
+                  ? 'sport'
+                  : 'muscles',
+        }
+      if (d.step === 'ppl' || d.step === 'muscles' || d.step === 'run' || d.step === 'sport')
         return { ...d, step: 'method' }
       return d
     case 'run':
@@ -116,6 +141,7 @@ const freshDraft = (): Draft => ({
   step: 'method',
   method: null,
   ppl: null,
+  sportKind: null,
   selection: {},
   run: EMPTY_RUN_FIELDS,
   effort: 7,
@@ -139,6 +165,7 @@ function draftFromWorkout(w: Workout): Draft {
     step: 'effort',
     method: w.method,
     ppl: w.ppl ?? null,
+    sportKind: w.sport?.kind ?? null,
     selection,
     run: {
       distanceKm: storedKm != null ? String(storedKm) : '',
@@ -176,10 +203,18 @@ const TITLES: Record<Step, string> = {
   ppl: 'What kind of day?',
   muscles: 'What did you hit?',
   run: 'How far?',
+  sport: voice.grounds.sport.stepTitle,
   effort: 'How did it go?',
 }
 
-const STEP_INDEX: Record<Step, number> = { method: 0, ppl: 1, muscles: 1, run: 1, effort: 2 }
+const STEP_INDEX: Record<Step, number> = {
+  method: 0,
+  ppl: 1,
+  muscles: 1,
+  run: 1,
+  sport: 1,
+  effort: 2,
+}
 
 interface AddWorkoutSheetProps {
   open: boolean
@@ -187,9 +222,18 @@ interface AddWorkoutSheetProps {
   onClose: () => void
   /** dev screenshot aid — open the When calendar immediately */
   devWhenOpen?: boolean
+  /** dev screenshot aid — start the blank flow on the sport picker or the
+      muscle picker */
+  devStartStep?: 'sport' | 'muscles'
 }
 
-export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWorkoutSheetProps) {
+export function AddWorkoutSheet({
+  open,
+  editing,
+  onClose,
+  devWhenOpen,
+  devStartStep,
+}: AddWorkoutSheetProps) {
   const addWorkout = useWorkoutStore((s) => s.addWorkout)
   const updateWorkout = useWorkoutStore((s) => s.updateWorkout)
   const workouts = useWorkoutStore((s) => s.workouts)
@@ -206,7 +250,9 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
     const fresh = editing ? draftFromWorkout(editing) : freshDraft()
     opened.current = fresh
     dispatch({ type: 'reset', draft: fresh })
-  }, [open, editing])
+    if (devStartStep && !editing)
+      dispatch({ type: 'method', method: devStartStep === 'sport' ? 'sport' : 'custom' })
+  }, [open, editing, devStartStep])
 
   /** anything the user has chosen — step position alone doesn't count, since
    *  reaching a step always means a choice was made to get there. Sheet owns
@@ -306,6 +352,8 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
         draft.method === 'run'
           ? { distanceKm: num(draft.run.distanceKm), durationMin: runDurationMin(draft.run) }
           : undefined,
+      sport:
+        draft.method === 'sport' && draft.sportKind ? { kind: draft.sportKind } : undefined,
       primary,
       secondary,
       effort: draft.effort,
@@ -318,17 +366,25 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
     onClose()
   }
 
-  // 1c: while the run step is up, the header's live dot warms with the pace
+  // 1c/3a: while the run or muscle step is up, the header's live dot warms
+  // with the pace or the picks
   const runKmN = Number(draft.run.distanceKm)
   const runEff = runEffort(
     easyPace,
     Number.isFinite(runKmN) && runKmN > 0 ? runKmN : 0,
     draft.run.paceSec,
   )
+  const stepEff =
+    draft.step === 'run' ? runEff : draft.step === 'muscles' ? gymEffort(draft.selection) : 0
   const dotHeat =
-    draft.step === 'run' && runEff > EFFORT_LIVE
-      ? strainToColor(Math.max(runEff, 1.2), heatRamp)
-      : null
+    stepEff > EFFORT_LIVE ? strainToColor(Math.max(stepEff, 1.2), heatRamp) : null
+
+  /** the picks exactly as the sheet opened — an edit whose picks were never
+   *  touched keeps its recorded effort (the run step's held-clock rule) */
+  const selKey = (s: Selection) =>
+    JSON.stringify(Object.entries(s).filter(([, v]) => v !== undefined).sort())
+  const muscleUntouched =
+    editing !== null && selKey(draft.selection) === selKey(opened.current.selection)
 
   return (
     <Sheet open={open} onClose={onClose} dirty={dirty}>
@@ -377,7 +433,18 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
         {draft.step === 'muscles' && (
           <MuscleStep
             selection={draft.selection}
+            holdEffort={muscleUntouched}
             onCycle={(muscle) => dispatch({ type: 'cycle', muscle })}
+            onContinue={(effortPrefill) => {
+              if (effortPrefill !== null) dispatch({ type: 'effort', value: effortPrefill })
+              dispatch({ type: 'continue' })
+            }}
+          />
+        )}
+        {draft.step === 'sport' && (
+          <SportStep
+            value={draft.sportKind}
+            onChoose={(kind) => dispatch({ type: 'sport', kind })}
             onContinue={() => dispatch({ type: 'continue' })}
           />
         )}
@@ -394,6 +461,7 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
         {draft.step === 'effort' && (
           <EffortStep
             isRun={draft.method === 'run'}
+            isSport={draft.method === 'sport'}
             selection={draft.selection}
             effort={draft.effort}
             strainFeel={draft.strainFeel}

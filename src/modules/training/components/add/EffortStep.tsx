@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MUSCLES } from '../../data/muscles'
 import type { MuscleId, RepStyle, Workout } from '../../types'
 import { relativeDayLabel, timeLabel } from '../../../../core/dates'
+import { voice } from '../../../../core/voice'
 import { Collapsible } from '../../../../core/ui/Collapsible'
 import { CollapseChevron } from '../../../../core/ui/CollapseToggle'
 import { REP_STYLES } from '../../lib/strain'
@@ -15,6 +16,8 @@ const REP_STYLE_ORDER: RepStyle[] = ['light', 'mixed', 'heavy']
 interface EffortStepProps {
   /** runs have no rep style — the eccentric load is fixed by the sport */
   isRun?: boolean
+  /** sport sessions fix their rep character in SPORT_MAP, like runs do */
+  isSport?: boolean
   selection: Selection
   effort: number
   strainFeel: number
@@ -36,6 +39,7 @@ interface EffortStepProps {
 
 export function EffortStep({
   isRun = false,
+  isSport = false,
   selection,
   effort,
   strainFeel,
@@ -82,7 +86,7 @@ export function EffortStep({
         ))}
       </div>
 
-      <div className={`mb-5 ${isRun ? 'hidden' : ''}`}>
+      <div className={`mb-5 ${isRun || isSport ? 'hidden' : ''}`}>
         <span className="mb-1.5 block text-sm font-medium text-ink-dim">Workout style</span>
         <div className="flex gap-1.5" role="radiogroup" aria-label="Workout style">
           {REP_STYLE_ORDER.map((s) => {
@@ -153,7 +157,13 @@ export function EffortStep({
         onClick={onSave}
         className={`btn-cta w-full py-3.5 text-lg transition active:scale-[0.99] ${blockLink ? 'mt-2.5' : 'mt-6'}`}
       >
-        {editing ? 'Save Changes' : isRun ? 'Save Run' : 'Save Workout'}
+        {editing
+          ? 'Save Changes'
+          : isRun
+            ? 'Save Run'
+            : isSport
+              ? voice.grounds.sport.save
+              : 'Save Workout'}
       </button>
     </div>
   )

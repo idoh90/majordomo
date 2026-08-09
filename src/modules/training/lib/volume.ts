@@ -1,4 +1,4 @@
-import { isRun, type MuscleId, type Workout } from '../types'
+import { isLift, type MuscleId, type Workout } from '../types'
 import { ALL_MUSCLE_IDS } from '../data/muscles'
 import { weekKey, type WeekStart } from '../../../core/dates'
 
@@ -29,10 +29,10 @@ export function weeklyVolume(workouts: Workout[], now: Date, weekStart?: WeekSta
   const wk = weekKey(now, weekStart)
   const v = Object.fromEntries(ALL_MUSCLE_IDS.map((m) => [m, 0])) as VolumeMap
   for (const w of workouts) {
-    // runs load the legs but they are not hard sets — the MEV/MAV/MRV landmarks
-    // below are hypertrophy-set landmarks, so counting a run against them would
-    // read as overreaching that never happened
-    if (isRun(w)) continue
+    // runs and sport sessions load muscles but they are not hard sets — the
+    // MEV/MAV/MRV landmarks below are hypertrophy-set landmarks, so counting
+    // them would read as overreaching that never happened
+    if (!isLift(w)) continue
     if (weekKey(new Date(w.performedAt), weekStart) !== wk) continue
     for (const m of ALL_MUSCLE_IDS) v[m] += sessionSets(w, m)
   }

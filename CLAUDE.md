@@ -488,8 +488,9 @@ auto-enter Training so they land on the right screen.
 - `?console=training|capital` — start the shell inside that console
 - `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by
   the **shell** store (founder machines also accept the seven legacy skin ids)
-- `?sheet=add` / `?sheet=effort` / `?sheet=when` — opens the add sheet on load
-  (effort = edit mode on newest workout; when = also expands the calendar)
+- `?sheet=add` / `?sheet=effort` / `?sheet=when` / `?sheet=sport` / `?sheet=muscles`
+  — opens the add sheet on load (effort = edit mode on newest workout; when = also
+  expands the calendar; sport / muscles = the blank flow open on that picker)
 - `?sheet=skin` — opens the App-skin picker sheet on load
 - `?detail` — opens the newest workout's detail sheet
 - `?map=volume` — starts the body map in weekly-volume mode

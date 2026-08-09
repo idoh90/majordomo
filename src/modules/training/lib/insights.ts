@@ -1,4 +1,4 @@
-import { isRun, type MuscleGroup, type MuscleId, type Workout } from '../types'
+import { isLift, isRun, isSport, type MuscleGroup, type MuscleId, type Workout } from '../types'
 import { ALL_MUSCLE_IDS, MUSCLES, PICKER_GROUPS } from '../data/muscles'
 import {
   addDays,
@@ -37,7 +37,7 @@ export function weeklyCounts(
   }
   const byKey = new Map(buckets.map((b) => [b.key, b]))
   for (const w of workouts) {
-    if (isRun(w)) continue // runs are conditioning, not sessions against the goal
+    if (!isLift(w)) continue // runs and sports are conditioning, not sessions against the goal
     const b = byKey.get(weekKey(new Date(w.performedAt), weekStart))
     if (b) b.count++
   }
@@ -55,10 +55,10 @@ export function topMuscles(
   const cutoffMs = addDays(now, -days).getTime()
   const totals = new Map<MuscleId, number>()
   for (const w of workouts) {
-    // runs are conditioning, not training volume — the same line the weekly
-    // count and the RP landmarks already draw. One long run otherwise puts
-    // calves and quads on top of a chart that means "what you trained".
-    if (isRun(w)) continue
+    // runs and sports are conditioning, not training volume — the same line
+    // the weekly count and the RP landmarks already draw. One long run (or an
+    // MMA week) otherwise tops a chart that means "what you trained".
+    if (!isLift(w)) continue
     const t = new Date(w.performedAt).getTime()
     if (t < cutoffMs) continue
     for (const m of ALL_MUSCLE_IDS) {
@@ -72,12 +72,12 @@ export function topMuscles(
     .slice(0, top)
 }
 
-/** Sessions this calendar week, against the weekly goal — runs never count. */
+/** Sessions this calendar week, against the weekly goal — conditioning never counts. */
 export function thisWeekCount(workouts: Workout[], now: Date, weekStart?: WeekStart): number {
   const wk = weekKey(now, weekStart)
   let n = 0
   for (const w of workouts) {
-    if (isRun(w)) continue
+    if (!isLift(w)) continue
     if (weekKey(new Date(w.performedAt), weekStart) === wk) n++
   }
   return n
@@ -89,6 +89,17 @@ export function thisWeekRuns(workouts: Workout[], now: Date, weekStart?: WeekSta
   let n = 0
   for (const w of workouts) {
     if (!isRun(w)) continue
+    if (weekKey(new Date(w.performedAt), weekStart) === wk) n++
+  }
+  return n
+}
+
+/** Sport sessions this calendar week (the same standing as runs). */
+export function thisWeekSports(workouts: Workout[], now: Date, weekStart?: WeekStart): number {
+  const wk = weekKey(now, weekStart)
+  let n = 0
+  for (const w of workouts) {
+    if (!isSport(w)) continue
     if (weekKey(new Date(w.performedAt), weekStart) === wk) n++
   }
   return n

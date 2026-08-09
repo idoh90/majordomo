@@ -9,7 +9,7 @@ import {
   type WeekStart,
 } from '../../core/dates'
 import { voice } from '../../core/voice'
-import { isRun, type Workout } from '../../modules/training/types'
+import { isLift, type Workout } from '../../modules/training/types'
 import { unfulfilledTrainingEvents } from '../../modules/training/lib/fulfillment'
 import type { Snapshot } from '../../modules/capital/types'
 import type { Exam, SessionMeta, Subject } from '../../modules/study/types'
@@ -157,7 +157,7 @@ export function computeBriefing(i: HeadsUpInputs): { greeting: string | null; he
       const weekEnd = addDays(weekStartD, 7).getTime()
       const done = i.workouts.filter((w) => {
         const t = new Date(w.performedAt).getTime()
-        return !isRun(w) && t >= weekStartD.getTime() && t < weekEnd
+        return isLift(w) && t >= weekStartD.getTime() && t < weekEnd
       }).length
       if (done <= i.weeklyGoal - 2) {
         push('goal-behind', voice.manor.headsUp.goalBehind({ done, goal: i.weeklyGoal }))

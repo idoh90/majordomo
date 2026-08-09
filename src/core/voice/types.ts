@@ -457,8 +457,14 @@ export interface VoicePack {
     /** dim tag on a booked block that already has a workout linked */
     fulfilledTag: string
     /** title of the Manor block drawn from a logged session that answered no
-     *  booking — the Grounds' own projection onto the week */
-    loggedBlockTitle: (v: { ppl: 'push' | 'pull' | 'legs' | null; run: boolean }) => string
+     *  booking — the Grounds' own projection onto the week. `sport` is the
+     *  sport's display name, pre-resolved by the wing (core stays ignorant of
+     *  the sport roster). */
+    loggedBlockTitle: (v: {
+      ppl: 'push' | 'pull' | 'legs' | null
+      run: boolean
+      sport: string | null
+    }) => string
     /** run step: pace lives on a band of zones anchored to the easy pace */
     runPaceLabel: string
     runUnitPerKm: string
@@ -480,6 +486,25 @@ export interface VoicePack {
     /** the effort line under the band — prefilled, or waiting on a distance */
     runEffortPrefill: (v: { n: number }) => string
     runEffortIdle: string
+    /** the muscle step's body-map twin (Run Entry Explorations 3a): mini
+     *  figures beside the picker that ignite muscle by muscle as chips are
+     *  tapped */
+    muscleTwin: {
+      /** captions under the two figures */
+      front: string
+      back: string
+      /** the shape chip — picks matching a PPL day, a free mix, or nothing yet */
+      shape: Record<'push' | 'pull' | 'legs', string>
+      shapeCustom: string
+      shapeNone: string
+      /** the tally beside the figures, and its empty state */
+      counts: (v: { p: number; s: number }) => string
+      countsNone: string
+      /** the effort line — what Continue will hand the next step, or that
+       *  nothing has been earned yet */
+      effortPrefill: (v: { n: number }) => string
+      effortIdle: string
+    }
     /** RUNS panel — conditioning for the calendar week, then the last few out */
     runs: {
       title: string
@@ -507,6 +532,29 @@ export interface VoicePack {
       paceOne: string
       /** the run was logged on effort alone, with neither side recorded */
       detailNone: string
+    }
+    /** OTHER SPORT — sessions of sports beyond lifting and running. Sport
+     *  names arrive pre-resolved as plain strings; the roster is wing data. */
+    sport: {
+      /** the method step's fourth door: card title + its one-line caption */
+      methodTitle: string
+      methodCaption: string
+      /** sheet title while the sport picker is up */
+      stepTitle: string
+      /** label over the dropdown, and the unpicked state's line */
+      pickerLabel: string
+      pickerPlaceholder: string
+      /** under the picked sport's muscle chips: what the chips mean */
+      hitsNote: string
+      /** the save button on the effort step */
+      save: string
+      /** detail sheet caption in place of a rep style (a sport's is fixed) */
+      detailCaption: string
+      /** briefing: " — last was a Boxing session yesterday" */
+      lastLine: (v: { name: string; when: string }) => string
+      /** briefing: the week's conditioning tally, ' (plus 2 runs and an MMA
+       *  session)' — returns '' when both are zero, leading space included */
+      weekTally: (v: { runs: number; sports: number }) => string
     }
     /** weekly-goal card + its dialog */
     weekTitle: string

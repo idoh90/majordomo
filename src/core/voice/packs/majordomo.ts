@@ -335,8 +335,10 @@ export const majordomoPack: VoicePack = {
     fulfilsChange: 'change',
     fulfilsNoBlock: "None — don't link",
     fulfilledTag: 'LOGGED',
-    loggedBlockTitle: ({ ppl, run }) =>
-      run ? 'Run' : ppl ? { push: 'Push', pull: 'Pull', legs: 'Legs' }[ppl] : 'Training',
+    loggedBlockTitle: ({ ppl, run, sport }) =>
+      run
+        ? 'Run'
+        : (sport ?? (ppl ? { push: 'Push', pull: 'Pull', legs: 'Legs' }[ppl] : 'Training')),
     runPaceLabel: 'Pace',
     runUnitPerKm: '/km',
     runEasyLabel: 'EASY',
@@ -357,6 +359,17 @@ export const majordomoPack: VoicePack = {
     runHeldTime: ({ time }) => `Holding the logged ${time}. A distance would give it a pace.`,
     runEffortPrefill: ({ n }) => `Effort ${n} · prefilled on the next step`,
     runEffortIdle: 'Effort prefill follows your pace',
+    muscleTwin: {
+      front: 'FRONT',
+      back: 'BACK',
+      shape: { push: 'PUSH SHAPE', pull: 'PULL SHAPE', legs: 'LEGS SHAPE' },
+      shapeCustom: 'CUSTOM MIX',
+      shapeNone: 'NOTHING YET',
+      counts: ({ p, s }) => `${p} primary · ${s} secondary`,
+      countsNone: 'Nothing marked yet, sir.',
+      effortPrefill: ({ n }) => `Effort ${n} · prefilled on the next step`,
+      effortIdle: 'Effort prefill follows your picks',
+    },
     runs: {
       title: 'Runs',
       weekLabel: 'This week',
@@ -373,6 +386,23 @@ export const majordomoPack: VoicePack = {
       distanceLabel: 'Distance',
       paceOne: 'Pace',
       detailNone: 'No distance or time recorded — this run was logged on effort alone.',
+    },
+    sport: {
+      methodTitle: 'OTHER SPORT',
+      methodCaption: 'MMA, swimming, tennis and more. Feeds recovery, not the weekly count.',
+      stepTitle: 'Which sport?',
+      pickerLabel: 'Sport',
+      pickerPlaceholder: 'Choose a sport',
+      hitsNote: 'What it loads on the body map — solid chips take the brunt, outlined ones assist.',
+      save: 'Save Session',
+      detailCaption: 'A sport session — it feeds recovery, not the weekly lifting count.',
+      lastLine: ({ name, when }) => ` — last was a ${name} session ${when}`,
+      weekTally: ({ runs, sports }) => {
+        const parts: string[] = []
+        if (runs > 0) parts.push(`${runs} ${runs === 1 ? 'run' : 'runs'}`)
+        if (sports > 0) parts.push(`${sports} sport ${sports === 1 ? 'session' : 'sessions'}`)
+        return parts.length ? ` (plus ${parts.join(' and ')})` : ''
+      },
     },
     weekTitle: 'This week',
     goalMet: "You've hit this week's goal.",

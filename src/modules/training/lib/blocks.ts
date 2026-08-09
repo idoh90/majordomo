@@ -1,7 +1,8 @@
 import { useEventsStore } from '../../../core/events/store'
 import type { CalendarEvent } from '../../../core/events/types'
 import { voice } from '../../../core/voice'
-import { isRun, type Workout } from '../types'
+import { isRun, isSport, type Workout } from '../types'
+import { sportLabel } from '../data/sports'
 
 /**
  * logged-session blocks — the Grounds' projection onto the Manor.
@@ -59,7 +60,11 @@ export function blockSpan(w: Workout): { start: string; end: string } {
 }
 
 export const blockTitle = (w: Workout): string =>
-  voice.grounds.loggedBlockTitle({ ppl: w.ppl ?? null, run: isRun(w) })
+  voice.grounds.loggedBlockTitle({
+    ppl: w.ppl ?? null,
+    run: isRun(w),
+    sport: isSport(w) ? sportLabel(w) : null,
+  })
 
 const findMirror = (list: CalendarEvent[], ref: string): CalendarEvent | undefined =>
   list.find((e) => e.kind === 'training' && isWorkoutMirror(e) && e.sourceRef === ref)

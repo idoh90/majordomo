@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { isRun, type Workout } from '../../types'
+import { isLift, isRun, isSport, type Workout } from '../../types'
 import { MUSCLES, PPL_LABELS } from '../../data/muscles'
+import { sportLabel } from '../../data/sports'
+import { SportIcon } from '../icons'
 import { timeLabel } from '../../../../core/dates'
 import { useWorkoutStore } from '../../store'
 import { ConfirmDialog } from '../../../../core/ui/ConfirmDialog'
@@ -49,7 +51,13 @@ export function WorkoutCard({ workout, onEdit, onOpen }: WorkoutCardProps) {
               Run{runLabel(workout) && ` · ${runLabel(workout)}`}
             </span>
           )}
-          {!isRun(workout) && workout.repStyle && workout.repStyle !== 'mixed' && (
+          {isSport(workout) && (
+            <span className="flex items-center gap-1 rounded-md border border-accent/60 px-1.5 py-px font-display text-[11px] font-bold uppercase tracking-[0.14em] text-accent">
+              {workout.sport && <SportIcon kind={workout.sport.kind} size={12} />}
+              {sportLabel(workout)}
+            </span>
+          )}
+          {isLift(workout) && workout.repStyle && workout.repStyle !== 'mixed' && (
             <span className="rounded-md border border-line px-1.5 py-px font-display text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint">
               {workout.repStyle === 'heavy' ? 'Heavy' : 'High rep'}
             </span>

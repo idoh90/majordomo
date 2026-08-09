@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { isRun, type MuscleId, type Workout } from '../../types'
+import { isRun, isSport, type MuscleId, type Workout } from '../../types'
 import { MUSCLES, PPL_LABELS } from '../../data/muscles'
+import { sportLabel } from '../../data/sports'
+import { SportIcon } from '../icons'
 import { formatClock, formatKm, runPaceSeconds, runTotalSeconds } from '../../lib/runs'
 import { voice } from '../../../../core/voice'
 import { hoursBetween, relativeDayLabel, timeLabel } from '../../../../core/dates'
@@ -55,10 +57,18 @@ export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDet
   return (
     <Sheet open onClose={onClose}>
       <div className="mb-1 flex items-center gap-2">
-        <span className="rounded-md border border-accent/60 px-1.5 py-px font-display text-[11px] font-bold uppercase tracking-[0.14em] text-accent">
+        <span className="flex items-center gap-1 rounded-md border border-accent/60 px-1.5 py-px font-display text-[11px] font-bold uppercase tracking-[0.14em] text-accent">
           {/* a run is neither a PPL day nor a custom pick of muscles — it read
-              'Custom' here while its own figures went unmentioned */}
-          {isRun(w) ? voice.grounds.runs.badge : w.ppl ? PPL_LABELS[w.ppl] : 'Custom'}
+              'Custom' here while its own figures went unmentioned; a sport
+              session names its sport */}
+          {isSport(w) && w.sport && <SportIcon kind={w.sport.kind} size={12} />}
+          {isRun(w)
+            ? voice.grounds.runs.badge
+            : isSport(w)
+              ? sportLabel(w)
+              : w.ppl
+                ? PPL_LABELS[w.ppl]
+                : 'Custom'}
         </span>
         <h2 className="font-display text-xl font-bold tracking-wide">
           {relativeDayLabel(w.performedAt, new Date(now))}
@@ -68,9 +78,12 @@ export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDet
         </h2>
       </div>
       {/* a run's rep style is always 'light' — a fixed word says nothing, where
-          what it covered does */}
+          what it covered does; a sport's is fixed by its map, so the caption
+          names the session's nature instead */}
       {isRun(w) ? (
         <RunFigures workout={w} />
+      ) : isSport(w) ? (
+        <p className="mb-4 text-xs text-ink-faint">{voice.grounds.sport.detailCaption}</p>
       ) : (
         <p className="mb-4 text-xs text-ink-faint">
           {REP_STYLES[style].title} · {REP_STYLES[style].caption}
