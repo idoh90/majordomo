@@ -1,9 +1,6 @@
 import { isRun, type Workout } from '../types'
 import { addDays, startOfWeek, weekKey, type WeekStart } from '../../../core/dates'
 
-/** past this many minutes per km it isn't a running pace any more */
-export const WALKING_PACE_MIN_PER_KM = 30
-
 /**
  * A run's clock is STORED in minutes (`RunDetail.durationMin`) and may carry a
  * fraction — 24:35 is 24.5833…. Every read rounds to the whole second FIRST and

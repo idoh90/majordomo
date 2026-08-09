@@ -459,23 +459,27 @@ export interface VoicePack {
     /** title of the Manor block drawn from a logged session that answered no
      *  booking — the Grounds' own projection onto the week */
     loggedBlockTitle: (v: { ppl: 'push' | 'pull' | 'legs' | null; run: boolean }) => string
-    /** run step: the pace read-out, its walking-pace floor, and the hint */
-    runPace: (v: { pace: string }) => string
-    runPaceWalking: string
-    runOptional: string
-    /** run step: a clock can be typed OUTRIGHT or arrived at through a pace,
-     *  so the two entries name themselves and each reads the other back */
-    runEntryTime: string
-    runEntryPace: string
-    runDurationLabel: string
+    /** run step: pace lives on a band of zones anchored to the easy pace */
     runPaceLabel: string
-    /** unit suffixes on the minute/second boxes, and on a pace */
-    runUnitMin: string
-    runUnitSec: string
     runUnitPerKm: string
-    /** pace mode's read-out: the time it works out to, or what it still wants */
+    /** the easy-pace anchor's label and its ±5s stepper (for screen readers) */
+    runEasyLabel: string
+    runEasyFasterAria: string
+    runEasySlowerAria: string
+    /** the five zones, as the chip prints them */
+    runZoneNames: Record<'max' | 'threshold' | 'steady' | 'easy' | 'recovery', string>
+    /** under the band: which way the slider runs, and the ±1s fine-tune */
+    runSliderHint: string
+    runFineFaster: string
+    runFineSlower: string
+    /** the read-out: the time the pace works out to, or what it still wants */
     runTotal: (v: { time: string; km: string }) => string
     runNeedsDistance: string
+    /** a stored clock held verbatim while it has no distance to pace against */
+    runHeldTime: (v: { time: string }) => string
+    /** the effort line under the band — prefilled, or waiting on a distance */
+    runEffortPrefill: (v: { n: number }) => string
+    runEffortIdle: string
     /** RUNS panel — conditioning for the calendar week, then the last few out */
     runs: {
       title: string

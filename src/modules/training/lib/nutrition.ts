@@ -40,6 +40,9 @@ export interface Profile {
   carbPerSet: number
   /** minimum fat in g/kg for hormonal health */
   fatFloorGkg: number
+  /** seconds per km of an easy conversational run — anchors the run sheet's
+      zones and its effort prefill (lib/pace.ts) */
+  easyPaceSec: number
 }
 
 export const DEFAULT_PROFILE: Profile = {
@@ -55,6 +58,7 @@ export const DEFAULT_PROFILE: Profile = {
   kcalPerSet: 12,
   carbPerSet: 8,
   fatFloorGkg: 0.6,
+  easyPaceSec: 360,
 }
 
 // Session energy scales with muscle size: large compound movers cost more than

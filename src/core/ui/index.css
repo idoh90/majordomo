@@ -137,6 +137,17 @@ body {
   }
 }
 
+/* the run sheet's pulse trace — the SVG holds two copies of one period, so
+   sliding half its width loops seamlessly */
+@keyframes run-pulse {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 input[type='datetime-local'] {
   color-scheme: dark;
 }

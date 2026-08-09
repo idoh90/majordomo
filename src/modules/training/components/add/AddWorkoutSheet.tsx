@@ -12,8 +12,12 @@ import { EffortStep } from './EffortStep'
 import { MethodStep } from './MethodStep'
 import { MuscleStep } from './MuscleStep'
 import { PplStep } from './PplStep'
-import { EMPTY_RUN_FIELDS, RunStep, runFieldSeconds, splitClock, type RunFields } from './RunStep'
+import { DEFAULT_PACE, EMPTY_RUN_FIELDS, RunStep, runFieldSeconds, type RunFields } from './RunStep'
 import { secondsToMinutes } from '../../lib/runs'
+import { clampPace, EFFORT_LIVE, runEffort } from '../../lib/pace'
+import { strainToColor } from '../../lib/strainColor'
+import { SKINS } from '../../../../core/ui/skins'
+import { useShellStore } from '../../../../core/store/shell'
 
 export type Selection = Partial<Record<MuscleId, 'primary' | 'secondary'>>
 
@@ -126,20 +130,21 @@ function draftFromWorkout(w: Workout): Draft {
   const selection: Selection = {}
   for (const m of w.primary) selection[m] = 'primary'
   for (const m of w.secondary) selection[m] = 'secondary'
-  // a stored clock is minutes, fraction and all — it re-enters the sheet as the
-  // minute/second pair it was typed as, never as "24.583"
+  // a stored clock re-enters as a HELD number: the slider seeds from the pace
+  // it implies, but the clock itself is quoted verbatim until pace or distance
+  // is touched — opening and saving never requantizes it
   const storedSec = w.run?.durationMin != null ? Math.round(w.run.durationMin * 60) : 0
-  const clock = storedSec > 0 ? splitClock(storedSec) : { min: '', sec: '' }
+  const storedKm = w.run?.distanceKm
   return {
     step: 'effort',
     method: w.method,
     ppl: w.ppl ?? null,
     selection,
     run: {
-      ...EMPTY_RUN_FIELDS,
-      distanceKm: w.run?.distanceKm != null ? String(w.run.distanceKm) : '',
-      durationMin: clock.min,
-      durationSec: clock.sec,
+      distanceKm: storedKm != null ? String(storedKm) : '',
+      paceSec:
+        storedSec > 0 && storedKm ? clampPace(Math.round(storedSec / storedKm)) : DEFAULT_PACE,
+      heldSec: storedSec,
     },
     effort: w.effort,
     strainFeel: w.strainFeel,
@@ -188,6 +193,8 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
   const addWorkout = useWorkoutStore((s) => s.addWorkout)
   const updateWorkout = useWorkoutStore((s) => s.updateWorkout)
   const workouts = useWorkoutStore((s) => s.workouts)
+  const easyPace = useWorkoutStore((s) => s.profile.easyPaceSec)
+  const heatRamp = SKINS[useShellStore((s) => s.skin)].heatRamp
   // COMMITTED events only — a what-if rehearsal must never be linked against
   const events = useEventsStore((s) => s.events)
   const [draft, dispatch] = useReducer(reducer, undefined, freshDraft)
@@ -311,6 +318,18 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
     onClose()
   }
 
+  // 1c: while the run step is up, the header's live dot warms with the pace
+  const runKmN = Number(draft.run.distanceKm)
+  const runEff = runEffort(
+    easyPace,
+    Number.isFinite(runKmN) && runKmN > 0 ? runKmN : 0,
+    draft.run.paceSec,
+  )
+  const dotHeat =
+    draft.step === 'run' && runEff > EFFORT_LIVE
+      ? strainToColor(Math.max(runEff, 1.2), heatRamp)
+      : null
+
   return (
     <Sheet open={open} onClose={onClose} dirty={dirty}>
       <div className="mb-4 flex items-center gap-2">
@@ -340,6 +359,9 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
               className={`h-1.5 rounded-full transition-all ${
                 i === STEP_INDEX[draft.step] ? 'w-5 bg-accent' : 'w-1.5 bg-panel-3'
               }`}
+              style={
+                i === STEP_INDEX[draft.step] && dotHeat ? { background: dotHeat } : undefined
+              }
             />
           ))}
         </div>
@@ -363,7 +385,10 @@ export function AddWorkoutSheet({ open, editing, onClose, devWhenOpen }: AddWork
           <RunStep
             fields={draft.run}
             onChange={(patch) => dispatch({ type: 'run', patch })}
-            onContinue={() => dispatch({ type: 'continue' })}
+            onContinue={(effortPrefill) => {
+              if (effortPrefill !== null) dispatch({ type: 'effort', value: effortPrefill })
+              dispatch({ type: 'continue' })
+            }}
           />
         )}
         {draft.step === 'effort' && (
