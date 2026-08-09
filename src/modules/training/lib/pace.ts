@@ -6,8 +6,12 @@
  * (`Profile.easyPaceSec`).
  */
 
-/** the band: 3:00/km (sprint end) to 9:00/km (slow end) */
-export const PACE_MIN = 180
+/**
+ * The band: 2:00/km to 9:00/km. The fast end is short-interval territory —
+ * 2:00/km is past 800 m world-record pace, so nothing a person can actually
+ * run falls off the left edge.
+ */
+export const PACE_MIN = 120
 export const PACE_MAX = 540
 export const PACE_SPAN = PACE_MAX - PACE_MIN
 
@@ -17,9 +21,14 @@ export const clampPace = (p: number): number => Math.min(PACE_MAX, Math.max(PACE
 export const pacePct = (p: number): number =>
   Math.min(100, Math.max(0, ((p - PACE_MIN) / PACE_SPAN) * 100))
 
-/** the easy anchor's stepper bounds — slower than 9:00 isn't a run's easy pace */
-export const EASY_PACE_MIN = 240
-export const EASY_PACE_MAX = 540
+/**
+ * The easy anchor's stepper bounds. The floor is 3:00/km — faster than any
+ * human's *easy* pace, and far enough above the band's own floor that the
+ * fastest zone edge (easy ÷ 1.33) still lands inside the band, so all five
+ * zones stay drawable however fast the runner is.
+ */
+export const EASY_PACE_MIN = 180
+export const EASY_PACE_MAX = PACE_MAX
 export const EASY_PACE_STEP = 5
 
 export type RunZoneId = 'max' | 'threshold' | 'steady' | 'easy' | 'recovery'
