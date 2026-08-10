@@ -256,6 +256,7 @@ function BenchPanel({
   butler: (msg: string) => void
   onNeedVenture: () => void
 }) {
+  const cards = useWorkshopStore((s) => s.cards)
   const [expanded, setExpanded] = useState(false)
   const ringed = ventures.filter((v) => v.status !== 'shipped')
   const shown = expanded ? ringed : ringed.slice(0, MAX_RINGS)
@@ -281,7 +282,12 @@ function BenchPanel({
         style={PEGBOARD_BG}
       >
         {shown.map((v) => (
-          <VentureRing key={v.id} venture={v} week={stats.perVenture[v.id]} />
+          <VentureRing
+            key={v.id}
+            venture={v}
+            week={stats.perVenture[v.id]}
+            tasks={taskProgress(cards, v.id)}
+          />
         ))}
         {hidden > 0 && (
           <button
@@ -300,7 +306,19 @@ function BenchPanel({
   )
 }
 
-function VentureRing({ venture, week }: { venture: Venture; week?: { fulfilledH: number } }) {
+/** the outer arc's radius — a second, thinner ring outside the hours one */
+const RING_OUTER_R = 45
+const RING_OUTER_C = 2 * Math.PI * RING_OUTER_R
+
+function VentureRing({
+  venture,
+  week,
+  tasks,
+}: {
+  venture: Venture
+  week?: { fulfilledH: number }
+  tasks: TaskProgress
+}) {
   const fh = week?.fulfilledH ?? 0
   const goal = venture.goalH
   const frac = goal > 0 ? Math.min(1, fh / goal) : 0
@@ -309,6 +327,35 @@ function VentureRing({ venture, week }: { venture: Venture; week?: { fulfilledH:
     <div className="flex w-[104px] flex-none flex-col items-center gap-2 py-1">
       <div className="relative h-[96px] w-[96px]">
         <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden>
+          {/* OUTER: how much of the board is struck — the venture's progress.
+              INNER: hours at the bench this week — its effort. Two readings,
+              deliberately different: effort only climbs, progress can fall
+              when new jobs are hung. The outer arc is drawn thinner and
+              paler so the hours stay the ring's headline. */}
+          {tasks.total > 0 && (
+            <>
+              <circle
+                cx="48"
+                cy="48"
+                r={RING_OUTER_R}
+                fill="none"
+                stroke="var(--color-panel-2)"
+                strokeWidth="3"
+              />
+              <circle
+                cx="48"
+                cy="48"
+                r={RING_OUTER_R}
+                fill="none"
+                stroke={COPPER}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${((RING_OUTER_C * tasks.pct) / 100).toFixed(1)} ${RING_OUTER_C.toFixed(1)}`}
+                transform="rotate(-90 48 48)"
+                opacity="0.75"
+              />
+            </>
+          )}
           <circle cx="48" cy="48" r="38" fill="none" stroke="var(--color-panel-2)" strokeWidth="8" />
           <circle
             cx="48"
@@ -334,6 +381,21 @@ function VentureRing({ venture, week }: { venture: Venture; week?: { fulfilledH:
       </div>
       <div className="max-w-full truncate text-center font-display text-[10px] font-semibold tracking-[0.14em] text-ink-dim">
         {venture.name.toUpperCase()}
+      </div>
+      {/* the slot is always here, filled or not: the row centres its tiles, and
+          a caption on some of them would push those rings out of line */}
+      <div
+        className="-mt-1 h-[13px] text-[10px] font-semibold leading-[13px] [font-variant-numeric:tabular-nums]"
+        style={{ color: COPPER }}
+      >
+        {tasks.total > 0 && (
+          <>
+            {voice.workshop.tasks.pct(tasks.pct)}{' '}
+            <span className="font-normal text-ink-faint">
+              {voice.workshop.tasks.count(tasks)}
+            </span>
+          </>
+        )}
       </div>
     </div>
   )

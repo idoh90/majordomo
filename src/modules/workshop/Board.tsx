@@ -498,7 +498,9 @@ function CardFace({ card }: { card: BoardCard }) {
           {voice.workshop.board.done}
         </div>
       )}
-      {!done && card.type === 'note' && card.body && (
+      {/* a struck job hides its detail: the card has said the only thing that
+          still matters about it, and the wall stays readable */}
+      {!done && card.type !== 'link' && card.body && (
         <div className="mt-1 text-[12px] leading-[1.45] text-ink-dim [font-variant-numeric:tabular-nums]">
           {card.body}
         </div>
@@ -678,8 +680,11 @@ function HangCardSheet({
       return
     }
     const store = useWorkshopStore.getState()
+    // a link carries an address, everything else carries prose — and the
+    // unused half is cleared, so switching a card's type cannot leave the old
+    // one's field behind to reappear if it is switched back
     const extra = {
-      body: type === 'note' ? body.trim() || undefined : undefined,
+      body: type === 'link' ? undefined : body.trim() || undefined,
       url: type === 'link' ? url.trim() || undefined : undefined,
     }
     if (editing) {
@@ -720,13 +725,21 @@ function HangCardSheet({
         placeholder={voice.workshop.sheet.titlePlaceholder}
         className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
       />
-      {type === 'note' && (
+      {/* the same field for both: a note's text and a job's description are
+          the longer half of the card, and only the label differs */}
+      {(type === 'note' || type === 'task') && (
         <>
-          <SheetLabel>{voice.workshop.sheet.body}</SheetLabel>
+          <SheetLabel>
+            {type === 'task' ? voice.workshop.sheet.detail : voice.workshop.sheet.body}
+          </SheetLabel>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder={voice.workshop.sheet.bodyPlaceholder}
+            placeholder={
+              type === 'task'
+                ? voice.workshop.sheet.detailPlaceholder
+                : voice.workshop.sheet.bodyPlaceholder
+            }
             rows={2}
             className="w-full resize-none rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
           />

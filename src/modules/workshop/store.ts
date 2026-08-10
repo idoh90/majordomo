@@ -389,7 +389,9 @@ if (import.meta.env.DEV) {
         card('demo-card-dihedral', 'demo-vent-orni', 'link', 'Dihedral thread — Flite Test', 3, 0, {
           url: 'https://flitetest.com',
         }),
-        card('demo-card-weigh', 'demo-vent-orni', 'task', 'Weigh the fuselage', 0, 1),
+        card('demo-card-weigh', 'demo-vent-orni', 'task', 'Weigh the fuselage', 0, 1, {
+          body: 'Bare frame, no battery. Target is 41 g all in.',
+        }),
         card('demo-card-servo', 'demo-vent-orni', 'task', 'Re-rig the tail servo', 1, 1),
         card('demo-card-suppliers', 'demo-vent-orni', 'link', 'Spar suppliers shortlist', 2, 1, {
           url: 'https://docs.google.com',

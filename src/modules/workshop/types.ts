@@ -37,7 +37,8 @@ export interface BoardCard {
   ventureId: string
   type: CardType
   title: string
-  /** note body */
+  /** a note's text, or a task's description — the same field, since both are
+   *  "the longer half" of the card and a task that needs explaining is common */
   body?: string
   /** link target */
   url?: string

@@ -885,6 +885,9 @@ export interface VoicePack {
       title: string
       body: string
       bodyPlaceholder: string
+      /** the same field on a TASK card — a job's description, not a note's text */
+      detail: string
+      detailPlaceholder: string
       url: string
       urlPlaceholder: string
       threadTo: string

@@ -843,6 +843,8 @@ export const majordomoPack: VoicePack = {
       title: 'TITLE',
       body: 'NOTE — OPTIONAL',
       bodyPlaceholder: 'A line or two',
+      detail: 'DETAIL — OPTIONAL',
+      detailPlaceholder: 'What it involves',
       url: 'ADDRESS',
       urlPlaceholder: 'https://…',
       threadTo: 'THREAD TO — OPTIONAL',
