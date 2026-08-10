@@ -3,8 +3,9 @@ import type { CalendarEvent } from '../events/types'
 /**
  * Which calendar events are PROJECTIONS rather than records.
  *
- * Homework due-days, exam days and paydays are drawn onto the Manor as allDay
- * markers by their own wing, from a record that lives elsewhere. The Study says
+ * Homework due-days, exam days, paydays, milestone days and a workshop task's
+ * delivery deadline are drawn onto the Manor as allDay markers by their own
+ * wing, from a record that lives elsewhere. The Study says
  * it outright: "The records here are the truth; markers are a projection."
  * A logged workout's training block is the same bargain in a timed shape — the
  * workout is the record, the block on the week is drawn from it.
@@ -30,7 +31,7 @@ import type { CalendarEvent } from '../events/types'
  * storage key names, and the same one that keeps this file honest: it is the
  * ONE place both the reader (the registry) and the writer (deleteEvent) agree.
  */
-const PROJECTION_PREFIXES = ['hw:', 'exam:', 'payday:', 'workout:', 'ms:'] as const
+const PROJECTION_PREFIXES = ['hw:', 'exam:', 'payday:', 'workout:', 'ms:', 'due:'] as const
 
 export function isProjection(e: CalendarEvent): boolean {
   if (!e.sourceRef) return false

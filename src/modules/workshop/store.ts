@@ -5,7 +5,18 @@ import { localDayKey } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import { voice } from '../../core/voice'
 import { noteDeleted } from '../../core/sync/intent'
-import { effectiveMsDay, msRef, nextCol, nextRow, projRef, syncMarker } from './lib'
+import {
+  dueMarkerTitle,
+  dueOf,
+  dueRef,
+  effectiveDueDay,
+  effectiveMsDay,
+  msRef,
+  nextCol,
+  nextRow,
+  projRef,
+  syncMarker,
+} from './lib'
 import type {
   Bench,
   BoardCard,
@@ -55,7 +66,7 @@ interface WorkshopState {
     ventureId: string,
     type: CardType,
     title: string,
-    extra?: { body?: string; url?: string; threadTo?: string; parentId?: string },
+    extra?: { body?: string; url?: string; threadTo?: string; parentId?: string; dueAt?: string },
   ) => BoardCard
   updateCard: (id: string, patch: Partial<Omit<BoardCard, 'id' | 'ventureId'>>) => void
   toggleCardDone: (id: string) => void
@@ -84,6 +95,23 @@ interface WorkshopState {
 }
 
 const byOrder = (a: { order: number }, b: { order: number }) => a.order - b.order
+
+/**
+ * Redraw one card's delivery chip on the Manor after it changed. Called for
+ * EVERY card mutation rather than only the obvious one: a deadline leaves the
+ * calendar when the job is struck, when the card is retyped away from a task,
+ * when it is renamed (the chip carries the title) and when it is taken down —
+ * and a chip that outlives its card is exactly the kind of ghost the heal pass
+ * exists to catch after the fact rather than the way it should be avoided.
+ */
+function syncDue(card: BoardCard | undefined): void {
+  if (!card) return
+  syncMarker(
+    dueRef(card.id),
+    effectiveDueDay(card, Date.now()),
+    dueOf(card) ? dueMarkerTitle(card) : '',
+  )
+}
 
 export const useWorkshopStore = create<WorkshopState>()(
   persist(
@@ -131,6 +159,9 @@ export const useWorkshopStore = create<WorkshopState>()(
         for (const m of get().milestones.filter((m) => m.ventureId === id)) {
           syncMarker(msRef(m.id), null, '')
         }
+        for (const c of get().cards.filter((c) => c.ventureId === id && dueOf(c))) {
+          syncMarker(dueRef(c.id), null, '')
+        }
         // the cascade has to be declared in full: a venture's cards, threads
         // and milestones go with it, and each is its own record
         const before = get()
@@ -171,6 +202,8 @@ export const useWorkshopStore = create<WorkshopState>()(
           title,
           body: extra?.body,
           url: extra?.url,
+          // a deadline only ever belongs to a job — see BoardCard.dueAt
+          dueAt: type === 'task' ? extra?.dueAt : undefined,
           parentId,
           col: type === 'title' ? nextCol(mine) : 0,
           row: type === 'title' ? 0 : nextRow(mine, parentId),
@@ -178,16 +211,21 @@ export const useWorkshopStore = create<WorkshopState>()(
         }
         set((s) => ({ cards: [...s.cards, card] }))
         if (extra?.threadTo) get().addThread(ventureId, card.id, extra.threadTo)
+        syncDue(card)
         return card
       },
-      updateCard: (id, patch) =>
+      updateCard: (id, patch) => {
         set((s) => ({
           cards: s.cards.map((c) => (c.id === id ? { ...c, ...patch, id, ventureId: c.ventureId } : c)),
-        })),
-      toggleCardDone: (id) =>
+        }))
+        syncDue(get().cards.find((c) => c.id === id))
+      },
+      toggleCardDone: (id) => {
         set((s) => ({
           cards: s.cards.map((c) => (c.id === id ? { ...c, done: !c.done } : c)),
-        })),
+        }))
+        syncDue(get().cards.find((c) => c.id === id))
+      },
       /**
        * Reordering is a RENUMBER of the destination column, not a swap: the
        * card is spliced in at `index` and every sibling is renumbered 0..n.
@@ -238,6 +276,7 @@ export const useWorkshopStore = create<WorkshopState>()(
         const cut = get().threads.filter((t) => t.from === id || t.to === id)
         noteDeleted('workshop', 'thread', cut.map((t) => t.id))
         noteDeleted('workshop', 'card', [id])
+        syncMarker(dueRef(id), null, '')
         set((s) => ({
           // taking down a heading does NOT take down the work under it: the
           // children come loose and stay on the wall
@@ -390,6 +429,12 @@ if (import.meta.env.DEV) {
   ) {
     const iso = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000).toISOString()
     const dayKey = (inDays: number) => localDayKey(new Date(Date.now() + inDays * 86_400_000))
+    /** a delivery deadline at a local hour, N days from today */
+    const dueIso = (inDays: number, hour: number, min = 0) => {
+      const d = new Date(Date.now() + inDays * 86_400_000)
+      d.setHours(hour, min, 0, 0)
+      return d.toISOString()
+    }
     const vent = (
       id: string,
       name: string,
@@ -431,6 +476,7 @@ if (import.meta.env.DEV) {
         card('demo-card-weigh', 'demo-vent-orni', 'task', 'Weigh the fuselage', 0, 1, {
           parentId: 'demo-title-airframe',
           body: 'Bare frame, no battery. Target is 41 g all in.',
+          dueAt: dueIso(2, 18),
         }),
         card('demo-card-suppliers', 'demo-vent-orni', 'link', 'Spar suppliers shortlist', 0, 2, {
           parentId: 'demo-title-airframe',
@@ -450,6 +496,9 @@ if (import.meta.env.DEV) {
         card('demo-title-flight', 'demo-vent-orni', 'title', 'FLIGHT', 2, 0),
         card('demo-card-servo', 'demo-vent-orni', 'task', 'Re-rig the tail servo', 2, 0, {
           parentId: 'demo-title-flight',
+          // one deadline already missed, so the overdue chip has something to
+          // trail — the same demonstration the overdue milestone makes
+          dueAt: dueIso(-1, 9),
         }),
         card('demo-card-dihedral', 'demo-vent-orni', 'link', 'Dihedral thread — Flite Test', 2, 1, {
           parentId: 'demo-title-flight',

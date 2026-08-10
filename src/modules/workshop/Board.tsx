@@ -14,11 +14,13 @@ import {
   StatusPill,
   Stepper,
   fdate,
+  hhmm,
 } from './bits'
 import {
   boardGroups,
   dayKeyToDate,
   daysUntil,
+  dueRead,
   lifetimeHours,
   nextMilestone,
   pendingMilestones,
@@ -27,7 +29,7 @@ import {
 } from './lib'
 import { useWorkshopStore } from './store'
 import type { BoardGroup } from './lib'
-import type { BoardCard, CardType, Milestone, Venture } from './types'
+import type { BoardCard, CardType, Milestone, Thread, Venture } from './types'
 
 /**
  * THE VENTURE BOARD — the pegboard. Cards hang on a fixed (col, row) grid;
@@ -200,16 +202,22 @@ export function Board({
       ) : (
         <>
           <DesktopBoard
+            ventureId={venture.id}
             groups={groups}
             threads={myThreads}
+            now={now}
             onEdit={openEdit}
             onCreateAt={openCreateAt}
+            butler={butler}
           />
           <MobileBoard
+            ventureId={venture.id}
             groups={groups}
             threads={myThreads}
+            now={now}
             onEdit={openEdit}
             onCreateAt={openCreateAt}
+            butler={butler}
           />
         </>
       )}
@@ -311,6 +319,40 @@ function layout(
   return { cols, w, h }
 }
 
+/**
+ * Run or cut the twine between two cards. The one write behind every thread
+ * gesture — the desktop drag and the phone's two taps both come through here,
+ * so they can never disagree about what landing on an ALREADY threaded card
+ * means. It means take it down: the gesture is its own undo.
+ */
+function runThread(
+  ventureId: string,
+  threads: Thread[],
+  from: string,
+  to: string,
+  butler: (msg: string) => void,
+): void {
+  if (from === to) {
+    butler(voice.workshop.toast.threadSelf)
+    return
+  }
+  const store = useWorkshopStore.getState()
+  const existing = threads.find(
+    (t) => (t.from === from && t.to === to) || (t.from === to && t.to === from),
+  )
+  if (existing) {
+    store.deleteThread(existing.id)
+    butler(voice.workshop.toast.threadCut)
+  } else {
+    store.addThread(ventureId, from, to)
+    butler(voice.workshop.toast.threaded)
+  }
+}
+
+/** is there already twine between these two? — drives the cut/hang affordance */
+const threadedPair = (threads: Thread[], a: string, b: string) =>
+  threads.some((t) => (t.from === a && t.to === b) || (t.from === b && t.to === a))
+
 interface Drag {
   id: string
   /** pointer offset inside the card, in board units */
@@ -319,6 +361,16 @@ interface Drag {
   x: number
   y: number
   moved: boolean
+}
+
+/** a length of twine in flight, from a card's eyelet to wherever the hand is */
+interface TwineDrag {
+  from: string
+  /** pointer position, in board units */
+  x: number
+  y: number
+  /** the card under the pointer, if it is a legal other end */
+  over: string | null
 }
 
 interface Pan {
@@ -340,21 +392,28 @@ const ZOOM_MAX = 1.6
 const VIEW_H = 560
 
 function DesktopBoard({
+  ventureId,
   groups,
   threads,
+  now,
   onEdit,
   onCreateAt,
+  butler,
 }: {
+  ventureId: string
   groups: BoardGroup[]
-  threads: { id: string; from: string; to: string }[]
+  threads: Thread[]
+  now: number
   onEdit: (card: BoardCard) => void
   /** a press on bare board: hang something under this heading, at this place */
   onCreateAt: (parentId: string | undefined, index: number) => void
+  butler: (msg: string) => void
 }) {
   const viewRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef(new Map<string, HTMLDivElement>())
   const [heights, setHeights] = useState<Record<string, number>>({})
   const [drag, setDrag] = useState<Drag | null>(null)
+  const [twine, setTwine] = useState<TwineDrag | null>(null)
   const [pan, setPan] = useState<Pan | null>(null)
   const [view, setView] = useState({ x: 0, y: 0, z: 1 })
 
@@ -439,6 +498,58 @@ function DesktopBoard({
     setDrag(null)
   }
 
+  /* ---------------------------------------------------------- thread drag
+   * A second gesture on the same surface, told apart by where it STARTS: the
+   * eyelet runs twine, the face moves the card, bare board pans the wall.
+   * The eyelet keeps the pointer capture, but capture still bubbles through
+   * the React tree, so the surface below goes on hearing move and up.
+   */
+
+  /** the card whose face covers a board point — headings excluded, as in the
+   *  sheet's picker: a heading is a rail, and twine to a rail says nothing */
+  const cardAt = (x: number, y: number): BoardCard | null => {
+    for (const col of cols) {
+      for (const p of col.children) {
+        if (x >= p.x && x <= p.x + CARD_W && y >= p.y && y <= p.y + p.h) return p.card
+      }
+    }
+    return null
+  }
+
+  const twineDown = (card: BoardCard) => (e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    e.stopPropagation() // never also a card drag, never also a pan
+    const pt = boardPoint(e)
+    try {
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    } catch {
+      // as with the card drag: without capture the gesture ends on pointer-out
+    }
+    setTwine({ from: card.id, x: pt.x, y: pt.y, over: null })
+  }
+
+  const twineMove = (e: React.PointerEvent) => {
+    if (!twine) return
+    const pt = boardPoint(e)
+    const hit = cardAt(pt.x, pt.y)
+    setTwine({ ...twine, x: pt.x, y: pt.y, over: hit && hit.id !== twine.from ? hit.id : null })
+  }
+
+  /** returns true when the press was a thread gesture and is now spent */
+  const twineUp = (): boolean => {
+    if (!twine) return false
+    if (twine.over) runThread(ventureId, threads, twine.from, twine.over, butler)
+    setTwine(null)
+    return true
+  }
+
+  const twineRole = (id: string): ThreadRole => {
+    if (!twine) return 'idle'
+    if (twine.from === id) return 'source'
+    if (twine.over !== id) return 'idle'
+    return threadedPair(threads, twine.from, id) ? 'cut' : 'target'
+  }
+
   /* ------------------------------------------------------------ pan + zoom */
 
   const surfaceDown = (e: React.PointerEvent) => {
@@ -471,6 +582,9 @@ function DesktopBoard({
   const surfaceUp = (e: React.PointerEvent) => {
     const p = pan
     setPan(null)
+    // twine first: the eyelet stopped the press from ever becoming a pan, so
+    // `p` is null here and the bare-board branch below would run regardless
+    if (twineUp()) return
     if (!p || p.moved || drag) return
     const pt = boardPoint(e)
     const t = dropAt(pt.x, pt.y)
@@ -526,9 +640,13 @@ function DesktopBoard({
         onPointerMove={(e) => {
           surfaceMove(e)
           cardMove(e)
+          twineMove(e)
         }}
         onPointerUp={surfaceUp}
-        onPointerCancel={() => setPan(null)}
+        onPointerCancel={() => {
+          setPan(null)
+          setTwine(null)
+        }}
         className="relative overflow-hidden"
         style={{ height: VIEW_H, cursor: pan?.moved ? 'grabbing' : 'grab', ...PEGBOARD_BG }}
       >
@@ -605,10 +723,52 @@ function DesktopBoard({
                     transition: dragging ? 'none' : 'left 180ms ease-out, top 180ms ease-out',
                   }}
                 >
-                  <CardFace card={p.card} groupIndex={ci} />
+                  <CardFace
+                    card={p.card}
+                    groupIndex={ci}
+                    now={now}
+                    thread={
+                      p.card.type === 'title'
+                        ? undefined
+                        : { role: twineRole(p.card.id), onPointerDown: twineDown(p.card) }
+                    }
+                  />
                 </div>
               )
             }),
+          )}
+
+          {/* the twine in flight — a straight pull from the eyelet to the hand.
+              Right angles are what a HUNG thread looks like; a taut line is
+              what one being run looks like, and the difference is the point. */}
+          {twine && (
+            <svg
+              width={boardW}
+              height={boardH}
+              viewBox={`0 0 ${boardW} ${boardH}`}
+              className="pointer-events-none absolute inset-0"
+              style={{ zIndex: 40 }}
+              fill="none"
+              aria-hidden
+            >
+              {(() => {
+                const a = cardPos(cols, twine.from)
+                return (
+                  <>
+                    <path
+                      d={`M${a.x} ${a.y + a.h / 2} L${twine.x} ${twine.y}`}
+                      stroke={twine.over && threadedPair(threads, twine.from, twine.over)
+                        ? 'var(--color-danger)'
+                        : COPPER}
+                      strokeWidth="2"
+                      strokeDasharray="7 5"
+                      strokeOpacity="0.85"
+                    />
+                    <rect x={twine.x - 3.5} y={twine.y - 3.5} width="7" height="7" fill={COPPER} />
+                  </>
+                )
+              })()}
+            </svg>
           )}
         </div>
 
@@ -623,8 +783,10 @@ function DesktopBoard({
 
         {/* a press and a drag on the same surface do different things, and
             neither leaves a mark — so the board says so, once, quietly */}
-        <div className="pointer-events-none absolute bottom-3 left-4 text-[10.5px] italic text-ink-faint">
+        <div className="pointer-events-none absolute bottom-3 left-4 max-w-[60%] text-[10.5px] italic leading-snug text-ink-faint">
           {voice.workshop.board.pressHint}
+          <br />
+          {voice.workshop.board.threadHint}
         </div>
       </div>
     </div>
@@ -752,9 +914,32 @@ function Threads({
   )
 }
 
+/** how a card is taking part in a thread gesture right now */
+type ThreadRole = 'idle' | 'source' | 'target' | 'cut'
+
+interface ThreadHandle {
+  role: ThreadRole
+  /** desktop: the eyelet is dragged */
+  onPointerDown?: (e: React.PointerEvent) => void
+  /** phone: the eyelet is tapped to arm, then the other card is tapped */
+  onClick?: (e: React.MouseEvent) => void
+}
+
 /** one hung card: peg tabs, type label, state square, title, body/url */
-function CardFace({ card, groupIndex = 0 }: { card: BoardCard; groupIndex?: number }) {
+function CardFace({
+  card,
+  groupIndex = 0,
+  now,
+  thread,
+}: {
+  card: BoardCard
+  groupIndex?: number
+  /** ticking now, for a deadline's reading — omitted where none is shown */
+  now?: number
+  thread?: ThreadHandle
+}) {
   const done = card.type === 'task' && card.done
+  const due = now != null ? dueRead(card, now) : null
 
   // A heading is not a card, it is a rail: no peg tabs, no state square, a
   // copper underline and the name in display type. Making it look like the
@@ -777,12 +962,24 @@ function CardFace({ card, groupIndex = 0 }: { card: BoardCard; groupIndex?: numb
     )
   }
 
+  // the card owns the outline while a thread is being run to it: copper to
+  // hang one, danger to cut the one that is already there
+  const ring =
+    thread?.role === 'target'
+      ? { borderColor: COPPER, boxShadow: '0 0 0 2px var(--glow-workshop)' }
+      : thread?.role === 'cut'
+        ? { borderColor: 'var(--color-danger)', boxShadow: 'none' }
+        : thread?.role === 'source'
+          ? { borderColor: COPPER, boxShadow: 'none' }
+          : {}
+
   return (
     <div
       className="relative rounded-[2px] border border-line px-3.5 py-3"
       style={{
         background: 'color-mix(in srgb, var(--color-panel) 82%, var(--color-bg))',
         opacity: done ? 0.45 : 1,
+        ...ring,
       }}
     >
       <span
@@ -790,6 +987,27 @@ function CardFace({ card, groupIndex = 0 }: { card: BoardCard; groupIndex?: numb
         className="absolute -top-[10px] left-[24%] h-[11px] w-[9px] rounded-[1px] border"
         style={{ background: 'var(--color-panel-3)', borderColor: 'var(--color-line)' }}
       />
+      {/* THE EYELET — where twine is picked up. It sits half off the card's
+          left edge, in the gutter the threads already run through, so it reads
+          as hardware rather than as another control on the face. `data-nodrag`
+          keeps a press here from also dragging the card. */}
+      {thread && (
+        <button
+          type="button"
+          data-nodrag
+          aria-label={voice.workshop.board.threadFrom}
+          onPointerDown={thread.onPointerDown}
+          onClick={thread.onClick}
+          className="absolute -left-[8px] top-1/2 h-[15px] w-[15px] -translate-y-1/2 rounded-full border-2 transition-all after:absolute after:-inset-3 after:content-[''] hover:scale-110"
+          style={{
+            borderColor: COPPER,
+            background:
+              thread.role === 'source' ? COPPER : 'color-mix(in srgb, var(--color-bg) 88%, transparent)',
+            opacity: thread.role === 'idle' ? 0.6 : 1,
+            cursor: 'crosshair',
+          }}
+        />
+      )}
       <span
         aria-hidden
         className="absolute -top-[10px] right-[24%] h-[11px] w-[9px] rounded-[1px] border"
@@ -845,6 +1063,30 @@ function CardFace({ card, groupIndex = 0 }: { card: BoardCard; groupIndex?: numb
           {voice.workshop.board.done}
         </div>
       )}
+      {/* the promise, with its hour. A missed one turns danger and keeps
+          saying so; a struck job shows nothing, because the deadline it was
+          racing no longer has a claim on anyone. */}
+      {!done && due && (
+        <div
+          className="mt-1.5 inline-flex items-center gap-1.5 rounded-[2px] border px-2 py-[3px] font-display text-[9.5px] font-semibold tracking-[0.12em] [font-variant-numeric:tabular-nums]"
+          style={{
+            borderColor: due.overdue
+              ? 'color-mix(in srgb, var(--color-danger) 55%, transparent)'
+              : 'color-mix(in srgb, var(--color-w-workshop) 40%, transparent)',
+            color: due.overdue ? 'var(--color-danger)' : due.days <= 1 ? COPPER : 'var(--color-ink-dim)',
+            background: due.overdue
+              ? 'color-mix(in srgb, var(--color-danger) 10%, transparent)'
+              : 'transparent',
+          }}
+        >
+          {voice.workshop.due.chip({
+            date: fdate(due.at),
+            time: hhmm(due.at),
+            days: due.days,
+            overdue: due.overdue,
+          })}
+        </div>
+      )}
       {/* a struck job hides its detail: the card has said the only thing that
           still matters about it, and the wall stays readable */}
       {!done && card.type !== 'link' && card.body && (
@@ -879,28 +1121,87 @@ function CardFace({ card, groupIndex = 0 }: { card: BoardCard; groupIndex?: numb
  * is a worse way to read the same cards.
  */
 function MobileBoard({
+  ventureId,
   groups,
   threads,
+  now,
   onEdit,
   onCreateAt,
+  butler,
 }: {
+  ventureId: string
   groups: BoardGroup[]
-  threads: { id: string; from: string; to: string }[]
+  threads: Thread[]
+  now: number
   onEdit: (card: BoardCard) => void
   onCreateAt: (parentId: string | undefined, index: number) => void
+  butler: (msg: string) => void
 }) {
   const [page, setPage] = useState(0)
   const [z, setZ] = useState(1)
+  /**
+   * The phone threads in TWO TAPS, not by dragging: a column here is a snap
+   * page, so a drag either fights the pager or can only ever reach the cards
+   * already on screen — and the pair worth threading is usually on two
+   * different pages. Arming survives a swipe; a tap on the far card finishes.
+   */
+  const [armed, setArmed] = useState<string | null>(null)
   const scroller = useRef<HTMLDivElement | null>(null)
-  const linked = (a: BoardCard, b: BoardCard) =>
-    threads.some(
-      (t) => (t.from === a.id && t.to === b.id) || (t.from === b.id && t.to === a.id),
-    )
+  const linked = (a: BoardCard, b: BoardCard) => threadedPair(threads, a.id, b.id)
 
   const zoomBy = (f: number) => setZ((v) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v * f)))
 
+  /** a tap on a card: the far end of an armed thread, or the editor as usual */
+  const tapCard = (card: BoardCard) => {
+    if (!armed) {
+      onEdit(card)
+      return
+    }
+    if (armed !== card.id) {
+      navigator.vibrate?.(6)
+      runThread(ventureId, threads, armed, card.id, butler)
+    }
+    setArmed(null)
+  }
+
+  /**
+   * Only two cards ever light up while armed: the one twine is coming FROM,
+   * and any card a tap would CUT rather than join. Ringing every other card as
+   * a target would be true and useless — while armed, every card is a target.
+   */
+  const mobileRole = (id: string): ThreadRole => {
+    if (!armed) return 'idle'
+    if (armed === id) return 'source'
+    return threadedPair(threads, armed, id) ? 'cut' : 'idle'
+  }
+
   return (
     <div className="trough relative md:hidden" style={PEGBOARD_BG}>
+      {/* armed: the wall says what it is waiting for, and how to call it off.
+          It sits at the TOP — the bottom already holds the pager dots and the
+          zoom trio — and it takes its own height rather than floating over the
+          page, because the thing it would cover is the column's own heading. */}
+      {armed && (
+        <div
+          className="flex items-center gap-3 px-4 py-2.5"
+          style={{
+            background: 'color-mix(in srgb, var(--color-w-workshop) 16%, var(--color-panel))',
+            borderBottom: `1.5px solid ${COPPER}`,
+          }}
+        >
+          <span className="font-display text-[10.5px] font-semibold tracking-[0.12em] text-ink">
+            {voice.workshop.board.threadPick}
+          </span>
+          <button
+            type="button"
+            onClick={() => setArmed(null)}
+            className="ml-auto rounded-pill border px-3 py-1.5 font-display text-[9.5px] font-bold tracking-[0.14em] text-ink-dim"
+            style={{ borderColor: 'var(--color-line)' }}
+          >
+            {voice.workshop.board.threadStop}
+          </button>
+        </div>
+      )}
       {/* bottom-right, not top: it is where a thumb already is, and the top of
           every page belongs to that column's heading */}
       <div className="absolute bottom-2.5 right-2.5 z-10">
@@ -972,17 +1273,30 @@ function MobileBoard({
                   <div
                     role="button"
                     tabIndex={0}
-                    onClick={() => onEdit(c)}
+                    onClick={() => tapCard(c)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        onEdit(c)
+                        tapCard(c)
                       }
                     }}
                     className={`block w-full cursor-pointer text-left ${k > 0 ? '' : 'mt-0'}`}
                     style={k > 0 ? undefined : { marginTop: 0 }}
                   >
-                    <CardFace card={c} />
+                    <CardFace
+                      card={c}
+                      now={now}
+                      thread={{
+                        role: mobileRole(c.id),
+                        onClick: (e) => {
+                          // the eyelet arms and disarms; the card behind it
+                          // must not open its editor under the tap
+                          e.stopPropagation()
+                          navigator.vibrate?.(6)
+                          setArmed((a) => (a === c.id ? null : c.id))
+                        },
+                      }}
+                    />
                   </div>
                   {k < g.children.length - 1 && !linked(c, g.children[k + 1]) && (
                     <div className="h-3" />
@@ -1029,6 +1343,36 @@ function MobileBoard({
 
 /* ---------------------------------------------------------------- sheets */
 
+/**
+ * A deadline is edited as a DAY and an HOUR and stored as one instant. The
+ * split is only the input's — two native pickers get the phone's own date and
+ * time wheels for free, where one `datetime-local` gets a cramped hybrid.
+ */
+const dueParts = (iso?: string): { date: string; time: string } => {
+  if (!iso) return { date: '', time: '' }
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return { date: '', time: '' }
+  return { date: localDayKey(d), time: hhmm(d) }
+}
+
+/** the pair back into an instant — parsed as LOCAL time, never `new Date(str)` */
+const dueInstant = (date: string, time: string): string | undefined => {
+  if (!date) return undefined
+  const [y, m, d] = date.split('-').map(Number)
+  const [hh, mm] = (time || '18:00').split(':').map(Number)
+  if (!y || !m || !d || Number.isNaN(hh) || Number.isNaN(mm)) return undefined
+  const at = new Date(y, m - 1, d, hh, mm, 0, 0)
+  return Number.isNaN(at.getTime()) ? undefined : at.toISOString()
+}
+
+/** what a deadline defaults to: the next 18:00 that hasn't happened yet */
+const nextEvening = (now: number): Date => {
+  const d = new Date(now)
+  d.setHours(18, 0, 0, 0)
+  if (d.getTime() <= now) d.setDate(d.getDate() + 1)
+  return d
+}
+
 function HangCardSheet({
   open,
   onClose,
@@ -1055,6 +1399,8 @@ function HangCardSheet({
   const [url, setUrl] = useState('')
   const [threadTo, setThreadTo] = useState('')
   const [parentId, setParentId] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [dueTime, setDueTime] = useState('')
 
   // (re)seed on open — a fresh hang or the tapped card's current state
   useEffect(() => {
@@ -1064,6 +1410,9 @@ function HangCardSheet({
     setBody(editing?.body ?? '')
     setUrl(editing?.url ?? '')
     setThreadTo('')
+    const due = dueParts(editing?.dueAt)
+    setDueDate(due.date)
+    setDueTime(due.time)
     // a press on the board already answered "under which heading"
     setParentId(editing?.parentId ?? placeAt?.parentId ?? '')
   }, [open, editing, placeAt])
@@ -1085,9 +1434,13 @@ function HangCardSheet({
     // a link carries an address, everything else carries prose — and the
     // unused half is cleared, so switching a card's type cannot leave the old
     // one's field behind to reappear if it is switched back
+    // a deadline is a job's business only — retyping a task to a note takes
+    // its chip off the Manor rather than leaving an orphan behind it
+    const dueAt = type === 'task' ? dueInstant(dueDate, dueTime) : undefined
     const extra = {
       body: type === 'link' ? undefined : body.trim() || undefined,
       url: type === 'link' ? url.trim() || undefined : undefined,
+      dueAt,
     }
     // a heading never hangs under anything — see BoardCard.parentId
     const under = type === 'title' ? undefined : parentId || undefined
@@ -1099,7 +1452,17 @@ function HangCardSheet({
         store.placeCard(editing.id, under, Number.MAX_SAFE_INTEGER)
       }
       if (threadTo) store.addThread(venture.id, editing.id, threadTo)
-      butler(threadTo ? voice.workshop.toast.threaded : voice.workshop.toast.renamed)
+      // the toast names the thing that CHANGED, deadline included — "Renamed"
+      // over a card whose deadline was just cleared is a small lie
+      butler(
+        threadTo
+          ? voice.workshop.toast.threaded
+          : dueAt && !editing.dueAt
+            ? voice.workshop.toast.dueSet
+            : !dueAt && editing.dueAt
+              ? voice.workshop.toast.dueCleared
+              : voice.workshop.toast.renamed,
+      )
     } else {
       const made = store.addCard(venture.id, type, trimmed, {
         ...extra,
@@ -1161,6 +1524,59 @@ function HangCardSheet({
             rows={2}
             className="w-full resize-none rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
           />
+        </>
+      )}
+      {/* ------------------------------------------------------- the deadline
+          A job may or may not be a delivery, so the field is not there until
+          it is asked for: a date input sitting empty on every card would
+          suggest every job wants a day, and most do not. */}
+      {type === 'task' && (
+        <>
+          <SheetLabel>{voice.workshop.due.label}</SheetLabel>
+          {!dueDate ? (
+            <button
+              type="button"
+              onClick={() => {
+                const d = nextEvening(Date.now())
+                setDueDate(localDayKey(d))
+                setDueTime(hhmm(d))
+              }}
+              className="rounded-pill border px-3.5 py-2 font-display text-[10px] font-bold tracking-[0.14em] transition-colors"
+              style={{ borderColor: COPPER, color: COPPER }}
+            >
+              {voice.workshop.due.set}
+            </button>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  aria-label={voice.workshop.due.dateLabel}
+                  className="rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none [font-variant-numeric:tabular-nums]"
+                />
+                <input
+                  type="time"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  aria-label={voice.workshop.due.timeLabel}
+                  className="rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none [font-variant-numeric:tabular-nums]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDueDate('')
+                    setDueTime('')
+                  }}
+                  className="rounded-pill border border-line px-3 py-2 font-display text-[9.5px] font-semibold tracking-[0.14em] text-ink-faint transition-colors hover:text-danger"
+                >
+                  {voice.workshop.due.clear}
+                </button>
+              </div>
+              <div className="mt-2 text-xs italic text-ink-dim">{voice.workshop.due.hint}</div>
+            </>
+          )}
         </>
       )}
       {type === 'link' && (

@@ -105,7 +105,7 @@ export function WorkshopScreen() {
   useEffect(() => {
     const events = useEventsStore.getState()
     const ws = useWorkshopStore.getState()
-    reconcileMarkers(ws.milestones, Date.now())
+    reconcileMarkers(ws.milestones, ws.cards, Date.now())
     if (!events.sandbox) ws.pruneSessions(events.events.map((e) => e.id))
   }, [])
 

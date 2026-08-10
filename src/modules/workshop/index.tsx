@@ -46,15 +46,15 @@ function Tile() {
 }
 
 /** One line on the Manor, pressing matters first. Also hosts the marker
- *  reconcile: it mounts wherever the Manor renders, so milestone chips heal
- *  and overdue ones trail to today even if the wing is never opened. */
+ *  reconcile: it mounts wherever the Manor renders, so milestone and delivery
+ *  chips heal and overdue ones trail to today even if the wing is never opened. */
 function Briefing() {
   const ventures = useWorkshopStore((s) => s.ventures)
 
   useEffect(() => {
     const store = useEventsStore.getState()
     const ws = useWorkshopStore.getState()
-    reconcileMarkers(ws.milestones, Date.now())
+    reconcileMarkers(ws.milestones, ws.cards, Date.now())
     if (!store.sandbox) ws.pruneSessions(store.events.map((e) => e.id))
   }, [])
 

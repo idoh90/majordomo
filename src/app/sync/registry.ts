@@ -266,8 +266,10 @@ const workshopSource: SyncSource = {
       sessions: mergeMap<WorkshopSessionMeta>(s.sessions, of(records, 'session')),
     }))
     // markers are never carried — this device draws its own from the
-    // milestones that just arrived (sandbox-guarded inside, engine muted)
-    reconcileWorkshopMarkers(useWorkshopStore.getState().milestones, Date.now())
+    // milestones and dated cards that just arrived (sandbox-guarded inside,
+    // engine muted)
+    const w = useWorkshopStore.getState()
+    reconcileWorkshopMarkers(w.milestones, w.cards, Date.now())
   },
 }
 

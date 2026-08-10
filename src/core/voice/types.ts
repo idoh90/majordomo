@@ -14,6 +14,11 @@ export interface BriefingChip {
   value: string
 }
 
+/** The body map's volume bands, restated here because core may not import a
+ *  console module. It must stay in step with VolumeStatus in
+ *  modules/training/lib/volume.ts — the map passes one straight in as a key. */
+export type VolumeBand = 'none' | 'under' | 'optimal' | 'pushing' | 'over'
+
 /** what the Watch knows about its own week when it reports in */
 export interface WatchBriefingFacts {
   doneH: number
@@ -641,6 +646,17 @@ export interface VoicePack {
     /** body map: the idle info line per mode, and the over-volume hint */
     mapIdleStrain: string
     mapIdleVolume: string
+    /** the tapped-muscle readout in volume mode. `band` is the prose status
+     *  word, `trend` the comparison with the muscle's own usual week — null
+     *  when there isn't enough history to compare against */
+    mapVolume: (v: { muscle: string; sets: number; band: string; trend: string | null }) => string
+    /** what each volume band is called in prose (the readout, and the
+     *  ledger's screen-reader text) */
+    volumeLabel: Record<VolumeBand, string>
+    /** the same bands as legend ticks — short enough to sit under a gradient */
+    volumeLegend: Record<Exclude<VolumeBand, 'none'>, string>
+    /** how this window compares with the muscle's own four-week average */
+    volumeTrend: Record<'above' | 'usual' | 'below', string>
     deloadTitle: string
     deload: (v: { count: number; muscles: string }) => string
     /** most-trained chart — lifting only, so it says so */
@@ -872,9 +888,28 @@ export interface VoicePack {
       loose: string
       hangHere: string
       pressHint: string
+      /** the second half of the hint: the eyelet, and what dragging it does */
+      threadHint: string
       zoomIn: string
       zoomOut: string
       zoomReset: string
+      /** the eyelet on a card — where a thread is picked up */
+      threadFrom: string
+      /** armed on the phone, waiting for the other end to be tapped */
+      threadPick: string
+      threadStop: string
+    }
+    /** a task's delivery deadline — date AND hour, unlike a milestone's day */
+    due: {
+      label: string
+      none: string
+      set: string
+      clear: string
+      dateLabel: string
+      timeLabel: string
+      hint: string
+      /** the chip on the card: `days` buckets the day, `overdue` the moment */
+      chip: (v: { date: string; time: string; days: number; overdue: boolean }) => string
     }
     emptyWing: string
     sheet: {
@@ -938,6 +973,10 @@ export interface VoicePack {
       titleHung: string
       cardGone: string
       threaded: string
+      threadCut: string
+      threadSelf: string
+      dueSet: string
+      dueCleared: string
       msAdded: string
       msDone: string
       msUndone: string
@@ -948,6 +987,8 @@ export interface VoicePack {
     }
     /** Manor marker-chip title */
     markerMs: (title: string) => string
+    /** Manor marker-chip title for a delivery — carries the promised hour */
+    markerDue: (title: string, time: string) => string
     archiveTitle: string
     archiveBody: (name: string) => string
     archiveYes: string

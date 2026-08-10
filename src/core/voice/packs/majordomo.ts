@@ -288,7 +288,7 @@ export const majordomoPack: VoicePack = {
       hotNow: 'HOT NOW',
       hotNowValue: ({ hot, total }) => `${hot} of ${total}`,
       colStrain: 'strain',
-      colSets: 'sets · this week',
+      colSets: 'sets · 7 days',
       sets: (n) => `~${n} ${plural(n, 'set', 'sets')}`,
       peak: 'Hottest now',
       expandLabel: (total) => `All ${total}`,
@@ -490,10 +490,32 @@ export const majordomoPack: VoicePack = {
     // device-neutral: one info line renders under a mouse as often as a thumb,
     // and unlike the history empty state there is no second element to swap
     mapIdleStrain: 'Select a muscle for details',
-    mapIdleVolume: 'Weekly volume vs your targets',
+    mapIdleVolume: 'Last 7 days of volume against each muscle’s range',
+    mapVolume: ({ muscle, sets, band, trend }) =>
+      [`${muscle} — ~${sets} ${plural(sets, 'set', 'sets')} in 7 days`, band, trend]
+        .filter(Boolean)
+        .join(' · '),
+    volumeLabel: {
+      none: 'nothing logged',
+      under: 'under its range',
+      optimal: 'in range',
+      pushing: 'past the range',
+      over: 'at the ceiling',
+    },
+    volumeLegend: {
+      under: 'Under',
+      optimal: 'In range',
+      pushing: 'Pushing',
+      over: 'Ceiling',
+    },
+    volumeTrend: {
+      above: 'above your usual',
+      usual: 'about your usual',
+      below: 'below your usual',
+    },
     deloadTitle: 'Deload check',
     deload: ({ count, muscles }) =>
-      `${count} muscles have had too much this week (${muscles}). A lighter session or an extra rest day would settle them.`,
+      `${count} muscles have had too much in the last seven days (${muscles}). A lighter session or an extra rest day would settle them.`,
     topMusclesTitle: 'Most Trained · 30d',
     topMusclesNote: 'Lifting only. Runs affect recovery, not this chart.',
     topMusclesEmpty: 'No lifting volume yet',
@@ -833,9 +855,30 @@ export const majordomoPack: VoicePack = {
       hangHere: '+ HANG ONE HERE',
       /** the hint under the board on desktop, where the gesture is invisible */
       pressHint: 'Press bare board to hang a card there. Drag it to move the wall.',
+      threadHint: "Drag a card's eyelet onto another to thread them, or onto a threaded one to cut it.",
       zoomIn: 'Closer',
       zoomOut: 'Further back',
       zoomReset: 'Back to full size',
+      threadFrom: 'Thread from this card',
+      threadPick: 'Now tap the other card.',
+      threadStop: 'STOP',
+    },
+    due: {
+      label: 'DELIVERY',
+      none: 'No deadline',
+      set: '+ SET A DEADLINE',
+      clear: 'NO DEADLINE',
+      dateLabel: 'DAY',
+      timeLabel: 'HOUR',
+      hint: "A deadline takes a chip on the Manor's week, sir. Struck jobs give theirs up.",
+      chip: ({ date, time, days, overdue }) =>
+        overdue
+          ? `OVERDUE · ${date} ${time}`
+          : days === 0
+            ? `DUE TODAY · ${time}`
+            : days === 1
+              ? `DUE TOMORROW · ${time}`
+              : `DUE ${date} · ${time}`,
     },
     emptyWing: 'The workshop stands ready, sir. Begin with a venture.',
     sheet: {
@@ -902,6 +945,10 @@ export const majordomoPack: VoicePack = {
       titleHung: 'A heading. Hang the work under it.',
       cardGone: 'Taken down.',
       threaded: 'Threaded.',
+      threadCut: 'Thread cut.',
+      threadSelf: 'A card cannot thread to itself, sir.',
+      dueSet: 'Noted. The chip has its day on the Manor.',
+      dueCleared: 'No deadline. The chip leaves the Manor.',
       msAdded: 'Marked. The chip has its day on the Manor.',
       msDone: 'Struck. The chip leaves the Manor.',
       msUndone: 'Back on the board.',
@@ -911,6 +958,7 @@ export const majordomoPack: VoicePack = {
       titleFirst: 'It needs a title first.',
     },
     markerMs: (title) => title,
+    markerDue: (title, time) => `${title} · ${time}`,
     archiveTitle: 'Archive this venture?',
     archiveBody: (name) => `${name} keeps its hours and its board. It just leaves the shelf.`,
     archiveYes: 'Archive',
@@ -1659,9 +1707,9 @@ export const majordomoPack: VoicePack = {
     },
     grounds: {
       bodyMap:
-        'Each muscle is coloured by what it’s still carrying — hot where the work landed, cooling over days. Tap one for its own reading. The toggle swaps recent strain for this week’s volume.',
+        'Each muscle is coloured by what it’s still carrying — hot where the work landed, cooling over days. Tap one for its own reading. The toggle swaps recent strain for the last seven days’ volume, where each muscle is shaded against its own range rather than a shared number.',
       ledger:
-        'The body map as a table: each muscle’s strain next to its estimated hard sets this week, for when you want the number and not the colour.',
+        'The body map as a table: each muscle’s strain next to its estimated hard sets over the last seven days, for when you want the number and not the colour.',
       weekGoal:
         'Sessions logged this week against the target you set. Runs still feed strain, but they don’t count here — this counts lifting.',
       weekChart:

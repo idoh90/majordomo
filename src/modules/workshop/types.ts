@@ -53,6 +53,14 @@ export interface BoardCard {
   url?: string
   /** task state */
   done?: boolean
+  /**
+   * A TASK's delivery deadline — an ISO instant, so the hour is part of it
+   * ("Friday, 18:00", not "Friday"). It projects a Manor marker on its local
+   * day (`due:<cardId>`); an overdue one trails to today the way a milestone
+   * does, and a struck job gives its chip up. Only ever set on `type: 'task'`;
+   * the sheet clears it when a card is switched to another type.
+   */
+  dueAt?: string
   /** the `title` card this one hangs under; unset = loose. A title card never
    *  has one — a heading under a heading is a tree, and this is a wall. */
   parentId?: string
