@@ -82,6 +82,12 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  /* kills double-tap-to-zoom app-wide (and with it the 300 ms tap delay that
+     waits to find out). The effective touch-action is the intersection all the
+     way up the ancestor chain, so declaring it here covers every descendant;
+     a subtree that needs less still narrows it locally. Pinch is refused in
+     JS — see core/ui/zoomLock.ts for why CSS cannot do that part. */
+  touch-action: manipulation;
 }
 
 body {

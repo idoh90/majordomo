@@ -12,6 +12,7 @@ import '@fontsource/source-sans-3/700.css'
 import './core/ui/index.css'
 import App from './app/App'
 import { applySkin } from './core/ui/skins'
+import { lockZoom } from './core/ui/zoomLock'
 import { voice } from './core/voice'
 import { initAuth } from './core/auth/store'
 import { initSync } from './app/sync/init'
@@ -29,6 +30,9 @@ if (import.meta.env.VITE_FOUNDER_SKIN === '1') {
 // don't flash Midnight on load
 applySkin(useShellStore.getState().skin)
 document.title = voice.appName
+// the viewport is the app's own, not a document's: no pinch, no double-tap
+// zoom. The Workshop's board keeps a zoom of its own and handles the gesture.
+lockZoom()
 
 // The registry, wired at module scope (an effect would double-invoke under
 // StrictMode). Nothing waits on it: the app renders from localStorage exactly
