@@ -104,6 +104,21 @@ export function TabBar({ view, onNav }: { view: string; onNav: (view: string) =>
           backdropFilter: 'blur(10px)',
           WebkitBackdropFilter: 'blur(10px)',
           paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
+          /* Pinned to its own compositing layer, deliberately.
+             A `position: fixed` bar that also carries a backdrop-filter is the
+             one combination iOS Safari is known to re-composite against the
+             SCROLLING content instead of the viewport — the bar then drifts
+             upward as the page moves, which is precisely the reported symptom
+             and one that reproduces on no engine I can drive here (Chrome
+             desktop and Chrome mobile emulation both hold it steady, in layout
+             and in hit-testing, on dev and on production).
+             Promoting the layer up front takes the bar out of that path: the
+             blur is then composited once rather than re-evaluated against
+             whatever is sliding beneath it. `translateZ(0)` is safe here only
+             because the fold's scrim is a SIBLING — a transform would
+             otherwise make this element the containing block for it. */
+          transform: 'translateZ(0)',
+          willChange: 'transform',
         }}
       >
         {wingsOpen && (
