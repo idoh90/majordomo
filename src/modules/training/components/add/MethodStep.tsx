@@ -1,4 +1,5 @@
 import { voice } from '../../../../core/voice'
+import { SPORT_DOOR_OPEN } from '../../data/sports'
 
 interface MethodStepProps {
   onChoose: (method: 'ppl' | 'custom' | 'run' | 'sport') => void
@@ -22,12 +23,9 @@ export function MethodStep({ onChoose }: MethodStepProps) {
         caption="Distance and pace. Feeds recovery, not the weekly count."
         onClick={() => onChoose('run')}
       />
-      {/* OTHER SPORT is DEV-ONLY for now: the flow works, but the sport roster
-          and its muscle maps want more work before they ship. Only the DOOR is
-          shut — every read path (history, the strain engine, the Manor block)
-          still understands a sport session, so one logged before this went dark
-          still reads correctly rather than turning into a nameless record. */}
-      {import.meta.env.DEV && (
+      {/* OTHER SPORT is DEV-only for now — see SPORT_DOOR_OPEN for why, and for
+          what stays reachable regardless */}
+      {SPORT_DOOR_OPEN && (
         <Choice
           title={voice.grounds.sport.methodTitle}
           caption={voice.grounds.sport.methodCaption}

@@ -118,6 +118,19 @@ export const SPORT_MAP: Record<
 /** picker order — combat first (the house's own sports), then the rest */
 export const SPORT_IDS = Object.keys(SPORT_MAP) as SportId[]
 
+/**
+ * Whether a sport session can be COMPOSED — the method-step door and the
+ * picker behind it. Shut in production until the roster and its muscle maps
+ * are finished; the whole flow stays reachable in dev while that work happens.
+ *
+ * It gates composing only. Reading a sport session — history, the detail
+ * sheet, the Manor block, the strain engine — is never gated: one logged while
+ * the door was open must keep naming its sport, not decay into a nameless
+ * record. Every gate in the add sheet reads THIS constant, so the door and the
+ * picker can never disagree about whether the flow exists.
+ */
+export const SPORT_DOOR_OPEN = import.meta.env.DEV
+
 /** the session's sport name, defensive against a hand-edited import */
 export function sportLabel(w: Pick<Workout, 'sport'>): string {
   const kind = w.sport?.kind

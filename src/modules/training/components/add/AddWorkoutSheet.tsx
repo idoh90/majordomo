@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef } from 'react'
 import type { MuscleId, PplType, RepStyle, SportId, Workout } from '../../types'
 import { PPL_MAP, RUN_MAP } from '../../data/muscles'
-import { SPORT_MAP } from '../../data/sports'
+import { SPORT_DOOR_OPEN, SPORT_MAP } from '../../data/sports'
 import { makeId, useWorkoutStore } from '../../store'
 import { linkedEventIds, rankTrainingEventMatches } from '../../lib/fulfillment'
 import { useEventsStore } from '../../../../core/events/store'
@@ -78,7 +78,9 @@ function reducer(d: Draft, a: Action): Draft {
       if (a.method === 'ppl') return { ...d, method: 'ppl', step: 'ppl' }
       if (a.method === 'run')
         return { ...d, method: 'run', selection: runSelection(), repStyle: 'light', step: 'run' }
-      if (a.method === 'sport') return { ...d, method: 'sport', step: 'sport' }
+      // the two ways into the sport step, both sealed while the door is shut,
+      // so no build can reach a step it has no picker for (the other is 'back')
+      if (a.method === 'sport') return SPORT_DOOR_OPEN ? { ...d, method: 'sport', step: 'sport' } : d
       return { ...d, method: 'custom', step: 'muscles' }
     case 'ppl': {
       const selection: Selection = {}
@@ -104,7 +106,13 @@ function reducer(d: Draft, a: Action): Draft {
     case 'continue':
       return { ...d, step: 'effort' }
     case 'back':
-      if (d.step === 'effort')
+      if (d.step === 'effort') {
+        // editing an existing sport session while the door is shut: the picker
+        // it would step back to does not exist in this build, and stepping to
+        // 'method' instead would offer to silently re-cast the record as a run.
+        // Nothing behind it, so nothing happens — the header hides the control
+        // to match (see `canBack`).
+        if (d.method === 'sport' && !SPORT_DOOR_OPEN) return d
         return {
           ...d,
           step:
@@ -116,6 +124,7 @@ function reducer(d: Draft, a: Action): Draft {
                   ? 'sport'
                   : 'muscles',
         }
+      }
       if (d.step === 'ppl' || d.step === 'muscles' || d.step === 'run' || d.step === 'sport')
         return { ...d, step: 'method' }
       return d
@@ -406,10 +415,16 @@ export function AddWorkoutSheet({
     [draft.performedAt, draft.effort, draft.strainFeel, draft.repStyle],
   )
 
+  /** a Back control is only drawn where there is a step behind — the method
+   *  step is the first, and a sport session's picker is shut in this build,
+   *  so the arrow must not promise a move the reducer will refuse */
+  const canBack =
+    draft.step !== 'method' && !(draft.step === 'effort' && draft.method === 'sport' && !SPORT_DOOR_OPEN)
+
   return (
     <Sheet open={open} onClose={onClose} dirty={dirty}>
       <div className="mb-4 flex items-center gap-2">
-        {draft.step !== 'method' && (
+        {canBack && (
           <button
             type="button"
             aria-label="Back"
