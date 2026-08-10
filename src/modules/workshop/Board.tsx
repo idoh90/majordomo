@@ -612,12 +612,14 @@ function DesktopBoard({
           )}
         </div>
 
-        <ZoomControls
-          zoom={view.z}
-          onIn={() => zoomAt(1.15)}
-          onOut={() => zoomAt(1 / 1.15)}
-          onReset={() => setView({ x: 0, y: 0, z: 1 })}
-        />
+        <div className="absolute right-3 top-3">
+          <ZoomControls
+            zoom={view.z}
+            onIn={() => zoomAt(1.15)}
+            onOut={() => zoomAt(1 / 1.15)}
+            onReset={() => setView({ x: 0, y: 0, z: 1 })}
+          />
+        </div>
 
         {/* a press and a drag on the same surface do different things, and
             neither leaves a mark — so the board says so, once, quietly */}
@@ -639,6 +641,9 @@ function cardPos(cols: PlacedColumn[], id: string): { x: number; y: number; h: n
   return { x: 0, y: 0, h: 0 }
 }
 
+/** the zoom trio. Positioned by its caller — the desktop board and the phone
+ *  hang it in different corners, and a self-positioning control cannot be
+ *  reused without one of them fighting it. Buttons are thumb-sized below md. */
 function ZoomControls({
   zoom,
   onIn,
@@ -651,13 +656,15 @@ function ZoomControls({
   onReset: () => void
 }) {
   const btn =
-    'flex h-8 w-8 items-center justify-center border border-line bg-panel text-[15px] leading-none text-ink-dim transition-colors hover:text-ink'
+    'flex h-10 w-10 items-center justify-center border border-line bg-panel text-[17px] leading-none text-ink-dim transition-colors hover:text-ink md:h-8 md:w-8 md:text-[15px]'
   return (
     <div
-      className="absolute right-3 top-3 flex items-center gap-1 rounded-[10px] p-1"
-      style={{ background: 'color-mix(in srgb, var(--color-panel) 82%, transparent)' }}
-      // the controls are chrome, not canvas: a press here must not pan
+      className="flex items-center gap-1 rounded-[10px] p-1"
+      style={{ background: 'color-mix(in srgb, var(--color-panel) 88%, transparent)' }}
+      // the controls are chrome, not canvas: a press here must not pan the
+      // board underneath, nor count as a press on bare pegboard
       onPointerDown={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
     >
       <button type="button" aria-label={voice.workshop.board.zoomOut} onClick={onOut} className={`${btn} rounded-l-[8px]`}>
         −
@@ -665,8 +672,8 @@ function ZoomControls({
       <button
         type="button"
         onClick={onReset}
-        className="min-w-[46px] px-1 text-center font-display text-[10.5px] font-semibold tracking-[0.1em] text-ink-dim transition-colors hover:text-ink [font-variant-numeric:tabular-nums]"
-        title={voice.workshop.board.zoomReset}
+        aria-label={voice.workshop.board.zoomReset}
+        className="min-h-10 min-w-[48px] px-1 text-center font-display text-[11px] font-semibold tracking-[0.1em] text-ink-dim transition-colors hover:text-ink md:min-h-0 md:text-[10.5px] [font-variant-numeric:tabular-nums]"
       >
         {Math.round(zoom * 100)}%
       </button>
@@ -793,23 +800,32 @@ function CardFace({ card, groupIndex = 0 }: { card: BoardCard; groupIndex?: numb
           {voice.workshop.sheet.cardType[card.type]}
         </span>
         {card.type === 'task' ? (
+          /* The one control on the wall people actually use, so it is a real
+             box you can hit: 24 px of ink with a 48 px target around it, not
+             the 9 px dot it was. `-inset-3` does the widening invisibly, which
+             keeps the card's own geometry unchanged. */
           <button
             type="button"
             data-nodrag
             aria-label={voice.workshop.board.done}
             aria-pressed={!!card.done}
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               // the mobile card is itself pressable — ticking must not also
               // open the editor behind it
               e.stopPropagation()
+              navigator.vibrate?.(6)
               useWorkshopStore.getState().toggleCardDone(card.id)
             }}
-            className="relative ml-auto h-[9px] w-[9px] after:absolute after:-inset-3 after:content-['']"
+            className="relative ml-auto flex h-6 w-6 flex-none items-center justify-center rounded-[4px] text-[13px] font-bold leading-none transition-colors after:absolute after:-inset-3 after:content-['']"
             style={{
               border: `1.5px solid ${COPPER}`,
               background: card.done ? COPPER : 'transparent',
+              color: 'var(--color-bg)',
             }}
-          />
+          >
+            {card.done ? '✓' : ''}
+          </button>
         ) : (
           <span
             aria-hidden
@@ -874,14 +890,27 @@ function MobileBoard({
   onCreateAt: (parentId: string | undefined, index: number) => void
 }) {
   const [page, setPage] = useState(0)
+  const [z, setZ] = useState(1)
   const scroller = useRef<HTMLDivElement | null>(null)
   const linked = (a: BoardCard, b: BoardCard) =>
     threads.some(
       (t) => (t.from === a.id && t.to === b.id) || (t.from === b.id && t.to === a.id),
     )
 
+  const zoomBy = (f: number) => setZ((v) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v * f)))
+
   return (
     <div className="trough relative md:hidden" style={PEGBOARD_BG}>
+      {/* bottom-right, not top: it is where a thumb already is, and the top of
+          every page belongs to that column's heading */}
+      <div className="absolute bottom-2.5 right-2.5 z-10">
+        <ZoomControls
+          zoom={z}
+          onIn={() => zoomBy(1.15)}
+          onOut={() => zoomBy(1 / 1.15)}
+          onReset={() => setZ(1)}
+        />
+      </div>
       <div
         ref={scroller}
         onScroll={(e) => {
@@ -891,7 +920,15 @@ function MobileBoard({
         className="flex snap-x snap-mandatory overflow-x-auto"
       >
         {groups.map((g, i) => (
-          <div key={g.title?.id ?? 'loose'} className="w-full flex-none snap-center px-6 pb-12 pt-5">
+          <div
+            key={g.title?.id ?? 'loose'}
+            className="w-full flex-none snap-center px-6 pb-12 pt-5"
+            /* `zoom`, not `transform: scale`: zoom REFLOWS, so the page keeps
+               its own height and the column goes on scrolling normally. A
+               transform would paint a scaled copy over an unchanged box, and
+               the bottom of a zoomed-in column would be unreachable. */
+            style={{ zoom: z }}
+          >
             {g.title ? (
               <div className="mb-4">
                 <CardFace card={g.title} groupIndex={i} />
@@ -966,7 +1003,8 @@ function MobileBoard({
           </div>
         ))}
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-3.5 flex items-center justify-center gap-2">
+      {/* the dots move left to make room for the zoom trio on the right */}
+      <div className="pointer-events-none absolute bottom-5 left-5 flex items-center gap-2">
         {groups.map((g, i) => (
           <span
             key={g.title?.id ?? 'loose'}
