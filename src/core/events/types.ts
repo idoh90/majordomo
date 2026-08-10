@@ -7,10 +7,10 @@
  */
 
 /** what the event is — drives color, iconography and wing routing */
-export type EventKind = 'shift' | 'sleep' | 'training' | 'study' | 'marker'
+export type EventKind = 'shift' | 'sleep' | 'training' | 'study' | 'workshop' | 'marker'
 
 /** which wing wrote the event ('manual' = placed by hand on the Manor) */
-export type EventSource = 'manual' | 'watch' | 'grounds' | 'capital' | 'study'
+export type EventSource = 'manual' | 'watch' | 'grounds' | 'capital' | 'study' | 'workshop'
 
 export interface CalendarEvent {
   id: string

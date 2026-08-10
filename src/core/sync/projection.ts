@@ -30,7 +30,7 @@ import type { CalendarEvent } from '../events/types'
  * storage key names, and the same one that keeps this file honest: it is the
  * ONE place both the reader (the registry) and the writer (deleteEvent) agree.
  */
-const PROJECTION_PREFIXES = ['hw:', 'exam:', 'payday:', 'workout:'] as const
+const PROJECTION_PREFIXES = ['hw:', 'exam:', 'payday:', 'workout:', 'ms:'] as const
 
 export function isProjection(e: CalendarEvent): boolean {
   if (!e.sourceRef) return false

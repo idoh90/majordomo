@@ -6,6 +6,7 @@ import { useCapitalStore } from '../../modules/capital/store'
 import { formatILS } from '../../modules/capital/lib/money'
 import { useStudyStore } from '../../modules/study/store'
 import { useWorkoutStore } from '../../modules/training/store'
+import { useWorkshopStore } from '../../modules/workshop/store'
 import { computeHouse, type HouseModel } from './house'
 
 /**
@@ -27,6 +28,9 @@ export function useHouse(): HouseModel {
   const subjects = useStudyStore((s) => s.subjects)
   const sessions = useStudyStore((s) => s.sessions)
   const exams = useStudyStore((s) => s.exams)
+  const ventures = useWorkshopStore((s) => s.ventures)
+  const wsSessions = useWorkshopStore((s) => s.sessions)
+  const milestones = useWorkshopStore((s) => s.milestones)
   const accounts = useCapitalStore((s) => s.accounts)
   const snapshots = useCapitalStore((s) => s.snapshots)
   const holdings = useCapitalStore((s) => s.holdings)
@@ -49,6 +53,9 @@ export function useHouse(): HouseModel {
         subjects,
         sessions,
         exams,
+        ventures,
+        wsSessions,
+        milestones,
         accounts,
         snapshots,
         holdings,
@@ -73,6 +80,9 @@ export function useHouse(): HouseModel {
       subjects,
       sessions,
       exams,
+      ventures,
+      wsSessions,
+      milestones,
       accounts,
       snapshots,
       holdings,

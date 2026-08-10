@@ -205,6 +205,23 @@ if (import.meta.env.DEV) {
       },
       { ...ev(2, 20, 22, 'study', 'Physics', 'study'), id: 'demo-study-2', sourceRef: 'subj:demo-subj-physics' },
       { ...ev(6, 16, 18, 'study', 'Academic Writing', 'study'), id: 'demo-study-3', sourceRef: 'subj:demo-subj-writing' },
+      // bench blocks in the 15:00 lane (free of the fixture's sleeps/shifts);
+      // literal ids + proj: refs so the workshop-store demo can pin metas
+      {
+        ...ev(todayIdx - 2, 15, 17, 'workshop', 'The Ornithopter', 'workshop'),
+        id: 'demo-bench-1',
+        sourceRef: 'proj:demo-vent-orni',
+      },
+      {
+        ...ev(todayIdx - 3, 15, 16.5, 'workshop', 'The Ornithopter', 'workshop'),
+        id: 'demo-bench-2',
+        sourceRef: 'proj:demo-vent-orni',
+      },
+      {
+        ...ev(5, 15, 17, 'workshop', 'The Darkroom', 'workshop'),
+        id: 'demo-bench-3',
+        sourceRef: 'proj:demo-vent-dark',
+      },
       ev(3, 0, 0, 'marker', 'Payday', 'capital', true),
       // next week — a quieter stretch
       ev(8, 19, 32, 'shift', 'Night Watch', 'watch'),

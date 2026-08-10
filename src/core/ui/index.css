@@ -40,6 +40,8 @@
   --color-w-grounds: #68b984;
   --color-w-ledger: #d4ae6a;
   --color-w-study: #a78bda;
+  /* copper, not brass — the Workshop must never read as the Ledger */
+  --color-w-workshop: #d18a62;
 
   --font-display: "Big Shoulders", "Arial Narrow", system-ui, sans-serif;
 
@@ -67,6 +69,7 @@
   --glow-accent: color-mix(in srgb, var(--color-accent) 35%, transparent);
   --glow-accent-lg: color-mix(in srgb, var(--color-accent) 40%, transparent);
   --glow-study: color-mix(in srgb, var(--color-w-study) 40%, transparent);
+  --glow-workshop: color-mix(in srgb, var(--color-w-workshop) 40%, transparent);
   /* body-map silhouette material */
   --sil-fill: #10141d;
   --sil-stroke: #232d40;
@@ -672,6 +675,7 @@ html[data-skin='terminal'] {
   --color-w-grounds: #6fe07f;
   --color-w-ledger: #d8c95f;
   --color-w-study: #9d8cff;
+  --color-w-workshop: #f0955c;
 
   /* the page is already true black, so the recess can only be black too —
      its border does the work of saying "this is cut in" */
@@ -703,6 +707,7 @@ html[data-skin='aurora'] {
   --color-w-grounds: #74c9a2;
   --color-w-ledger: #d8b46a;
   --color-w-study: #b294f5;
+  --color-w-workshop: #e08d64;
 
   --color-trough: #120f21;
   --color-trough-line: #282247;

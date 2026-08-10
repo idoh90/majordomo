@@ -47,8 +47,9 @@ export default [
       ],
     },
   },
-  wingRule('training', ['capital', 'watch', 'study']),
-  wingRule('capital', ['training', 'watch', 'study']),
-  wingRule('watch', ['training', 'capital', 'study']),
-  wingRule('study', ['training', 'capital', 'watch']),
+  wingRule('training', ['capital', 'watch', 'study', 'workshop']),
+  wingRule('capital', ['training', 'watch', 'study', 'workshop']),
+  wingRule('watch', ['training', 'capital', 'study', 'workshop']),
+  wingRule('study', ['training', 'capital', 'watch', 'workshop']),
+  wingRule('workshop', ['training', 'capital', 'watch', 'study']),
 ]

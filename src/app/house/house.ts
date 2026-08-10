@@ -20,6 +20,16 @@ import { computeStrains, readiness, type Readiness } from '../../modules/trainin
 import type { Workout } from '../../modules/training/types'
 import { bookedHoursBeforeExam, daysUntil, fulfilledHoursBetween, nextExam } from '../../modules/study/lib'
 import type { Exam, SessionMeta, Subject } from '../../modules/study/types'
+import {
+  daysUntil as wsDaysUntil,
+  fulfilledHoursBetween as wsFulfilledBetween,
+  nextMilestone,
+} from '../../modules/workshop/lib'
+import type {
+  Milestone,
+  SessionMeta as WorkshopSessionMeta,
+  Venture,
+} from '../../modules/workshop/types'
 import { nearWatch, warnableBlock } from '../manor/nearWatch'
 
 /**
@@ -39,7 +49,7 @@ import { nearWatch, warnableBlock } from '../manor/nearWatch'
  * beside.
  */
 
-export type WingId = 'manor' | 'watch' | 'grounds' | 'study' | 'capital'
+export type WingId = 'manor' | 'watch' | 'grounds' | 'study' | 'workshop' | 'capital'
 
 /** Which direction is the good one. The single source of truth for delta
  *  colour anywhere in the House — components read `good`, never the sign. */
@@ -48,6 +58,7 @@ const DESIRABLE: Record<WingId, 'up' | 'down' | 'neither'> = {
   watch: 'down', // fewer hours on duty is a better week, not a worse one
   grounds: 'up',
   study: 'up',
+  workshop: 'up',
   capital: 'up', // more budget left
 }
 
@@ -79,6 +90,8 @@ export interface HouseModel {
   watchBooked: number
   /** days until the next exam, and hours booked before it */
   examRunway: { subject: string; days: number; bookedH: number } | null
+  /** the Workshop's own signal card: the nearest undone milestone */
+  milestoneRunway: { venture: string; title: string; days: number } | null
   /** this month's spend per day so far, and the month before's */
   burn: { perDay: number; prevPerDay: number | null } | null
   pattern: { id: PatternId; args: Record<string, string | number> }
@@ -96,6 +109,9 @@ export interface HouseInputs {
   subjects: Subject[]
   sessions: Record<string, SessionMeta>
   exams: Exam[]
+  ventures: Venture[]
+  wsSessions: Record<string, WorkshopSessionMeta>
+  milestones: Milestone[]
   accounts: Account[]
   snapshots: Snapshot[]
   holdings: Holding[]
@@ -156,6 +172,23 @@ export function computeHouse(i: HouseInputs): HouseModel {
       }
     : null
 
+  /* -------------------------------------------------------------- workshop */
+  const workshopSeries = Array.from({ length: WEEKS }, (_, k) => {
+    const s = addDays(w0, -7 * (WEEKS - 1 - k))
+    return wsFulfilledBetween(i.events, i.wsSessions, s, addDays(s, 7))
+  })
+  const workshopNow = workshopSeries[workshopSeries.length - 1] ?? 0
+  const workshopPrev = workshopSeries[workshopSeries.length - 2] ?? null
+  const liveVentures = new Set(i.ventures.filter((v) => !v.archived).map((v) => v.id))
+  const nextMs = nextMilestone(i.milestones.filter((m) => liveVentures.has(m.ventureId)))
+  const milestoneRunway = nextMs
+    ? {
+        venture: i.ventures.find((v) => v.id === nextMs.ventureId)?.name ?? '—',
+        title: nextMs.title,
+        days: wsDaysUntil(nextMs.on, i.now),
+      }
+    : null
+
   /* --------------------------------------------------------------- capital */
   const thisMonth = monthKey(nowDate)
   const spentNow = monthlySpent(thisMonth, i.spends, i.recurring, i.spendItems)
@@ -193,7 +226,7 @@ export function computeHouse(i: HouseInputs): HouseModel {
   // intersected: the convention the Manor's own week line prints
   const manorSeries = weeklyHoursSeries(
     i.events,
-    ['shift', 'training', 'study'],
+    ['shift', 'training', 'study', 'workshop'],
     WEEKS,
     nowDate,
     i.weekStart,
@@ -216,6 +249,7 @@ export function computeHouse(i: HouseInputs): HouseModel {
       counts,
     ),
     row('study', `${studyNow.toFixed(1)} h`, studyNow, studyPrev, studySeries),
+    row('workshop', `${workshopNow.toFixed(1)} h`, workshopNow, workshopPrev, workshopSeries),
     // with no budget the figure is SPEND, not what's left of one — the row has
     // to say which, or the default estate reads '₪6,440 budget left' about a
     // budget that does not exist
@@ -231,7 +265,16 @@ export function computeHouse(i: HouseInputs): HouseModel {
     },
   ]
 
-  return { rows, readiness: ready, dutyLoad, watchBooked, examRunway, burn, pattern: findPattern(i) }
+  return {
+    rows,
+    readiness: ready,
+    dutyLoad,
+    watchBooked,
+    examRunway,
+    milestoneRunway,
+    burn,
+    pattern: findPattern(i),
+  }
 }
 
 function row(
@@ -281,5 +324,5 @@ function findPattern(i: HouseInputs): { id: PatternId; args: Record<string, stri
 export function weekBooked(events: CalendarEvent[], anchor: Date, weekStart: WeekStart): number {
   const w0 = startOfWeek(anchor, weekStart)
   const t = hoursByKind(eventsInRange(events, w0, addDays(w0, 7)))
-  return t.shift + t.training + t.study
+  return t.shift + t.training + t.study + t.workshop
 }

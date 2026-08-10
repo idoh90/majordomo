@@ -13,7 +13,7 @@ with a butler persona. Strategy in `majordomo-playbook.md`; engineering mileston
 in `majordomo-build-plan.md` (M0–M8); target UI in the Claude Design project
 "Majordomo: Calendar OS" (`Majordomo Manor.dc.html` + `Majordomo Tokens.dc.html`).
 What changes as milestones land: the Manor (a duty-cycle-seamed week calendar)
-becomes home behind a tab nav (MANOR / WATCH / GROUNDS / STUDY / LEDGER); consoles
+becomes home behind a tab nav (MANOR / WATCH / GROUNDS / STUDY / WORKSHOP / LEDGER); consoles
 become Wings; three commercial presets (Midnight / Terminal / Aurora) join and the
 seven Batman-era skins move behind a local `VITE_FOUNDER_SKIN` flag (`.env.local`,
 never committed, tree-shaken from builds). Two standing rules from the pivot onward:
@@ -204,6 +204,18 @@ src/
                   plan-then-fulfill sessions (kind 'study' events, sourceRef
                   'subj:<id>'), homework/exam allDay markers ('hw:'/'exam:'),
                   syllabus checklists; spec: majordomo-study-spec.md
+    workshop/     'THE WORKSHOP' (founder: APPLIED SCIENCES) — ventures (side
+                  projects) w/ weekly bench-hour rings + a lifetime odometer,
+                  Study-pattern sessions (kind 'workshop', sourceRef 'proj:<id>'),
+                  dated milestones as trailing allDay markers ('ms:'), the app's
+                  only live timer (persisted `bench`, DOWN TOOLS writes a
+                  born-done event, refused mid-sandbox, app-wide header chip),
+                  and a per-venture PEGBOARD: cards (note/task/link) on a fixed
+                  (col,row) grid, orthogonal copper threads (slot arithmetic —
+                  never a freeform canvas), drag-to-swap on desktop, column
+                  pager on mobile. Design: 'Workshop Wing - Pegboard.dc.html'
+                  in the Claude Design project. The 6th tab folds the mobile
+                  bar's overflow behind a WINGS tab (TabBar INLINE_WINGS).
     capital/      'WAYNE FUND' — net worth + budget console (see below)
 ```
 
@@ -285,6 +297,14 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   event id (sessions themselves are `majordomo-events` entries). Homework/exam actions
   write their Manor marker through the events store; `reconcileMarkers` heals drift
   (and trails overdue homework chips to today), never while a what-if sandbox is open.
+- **`majordomo-workshop` v1** (`modules/workshop/store.ts`) — the Workshop's
+  records: ventures, board cards + threads, milestones, per-session fulfillment
+  metadata keyed by event id (sessions themselves are `majordomo-events`
+  entries, exactly the Study's split), and the live `bench` timer — persisted
+  so a reload cannot lose a running clock, but **never synced** (a stopwatch is
+  one device's present, not a record). Milestone actions write their Manor
+  marker through the events store; `reconcileMarkers` heals drift and trails
+  overdue chips to today, never while a what-if sandbox is open.
 - **`majordomo-watch` v1** (`modules/watch/store.ts`) — shift *shapes* only
   (`ShiftTemplate { name, startMin, endMin }`, minutes since local midnight,
   `endMin > 1440` = ends next day). The watches themselves are events. Four starters
@@ -293,7 +313,7 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   independently produce identical records instead of eight shapes.
 
 **Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
-`majordomo-events` / `majordomo-study` / `majordomo-watch`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+`majordomo-events` / `majordomo-study` / `majordomo-workshop` / `majordomo-watch`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
 boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
 still applies; the old keys are left in place as insurance and never read again.
 
@@ -497,6 +517,8 @@ auto-enter Training so they land on the right screen.
   — opens the add sheet on load (effort = edit mode on newest workout; when = also
   expands the calendar; sport / muscles = the blank flow open on that picker)
 - `?sheet=skin` — opens the App-skin picker sheet on load
+- `?board` / `?board=<ventureId>` — opens the Workshop on a venture's pegboard
+  (first venture when unnamed) — screenshot aid · `window.__workshop` — store handle
 - `?detail` — opens the newest workout's detail sheet
 - `?map=volume` — starts the body map in weekly-volume mode
 - `?debugmap` — rainbow-colors every muscle plate to spot gaps/overlaps

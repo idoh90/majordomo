@@ -7,6 +7,7 @@ export const KIND_META: Record<EventKind, { color: string; label: string }> = {
   sleep: { color: 'var(--color-ink-dim)', label: voice.kinds.sleep },
   training: { color: 'var(--color-w-grounds)', label: voice.kinds.training },
   study: { color: 'var(--color-w-study)', label: voice.kinds.study },
+  workshop: { color: 'var(--color-w-workshop)', label: voice.kinds.workshop },
   marker: { color: 'var(--color-w-ledger)', label: voice.kinds.marker },
 }
 
@@ -14,6 +15,7 @@ export const KIND_META: Record<EventKind, { color: string; label: string }> = {
  *  due/exam day = study accent, its title already says what it is) */
 export function markerMeta(e: CalendarEvent): { color: string; label: string; glyph: string } {
   if (e.source === 'study') return { color: 'var(--color-w-study)', label: voice.kinds.study, glyph: '' }
+  if (e.source === 'workshop') return { color: 'var(--color-w-workshop)', label: voice.kinds.workshop, glyph: '◇' }
   return { color: 'var(--color-w-ledger)', label: voice.kinds.marker, glyph: '₪' }
 }
 

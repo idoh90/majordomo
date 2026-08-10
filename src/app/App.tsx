@@ -6,6 +6,7 @@ import { voice } from '../core/voice'
 import { useNow } from '../core/useNow'
 import { storageAvailable } from '../core/storage'
 import { useTrainingUi } from '../modules/training/uiStore'
+import { BenchChip } from '../modules/workshop/bench'
 import { CONSOLES } from './consoles'
 import { ManorScreen } from './manor/ManorScreen'
 import { House } from './house/HouseRail'
@@ -33,6 +34,7 @@ export default function App() {
     if (v && (v === 'manor' || CONSOLES.some((x) => x.id === v))) return v
     const trainingParams = ['sheet', 'detail', 'map', 'debugmap']
     if (trainingParams.some((k) => params.has(k))) return 'training'
+    if (params.has('board')) return 'workshop'
     return 'manor'
   })
 
@@ -103,10 +105,14 @@ export default function App() {
   )
 }
 
-/** the shell's view id is already a wing id for the four consoles; the menu
+/** the shell's view id is already a wing id for the five consoles; the menu
  *  view is the Manor */
 function wingOf(view: string): WingId {
-  return view === 'watch' || view === 'training' || view === 'study' || view === 'capital'
+  return view === 'watch' ||
+    view === 'training' ||
+    view === 'study' ||
+    view === 'workshop' ||
+    view === 'capital'
     ? view === 'training'
       ? 'grounds'
       : (view as WingId)
@@ -209,6 +215,8 @@ function AppHeader({
       </nav>
 
       <div className="ml-auto flex items-center gap-2.5">
+        {/* the live bench rides the chrome on every screen — see workshop/bench */}
+        <BenchChip />
         <span className="hidden text-[9.5px] tracking-[0.18em] text-ink-dim md:inline">
           {voice.presetLabel}
         </span>

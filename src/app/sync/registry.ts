@@ -16,6 +16,15 @@ import { useWorkoutStore } from '../../modules/training/store'
 import type { Workout } from '../../modules/training/types'
 import { useWatchStore } from '../../modules/watch/store'
 import type { ShiftTemplate } from '../../modules/watch/types'
+import { useWorkshopStore } from '../../modules/workshop/store'
+import { reconcileMarkers as reconcileWorkshopMarkers } from '../../modules/workshop/lib'
+import type {
+  BoardCard,
+  Milestone,
+  SessionMeta as WorkshopSessionMeta,
+  Thread,
+  Venture,
+} from '../../modules/workshop/types'
 
 /**
  * What each wing contributes to the registry, and how it takes records back.
@@ -225,6 +234,43 @@ const studySource: SyncSource = {
   },
 }
 
+/* -------------------------------------------------------------- the Workshop */
+
+const workshopSource: SyncSource = {
+  wing: 'workshop',
+  toRecords: () => {
+    const s = useWorkshopStore.getState()
+    return [
+      ...s.ventures.map((x) => rec('workshop', 'venture', x.id, x)),
+      ...s.cards.map((x) => rec('workshop', 'card', x.id, x)),
+      ...s.threads.map((x) => rec('workshop', 'thread', x.id, x)),
+      ...s.milestones.map((x) => rec('workshop', 'milestone', x.id, x)),
+      // keyed by event id, stable and unique; orphans are inert and never
+      // buried — see pruneSessions.
+      ...Object.entries(s.sessions).map(([eventId, meta]) =>
+        rec('workshop', 'session', eventId, meta),
+      ),
+      // DELIBERATELY ABSENT: `bench` — a running clock is a fact about ONE
+      // device's present, not a record. Carried, two devices would fight over
+      // whose stopwatch is real and a stale phone could resurrect a timer
+      // stopped hours ago.
+    ]
+  },
+  subscribe: (onChange) => useWorkshopStore.subscribe(onChange),
+  apply: (records) => {
+    useWorkshopStore.setState((s) => ({
+      ventures: mergeList<Venture>(s.ventures, of(records, 'venture'), byOrder),
+      cards: mergeList<BoardCard>(s.cards, of(records, 'card')),
+      threads: mergeList<Thread>(s.threads, of(records, 'thread')),
+      milestones: mergeList<Milestone>(s.milestones, of(records, 'milestone')),
+      sessions: mergeMap<WorkshopSessionMeta>(s.sessions, of(records, 'session')),
+    }))
+    // markers are never carried — this device draws its own from the
+    // milestones that just arrived (sandbox-guarded inside, engine muted)
+    reconcileWorkshopMarkers(useWorkshopStore.getState().milestones, Date.now())
+  },
+}
+
 /* --------------------------------------------------------------- the Ledger */
 
 const bySnapshotDateAsc = (a: Snapshot, b: Snapshot) => a.takenAt.localeCompare(b.takenAt)
@@ -309,6 +355,7 @@ export const SYNC_SOURCES: SyncSource[] = [
   manorSource,
   groundsSource,
   studySource,
+  workshopSource,
   ledgerSource,
   watchSource,
 ]

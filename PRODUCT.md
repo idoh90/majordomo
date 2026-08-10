@@ -60,9 +60,10 @@ because the data model refused to assume a 9-to-5.
   spinner, no session check between a person and their own records. The shell
   being fetchable is the only thing between the app and a flight.
 - **Installed as a PWA** on the home screen; also used in a desktop browser.
-- **Five wings, one shell:** the Manor (the week/month calendar — home), the Watch
+- **Six wings, one shell:** the Manor (the week/month calendar — home), the Watch
   (shifts), the Grounds (training), the Study (subjects, homework, exams), the
-  Ledger (net worth and budget).
+  Workshop (ventures, bench hours, milestones, pegboards), the Ledger (net worth
+  and budget).
 - **A single deployed estate.** Origins do not share storage, so moving between
   local and deployed is a deliberate export/import ritual, and that backup file is
   the only backup the financial data has.

@@ -188,6 +188,7 @@ export function hoursByKind(events: CalendarEvent[]): Record<EventKind, number> 
     sleep: 0,
     training: 0,
     study: 0,
+    workshop: 0,
     marker: 0,
   }
   for (const e of events) if (!e.allDay) totals[e.kind] += hoursOf(e)

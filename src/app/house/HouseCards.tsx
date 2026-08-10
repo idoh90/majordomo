@@ -10,6 +10,7 @@ const WING_COLOR: Record<WingId, string> = {
   watch: 'var(--color-w-watch)',
   grounds: 'var(--color-w-grounds)',
   study: 'var(--color-w-study)',
+  workshop: 'var(--color-w-workshop)',
   capital: 'var(--color-w-ledger)',
 }
 
@@ -18,6 +19,7 @@ const WING_NAME: Record<WingId, string> = {
   watch: voice.modules.watch.name,
   grounds: voice.modules.training.name,
   study: voice.modules.study.name,
+  workshop: voice.modules.workshop.name,
   capital: voice.modules.capital.name,
 }
 
@@ -76,6 +78,25 @@ export function SignalCard({ house, wing }: { house: HouseModel; wing: WingId })
           <>
             <BigFigure value={e.days <= 0 ? 'today' : `${e.days} d`} accent={accent} />
             <Line>{s.examRunwayLine(e)}</Line>
+          </>
+        ) : (
+          <Line>{s.idle}</Line>
+        )}
+      </Card>
+    )
+  }
+
+  if (wing === 'workshop') {
+    const m = house.milestoneRunway
+    return (
+      <Card title={s.milestoneRunway} accent={accent}>
+        {m ? (
+          <>
+            <BigFigure
+              value={m.days < 0 ? `${-m.days} d over` : m.days <= 0 ? 'today' : `${m.days} d`}
+              accent={m.days < 0 ? 'var(--color-danger)' : accent}
+            />
+            <Line>{s.milestoneRunwayLine(m)}</Line>
           </>
         ) : (
           <Line>{s.idle}</Line>

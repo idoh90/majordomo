@@ -116,6 +116,21 @@ export interface CapitalBriefingFacts {
   } | null
 }
 
+export interface WorkshopBriefingFacts {
+  fulfilledH: number
+  bookedH: number
+  goalH: number
+  /** the nearest undone milestone anywhere on the shelf; days < 0 = overdue */
+  milestone: { venture: string; title: string; days: number; towardH: number } | null
+  awaiting: number
+  ventureCount: number
+  /** a bench timer is running right now */
+  benchLive: { venture: string } | null
+  /** the longest-untouched building venture, when it has been ≥ 7 quiet days */
+  quiet: { venture: string; days: number } | null
+  nextSession: { venture: string; dayLabel: string } | null
+}
+
 export interface HouseRowFacts {
   figure: string
   delta: number | null
@@ -132,7 +147,7 @@ export interface VoicePack {
      *  replaces `capital` when no budget is set — the figure is then what has
      *  gone out, not what is left of a target that does not exist. */
     rowLabel: Record<
-      'manor' | 'watch' | 'grounds' | 'study' | 'capital' | 'capitalSpent',
+      'manor' | 'watch' | 'grounds' | 'study' | 'workshop' | 'capital' | 'capitalSpent',
       string
     >
     /** the wing's own signal card, shown only on that wing */
@@ -140,11 +155,13 @@ export interface VoicePack {
       dutyLoad: string
       readiness: string
       examRunway: string
+      milestoneRunway: string
       burnRate: string
       /** each signal's one composed line */
       dutyLoadLine: (v: { thisWeek: number; avg: number }) => string
       readinessLine: (v: { score: number; band: string; limiter: string | null }) => string
       examRunwayLine: (v: { subject: string; days: number; bookedH: number }) => string
+      milestoneRunwayLine: (v: { venture: string; title: string; days: number }) => string
       burnRateLine: (v: { perDay: string; prevPerDay: string | null }) => string
       /** nothing to draw yet */
       idle: string
@@ -185,6 +202,8 @@ export interface VoicePack {
   storageWarning: string
   /** tiny label beside the header's preset dots */
   presetLabel: string
+  /** the mobile bar's overflow tab, holding the wings past the fourth */
+  wingsTab: string
   /** shared UI primitives (core/ui) — copy a wing must not have to supply */
   ui: {
     /** a Sheet asked to close while its draft differs from the store */
@@ -759,18 +778,171 @@ export interface VoicePack {
       aside: (v: StudyBriefingFacts) => string | null
     }
   }
+  workshop: {
+    /** rings hero card title */
+    weekAtBench: string
+    weekLine: (v: { from: string; to: string; fulfilled: number; booked: number }) => string
+    ringOfGoal: (goal: number) => string
+    ringNoGoal: string
+    more: (n: number) => string
+    /** the timer's three states */
+    toTheBench: string
+    downTools: string
+    atTheBench: string
+    /** milestone countdown strip */
+    mattersPending: string
+    noMilestones: string
+    /** days < 0 reads as overdue — "N days over", and the chip trails to today */
+    countdown: (days: number) => string
+    hoursToward: (h: number) => string
+    overdueNote: string
+    desk: string
+    book: string
+    awaiting: string
+    noAwaiting: string
+    /** unfiled quick-add row: label over the venture picker */
+    fileUnder: string
+    done: string
+    partial: string
+    skipped: string
+    logIt: string
+    strikeRest: string
+    weekLedger: string
+    noLedger: string
+    status: {
+      done: string
+      /** a session logged live from the bench timer */
+      liveDone: string
+      partial: (h: number) => string
+      skipped: string
+      awaiting: string
+      ahead: string
+    }
+    /** the venture roster */
+    shelf: string
+    shelfCount: (v: { total: number; shipped: number }) => string
+    openVenture: string
+    /** the odometer never resets */
+    lifetime: string
+    odometer: string
+    statusName: { spark: string; building: string; shipped: string; shelved: string }
+    rename: string
+    ship: string
+    shelve: string
+    reopen: string
+    archive: string
+    /** the last-touched line under a shelf card */
+    touched: {
+      today: string
+      days: (n: number) => string
+      /** ≥ 7 quiet days earns the sir line */
+      quietLong: (n: number) => string
+      never: string
+      shippedIn: (month: string) => string
+      shippedLine: string
+    }
+    /** the venture board — the pegboard */
+    board: {
+      back: string
+      hang: string
+      empty: string
+      hangFirst: string
+      colOf: (v: { col: number; total: number }) => string
+      done: string
+    }
+    emptyWing: string
+    sheet: {
+      name: string
+      namePlaceholder: string
+      weeklyGoal: string
+      goalZeroHint: string
+      venture: string
+      day: string
+      start: string
+      duration: string
+      bookHintPast: string
+      bookHintFuture: string
+      title: string
+      body: string
+      bodyPlaceholder: string
+      url: string
+      urlPlaceholder: string
+      threadTo: string
+      noThread: string
+      cardType: { note: string; task: string; link: string }
+      titlePlaceholder: string
+      msPlaceholder: string
+      msHint: string
+      theDay: string
+      ctaOpen: string
+      ctaRename: string
+      ctaBook: string
+      ctaLog: string
+      ctaHang: string
+      ctaSaveCard: string
+      ctaMs: string
+      cancel: string
+    }
+    milestonesTitle: (name: string) => string
+    addMs: string
+    toast: {
+      benchStart: string
+      benchStop: (v: { h: number; m: number }) => string
+      benchShort: string
+      benchSandbox: string
+      markedDone: string
+      struck: string
+      notedPartial: (h: number) => string
+      restStruck: string
+      logged: string
+      onBooks: string
+      opened: string
+      renamed: string
+      shipped: string
+      shelved: string
+      reopened: string
+      archived: string
+      cardHung: string
+      cardGone: string
+      threaded: string
+      msAdded: string
+      msDone: string
+      msUndone: string
+      msGone: string
+      filed: string
+      nameFirst: string
+      titleFirst: string
+    }
+    /** Manor marker-chip title */
+    markerMs: (title: string) => string
+    archiveTitle: string
+    archiveBody: (name: string) => string
+    archiveYes: string
+    /** menu-tile labels */
+    tileNextMs: string
+    tileWeek: string
+    briefingPanel: {
+      chips: (v: WorkshopBriefingFacts) => BriefingChip[]
+      headline: (v: WorkshopBriefingFacts) => string
+      detail: (v: WorkshopBriefingFacts) => string
+      /** see watch.briefingPanel.aside */
+      aside: (v: WorkshopBriefingFacts) => string | null
+    }
+  }
   /** wing chip labels per event kind */
   kinds: {
     shift: string
     sleep: string
     training: string
     study: string
+    workshop: string
     marker: string
   }
   modules: {
     watch: { name: string; tagline: string }
     training: { name: string; tagline: string }
     study: { name: string; tagline: string }
+    workshop: { name: string; tagline: string }
     capital: { name: string; tagline: string }
   }
   capital: {
@@ -1203,6 +1375,14 @@ export interface VoicePack {
       subjectLedger: string
       desk: string
       weekLedger: string
+    }
+    workshop: {
+      bench: string
+      pending: string
+      desk: string
+      weekLedger: string
+      shelf: string
+      board: string
     }
     capital: {
       vault: string

@@ -63,6 +63,7 @@ export const majordomoPack: VoicePack = {
       watch: 'worked',
       grounds: 'workouts',
       study: 'studied',
+      workshop: 'at the bench',
       capital: 'budget left',
       capitalSpent: 'spent this month',
     },
@@ -70,6 +71,7 @@ export const majordomoPack: VoicePack = {
       dutyLoad: 'DUTY LOAD · 8 WEEKS',
       readiness: 'READINESS',
       examRunway: 'NEXT EXAM',
+      milestoneRunway: 'NEXT MILESTONE',
       burnRate: 'SPEND PER DAY',
       dutyLoadLine: ({ thisWeek, avg }) => {
         // a first counted week has a figure but nothing to measure it against;
@@ -97,6 +99,13 @@ export const majordomoPack: VoicePack = {
         return bookedH > 0
           ? `${subject} ${when}. You have ${hoursWord(bookedH)} ${plural(Math.round(bookedH), 'hour', 'hours')} of study booked before it.`
           : `${subject} ${when}. Nothing booked before it.`
+      },
+      milestoneRunwayLine: ({ venture, title, days }) => {
+        if (days < 0) {
+          return `${title} for ${venture} is ${lower(-days)} ${plural(-days, 'day', 'days')} past its day.`
+        }
+        const when = days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${lower(days)} days`
+        return `${title} for ${venture} ${when}.`
       },
       burnRateLine: ({ perDay, prevPerDay }) =>
         prevPerDay
@@ -132,6 +141,7 @@ export const majordomoPack: VoicePack = {
   skinPickerBlurb: 'Three looks for the same app. Switches instantly. Nothing else changes.',
   storageWarning: 'Your browser is blocking storage (private mode?). Nothing will survive a reload.',
   presetLabel: 'PRESET',
+  wingsTab: 'WINGS',
   ui: {
     discard: {
       title: 'Leave this unsaved?',
@@ -732,17 +742,248 @@ export const majordomoPack: VoicePack = {
       },
     },
   },
+  workshop: {
+    weekAtBench: 'THE WEEK AT THE BENCH',
+    weekLine: ({ from, to, fulfilled, booked }) =>
+      `${from} – ${to} · ${fulfilled.toFixed(1)} h fulfilled of ${booked.toFixed(1)} booked`,
+    ringOfGoal: (goal) => `of ${goal.toFixed(1)} h`,
+    ringNoGoal: 'h · no goal',
+    more: (n) => `+${n} MORE`,
+    toTheBench: 'TO THE BENCH',
+    downTools: 'DOWN TOOLS',
+    atTheBench: 'AT THE BENCH',
+    mattersPending: 'MATTERS PENDING',
+    noMilestones: 'No milestones marked.',
+    countdown: (days) =>
+      days < 0
+        ? days === -1
+          ? 'a day over'
+          : `${-days} days over`
+        : days === 0
+          ? 'today'
+          : days === 1
+            ? 'tomorrow'
+            : `in ${days} days`,
+    hoursToward: (h) => `${h.toFixed(1)} h at the bench toward it`,
+    overdueNote: "The chip follows you until it's dealt with.",
+    desk: 'THE DESK',
+    book: 'BOOK BENCH TIME',
+    awaiting: 'AWAITING REPORT',
+    noAwaiting: 'Nothing awaiting report.',
+    fileUnder: 'FILE UNDER',
+    done: 'DONE',
+    partial: 'PARTIAL',
+    skipped: 'SKIPPED',
+    logIt: 'LOG IT',
+    strikeRest: 'MARK THE REST SKIPPED',
+    weekLedger: "THIS WEEK'S LEDGER",
+    noLedger: 'Nothing on the books this week.',
+    status: {
+      done: 'DONE',
+      liveDone: 'LIVE · DONE',
+      partial: (h) => `PARTIAL ${h.toFixed(1)} H`,
+      skipped: 'SKIPPED',
+      awaiting: 'TO LOG',
+      ahead: 'AHEAD',
+    },
+    shelf: 'THE SHELF',
+    shelfCount: ({ total, shipped }) =>
+      shipped > 0
+        ? `${total} ${total === 1 ? 'VENTURE' : 'VENTURES'} · ${shipped} SHIPPED`
+        : `${total} ${total === 1 ? 'VENTURE' : 'VENTURES'}`,
+    openVenture: '+ OPEN A VENTURE',
+    lifetime: 'LIFETIME',
+    odometer: 'LIFETIME · THE ODOMETER',
+    statusName: { spark: 'SPARK', building: 'BUILDING', shipped: 'SHIPPED', shelved: 'SHELVED' },
+    rename: 'RENAME',
+    ship: 'SHIP',
+    shelve: 'SHELVE',
+    reopen: 'REOPEN',
+    archive: 'ARCHIVE',
+    touched: {
+      today: 'At the bench today.',
+      days: (n) => (n === 1 ? 'Quiet a day.' : `Quiet ${lower(n)} days.`),
+      quietLong: (n) => `The bench has been quiet ${lower(n)} days, sir.`,
+      never: 'Not yet at the bench.',
+      shippedIn: (month) => `Shipped in ${month}.`,
+      shippedLine: 'Shipped, sir. Quietly satisfying.',
+    },
+    board: {
+      back: 'THE SHELF',
+      hang: '+ HANG A CARD',
+      empty: 'A clean bench, sir. Pin the first card.',
+      hangFirst: '+ HANG A CARD',
+      colOf: ({ col, total }) => `COLUMN ${col} / ${total}`,
+      done: 'DONE',
+    },
+    emptyWing: 'The workshop stands ready, sir. Begin with a venture.',
+    sheet: {
+      name: 'NAME',
+      namePlaceholder: 'e.g. The Ornithopter',
+      weeklyGoal: 'WEEKLY BENCH GOAL',
+      goalZeroHint: 'Goal nought keeps the ring faint — the hours still count, sir.',
+      venture: 'VENTURE',
+      day: 'DAY',
+      start: 'START',
+      duration: 'DURATION',
+      bookHintPast: 'A past booking files as fulfilled, sir.',
+      bookHintFuture: 'This goes straight onto the Manor.',
+      title: 'TITLE',
+      body: 'NOTE — OPTIONAL',
+      bodyPlaceholder: 'A line or two',
+      url: 'ADDRESS',
+      urlPlaceholder: 'https://…',
+      threadTo: 'THREAD TO — OPTIONAL',
+      noThread: 'No thread',
+      cardType: { note: 'NOTE', task: 'TASK', link: 'LINK' },
+      titlePlaceholder: 'e.g. Re-rig the tail servo',
+      msPlaceholder: 'Name the next marker…',
+      msHint: "Each marker takes a chip on the Manor's week, sir.",
+      theDay: 'THE DAY',
+      ctaOpen: 'OPEN THE VENTURE',
+      ctaRename: 'SAVE',
+      ctaBook: 'ON THE BOOKS',
+      ctaLog: 'LOG IT',
+      ctaHang: 'HANG IT',
+      ctaSaveCard: 'SAVE',
+      ctaMs: 'MARK THE DAY',
+      cancel: 'CANCEL',
+    },
+    milestonesTitle: (name) => `MILESTONES — ${name}`,
+    addMs: '+ ADD',
+    toast: {
+      benchStart: 'The bench is yours, sir.',
+      benchStop: ({ h, m }) => {
+        const hours = h > 0 ? `${lower(h)} ${plural(h, 'hour', 'hours')}` : ''
+        const mins = m > 0 ? `${m <= 12 ? lower(m) : m} ${plural(m, 'minute', 'minutes')}` : ''
+        const span = hours && mins ? `${hours} and ${mins}` : hours || mins || 'a moment'
+        return `Down tools — ${span} to the good, sir.`
+      },
+      benchShort: 'Barely a minute, sir. Not logged.',
+      benchSandbox: 'A rehearsal is open, sir — apply or discard it first.',
+      markedDone: 'Marked done. The ring moves.',
+      struck: 'Marked skipped.',
+      notedPartial: (h) => `Noted. ${h.toFixed(1)} h of it.`,
+      restStruck: 'The rest are marked skipped.',
+      logged: 'Logged. The ring moves.',
+      onBooks: 'Booked.',
+      opened: 'Opened. The bench awaits.',
+      renamed: 'Renamed.',
+      shipped: 'Shipped, sir. Quietly satisfying.',
+      shelved: 'Shelved. It keeps its hours.',
+      reopened: 'Back on the bench.',
+      archived: 'Archived. The odometer stands.',
+      cardHung: 'Hung.',
+      cardGone: 'Taken down.',
+      threaded: 'Threaded.',
+      msAdded: 'Marked. The chip has its day on the Manor.',
+      msDone: 'Struck. The chip leaves the Manor.',
+      msUndone: 'Back on the board.',
+      msGone: 'Unmarked.',
+      filed: 'Filed.',
+      nameFirst: 'It needs a name first.',
+      titleFirst: 'It needs a title first.',
+    },
+    markerMs: (title) => title,
+    archiveTitle: 'Archive this venture?',
+    archiveBody: (name) => `${name} keeps its hours and its board. It just leaves the shelf.`,
+    archiveYes: 'Archive',
+    tileNextMs: 'until the next milestone',
+    tileWeek: 'at the bench this week',
+    briefingPanel: {
+      chips: ({ fulfilledH, bookedH, milestone, awaiting }) => [
+        { label: 'HOURS', value: `${fulfilledH.toFixed(1)} / ${bookedH.toFixed(1)} h` },
+        {
+          label: 'MILESTONE',
+          value: milestone
+            ? milestone.days < 0
+              ? 'over'
+              : milestone.days === 0
+                ? 'today'
+                : milestone.days === 1
+                  ? 'tomorrow'
+                  : `${milestone.days} d`
+            : '—',
+        },
+        { label: 'TO LOG', value: String(awaiting) },
+      ],
+      headline: ({ fulfilledH, goalH, milestone, benchLive }) => {
+        const hours =
+          fulfilledH > 0
+            ? `${hoursWord(fulfilledH)} ${plural(Math.round(fulfilledH), 'hour', 'hours')} at the bench this week`
+            : 'no hours at the bench yet this week'
+        if (benchLive) return `${benchLive.venture} is on the clock — ${hours}.`
+        if (milestone) {
+          const when =
+            milestone.days < 0
+              ? `${lower(-milestone.days)} ${plural(-milestone.days, 'day', 'days')} over`
+              : milestone.days === 0
+                ? 'today'
+                : milestone.days === 1
+                  ? 'tomorrow'
+                  : `in ${lower(milestone.days)} days`
+          return `The ${milestone.title} milestone ${milestone.days < 0 ? 'is ' : ''}${when}, sir — ${hours}.`
+        }
+        if (goalH > 0 && fulfilledH < goalH) {
+          return `${sentence(hours)}, of ${hoursWord(goalH)} intended.`
+        }
+        return `${sentence(hours)}.`
+      },
+      detail: ({ awaiting, quiet, nextSession, milestone }) => {
+        const parts: string[] = []
+        if (awaiting > 0) {
+          parts.push(
+            `${sentence(word(awaiting))} ${plural(awaiting, 'session awaits report', 'sessions await report')}.`,
+          )
+        }
+        if (milestone && milestone.days < 0) {
+          parts.push(`${milestone.title} is past its day and the chip is trailing you.`)
+        }
+        if (quiet) {
+          parts.push(`${quiet.venture} has been quiet ${lower(quiet.days)} days.`)
+        }
+        if (nextSession) {
+          parts.push(`${nextSession.dayLabel}'s bench is ${nextSession.venture}.`)
+        }
+        if (parts.length === 0) parts.push('Nothing awaits report and nothing is overdue.')
+        return parts.join(' ')
+      },
+      aside: ({ ventureCount, bookedH, fulfilledH, milestone }) => {
+        const parts: string[] = []
+        if (ventureCount > 0) {
+          parts.push(
+            `${sentence(word(ventureCount))} ${plural(ventureCount, 'venture is', 'ventures are')} on the shelf.`,
+          )
+        }
+        if (milestone) {
+          parts.push(
+            `${sentence(hoursWord(milestone.towardH))} ${plural(Math.round(milestone.towardH), 'hour', 'hours')} at the bench toward ${milestone.title}.`,
+          )
+        }
+        const undone = bookedH - fulfilledH
+        if (undone > 0.05) {
+          const n = Math.round(undone)
+          parts.push(
+            `${sentence(hoursWord(undone))} ${plural(n, 'hour', 'hours')} of this week's booking ${plural(n, 'is', 'are')} not done.`,
+          )
+        }
+        return parts.length > 0 ? parts.join(' ') : null
+      },
+    },
+  },
   kinds: {
     shift: 'THE WATCH',
     sleep: 'SLEEP',
     training: 'THE GROUNDS',
     study: 'THE STUDY',
+    workshop: 'THE WORKSHOP',
     marker: 'THE LEDGER',
   },
   modules: {
     watch: { name: 'THE WATCH', tagline: 'Shifts · hours · next up' },
     training: { name: 'THE GROUNDS', tagline: 'Workouts · recovery · food' },
     study: { name: 'THE STUDY', tagline: "Subjects · topics · what's due" },
+    workshop: { name: 'THE WORKSHOP', tagline: 'Ventures · bench hours · milestones' },
     capital: { name: 'THE LEDGER', tagline: 'Net worth · markets · budget' },
   },
   watch: {
@@ -1393,6 +1634,20 @@ export const majordomoPack: VoicePack = {
         'Book a study session ahead here. Past sessions still waiting to be logged are listed below.',
       weekLedger:
         'Every study session this week and how it went — done, partial, or skipped.',
+    },
+    workshop: {
+      bench:
+        'One ring per venture, filling as bench hours are fulfilled. The timer logs unplanned work; booked sessions land on the Manor.',
+      pending:
+        'Milestones coming up, soonest first, with the hours worked toward each. An overdue chip trails to today until dealt with.',
+      desk:
+        'Book bench time ahead here. Past sessions still waiting to be reported are listed below.',
+      weekLedger:
+        'Every bench session this week and how it went — done, partial, or skipped. LIVE marks hours the timer logged.',
+      shelf:
+        'Every venture and its lifetime hours. The odometer never resets — shipping or shelving keeps the history.',
+      board:
+        'The venture’s pegboard: notes, tasks and links hung on a grid and threaded together. Drag a card to move it.',
     },
     capital: {
       vault:

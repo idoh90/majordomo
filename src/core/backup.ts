@@ -18,6 +18,7 @@ export const ESTATE_KEYS = [
   'majordomo-events',
   'majordomo-training',
   'majordomo-study',
+  'majordomo-workshop',
   'majordomo-capital',
   'majordomo-watch',
 ] as const
@@ -142,6 +143,7 @@ export const STORE_LABEL: Record<string, string> = {
   'majordomo-events': 'The Manor',
   'majordomo-training': 'The Grounds',
   'majordomo-study': 'The Study',
+  'majordomo-workshop': 'The Workshop',
   'majordomo-capital': 'The Ledger',
   'majordomo-watch': 'The Watch',
   'batman-shell': 'Settings (legacy)',

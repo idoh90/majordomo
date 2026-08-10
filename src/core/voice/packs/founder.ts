@@ -19,6 +19,7 @@ export const founderPack: VoicePack = {
     watch: { name: 'THE NIGHT SHIFT', tagline: 'Shifts · duty · the roster' },
     training: { name: 'TRAINING GROUNDS', tagline: 'Conditioning · strain · fuel' },
     study: { name: 'THE ACADEMY', tagline: 'Subjects · syllabi · the docket' },
+    workshop: { name: 'APPLIED SCIENCES', tagline: 'Projects · bench hours · prototypes' },
     capital: { name: 'WAYNE FUND', tagline: 'Net worth · markets · ledger' },
   },
   capital: {
