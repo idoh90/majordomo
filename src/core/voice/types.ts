@@ -870,6 +870,8 @@ export interface VoicePack {
       colOf: (v: { col: number; total: number }) => string
       done: string
       loose: string
+      hangHere: string
+      pressHint: string
       zoomIn: string
       zoomOut: string
       zoomReset: string

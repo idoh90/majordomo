@@ -829,6 +829,10 @@ export const majordomoPack: VoicePack = {
       done: 'DONE',
       /** the column for work that has not been filed under a heading */
       loose: 'UNFILED',
+      /** the press-here target at the foot of a column on the phone */
+      hangHere: '+ HANG ONE HERE',
+      /** the hint under the board on desktop, where the gesture is invisible */
+      pressHint: 'Press bare board to hang a card there. Drag it to move the wall.',
       zoomIn: 'Closer',
       zoomOut: 'Further back',
       zoomReset: 'Back to full size',

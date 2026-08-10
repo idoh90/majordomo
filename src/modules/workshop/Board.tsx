@@ -72,6 +72,8 @@ export function Board({
 
   const [sheet, setSheet] = useState<'hang' | 'milestones' | null>(null)
   const [editCard, setEditCard] = useState<BoardCard | null>(null)
+  /** where a press on bare board asked for the new card to go */
+  const [placeAt, setPlaceAt] = useState<{ parentId?: string; index: number } | null>(null)
 
   const mine = cards.filter((c) => c.ventureId === venture.id)
   const groups = boardGroups(mine)
@@ -84,6 +86,13 @@ export function Board({
 
   const openEdit = (card: BoardCard) => {
     setEditCard(card)
+    setPlaceAt(null)
+    setSheet('hang')
+  }
+
+  const openCreateAt = (parentId: string | undefined, index: number) => {
+    setEditCard(null)
+    setPlaceAt({ parentId, index })
     setSheet('hang')
   }
 
@@ -190,8 +199,18 @@ export function Board({
         <EmptyBoard onHang={() => setSheet('hang')} />
       ) : (
         <>
-          <DesktopBoard groups={groups} threads={myThreads} onEdit={openEdit} />
-          <MobileBoard groups={groups} threads={myThreads} onEdit={openEdit} />
+          <DesktopBoard
+            groups={groups}
+            threads={myThreads}
+            onEdit={openEdit}
+            onCreateAt={openCreateAt}
+          />
+          <MobileBoard
+            groups={groups}
+            threads={myThreads}
+            onEdit={openEdit}
+            onCreateAt={openCreateAt}
+          />
         </>
       )}
 
@@ -200,11 +219,13 @@ export function Board({
         onClose={() => {
           setSheet(null)
           setEditCard(null)
+          setPlaceAt(null)
         }}
         venture={venture}
         cards={mine}
         threads={myThreads}
         editing={editCard}
+        placeAt={placeAt}
         butler={butler}
       />
       <MilestonesSheet
@@ -307,7 +328,12 @@ interface Pan {
   /** the offset at that moment */
   ox: number
   oy: number
+  /** the press has travelled far enough to be a pan rather than a tap */
+  moved: boolean
 }
+
+/** how far a press may travel and still count as a press, not a drag */
+const TAP_SLOP = 6
 
 const ZOOM_MIN = 0.4
 const ZOOM_MAX = 1.6
@@ -317,10 +343,13 @@ function DesktopBoard({
   groups,
   threads,
   onEdit,
+  onCreateAt,
 }: {
   groups: BoardGroup[]
   threads: { id: string; from: string; to: string }[]
   onEdit: (card: BoardCard) => void
+  /** a press on bare board: hang something under this heading, at this place */
+  onCreateAt: (parentId: string | undefined, index: number) => void
 }) {
   const viewRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef(new Map<string, HTMLDivElement>())
@@ -419,12 +448,33 @@ function DesktopBoard({
     } catch {
       /* see above */
     }
-    setPan({ sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y })
+    setPan({ sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false })
   }
 
   const surfaceMove = (e: React.PointerEvent) => {
     if (!pan) return
-    setView((v) => ({ ...v, x: pan.ox + (e.clientX - pan.sx), y: pan.oy + (e.clientY - pan.sy) }))
+    const moved =
+      pan.moved || Math.hypot(e.clientX - pan.sx, e.clientY - pan.sy) > TAP_SLOP
+    // the wall only follows the hand once the press has committed to being a
+    // drag — otherwise a tap that wobbles by a pixel would nudge the board
+    if (moved) {
+      setView((v) => ({ ...v, x: pan.ox + (e.clientX - pan.sx), y: pan.oy + (e.clientY - pan.sy) }))
+    }
+    if (moved !== pan.moved) setPan({ ...pan, moved })
+  }
+
+  /**
+   * A press on bare pegboard that never became a drag is an instruction to
+   * hang something THERE: the column decides the heading, the height decides
+   * the position, and the sheet opens already knowing both.
+   */
+  const surfaceUp = (e: React.PointerEvent) => {
+    const p = pan
+    setPan(null)
+    if (!p || p.moved || drag) return
+    const pt = boardPoint(e)
+    const t = dropAt(pt.x, pt.y)
+    onCreateAt(t.parentId, t.index)
   }
 
   /** zoom about a screen point, so the thing under the cursor stays under it */
@@ -477,10 +527,10 @@ function DesktopBoard({
           surfaceMove(e)
           cardMove(e)
         }}
-        onPointerUp={() => setPan(null)}
+        onPointerUp={surfaceUp}
         onPointerCancel={() => setPan(null)}
         className="relative overflow-hidden"
-        style={{ height: VIEW_H, cursor: pan ? 'grabbing' : 'grab', ...PEGBOARD_BG }}
+        style={{ height: VIEW_H, cursor: pan?.moved ? 'grabbing' : 'grab', ...PEGBOARD_BG }}
       >
         <div
           className="absolute left-0 top-0 origin-top-left"
@@ -568,6 +618,12 @@ function DesktopBoard({
           onOut={() => zoomAt(1 / 1.15)}
           onReset={() => setView({ x: 0, y: 0, z: 1 })}
         />
+
+        {/* a press and a drag on the same surface do different things, and
+            neither leaves a mark — so the board says so, once, quietly */}
+        <div className="pointer-events-none absolute bottom-3 left-4 text-[10.5px] italic text-ink-faint">
+          {voice.workshop.board.pressHint}
+        </div>
       </div>
     </div>
   )
@@ -810,10 +866,12 @@ function MobileBoard({
   groups,
   threads,
   onEdit,
+  onCreateAt,
 }: {
   groups: BoardGroup[]
   threads: { id: string; from: string; to: string }[]
   onEdit: (card: BoardCard) => void
+  onCreateAt: (parentId: string | undefined, index: number) => void
 }) {
   const [page, setPage] = useState(0)
   const scroller = useRef<HTMLDivElement | null>(null)
@@ -844,7 +902,7 @@ function MobileBoard({
               </div>
             )}
             {g.children.length === 0 ? (
-              <div className="flex min-h-[140px] items-center justify-center text-[12px] italic text-ink-faint">
+              <div className="flex min-h-[120px] items-center justify-center text-[12px] italic text-ink-faint">
                 {voice.workshop.board.empty}
               </div>
             ) : (
@@ -895,6 +953,16 @@ function MobileBoard({
                 </div>
               ))
             )}
+            {/* the phone's version of pressing bare board: an explicit target
+                at the foot of the column, because an invisible tap zone on a
+                touch screen is a thing nobody finds */}
+            <button
+              type="button"
+              onClick={() => onCreateAt(g.title?.id, g.children.length)}
+              className="mt-3 w-full rounded-[2px] border-[1.5px] border-dashed border-line py-3 text-center font-display text-[9.5px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
+            >
+              {voice.workshop.board.hangHere}
+            </button>
           </div>
         ))}
       </div>
@@ -930,6 +998,7 @@ function HangCardSheet({
   cards,
   threads,
   editing,
+  placeAt,
   butler,
 }: {
   open: boolean
@@ -938,6 +1007,8 @@ function HangCardSheet({
   cards: BoardCard[]
   threads: { id: string; from: string; to: string }[]
   editing: BoardCard | null
+  /** set when the sheet was opened by pressing a spot on the board */
+  placeAt: { parentId?: string; index: number } | null
   butler: (msg: string) => void
 }) {
   const [type, setType] = useState<CardType>('note')
@@ -955,8 +1026,9 @@ function HangCardSheet({
     setBody(editing?.body ?? '')
     setUrl(editing?.url ?? '')
     setThreadTo('')
-    setParentId(editing?.parentId ?? '')
-  }, [open, editing])
+    // a press on the board already answered "under which heading"
+    setParentId(editing?.parentId ?? placeAt?.parentId ?? '')
+  }, [open, editing, placeAt])
 
   const titles = cards.filter((c) => c.type === 'title' && c.id !== editing?.id)
   const others = cards.filter((c) => c.id !== editing?.id && c.type !== 'title')
@@ -991,11 +1063,16 @@ function HangCardSheet({
       if (threadTo) store.addThread(venture.id, editing.id, threadTo)
       butler(threadTo ? voice.workshop.toast.threaded : voice.workshop.toast.renamed)
     } else {
-      store.addCard(venture.id, type, trimmed, {
+      const made = store.addCard(venture.id, type, trimmed, {
         ...extra,
         parentId: under,
         threadTo: threadTo || undefined,
       })
+      // a card asked for at a spot lands AT that spot, not at the foot of the
+      // column — the press said where, and addCard only ever appends
+      if (placeAt && type !== 'title' && (under ?? undefined) === placeAt.parentId) {
+        store.placeCard(made.id, under, placeAt.index)
+      }
       butler(type === 'title' ? voice.workshop.toast.titleHung : voice.workshop.toast.cardHung)
     }
     onClose()
