@@ -124,6 +124,9 @@ export interface WorkshopBriefingFacts {
   milestone: { venture: string; title: string; days: number; towardH: number } | null
   awaiting: number
   ventureCount: number
+  /** jobs struck against jobs hung, summed across every live venture — the
+   *  shelf-wide total, so it cannot disagree with any one card's bar */
+  tasks: { done: number; total: number } | null
   /** a bench timer is running right now */
   benchLive: { venture: string } | null
   /** the longest-untouched building venture, when it has been ≥ 7 quiet days */
@@ -832,6 +835,16 @@ export interface VoicePack {
     /** the odometer never resets */
     lifetime: string
     odometer: string
+    /** how far along the BOARD is — jobs struck against jobs hung. A separate
+     *  reading from hours: effort only climbs, this can fall when new work is
+     *  found, which is honest about inventing. */
+    tasks: {
+      label: string
+      count: (v: { done: number; total: number }) => string
+      pct: (pct: number) => string
+      none: string
+      allDone: string
+    }
     statusName: { spark: string; building: string; shipped: string; shelved: string }
     rename: string
     ship: string

@@ -48,6 +48,51 @@ export function StatusPill({ status }: { status: VentureStatus }) {
   )
 }
 
+/**
+ * How far along the board is — struck jobs against hung ones. Sits beside the
+ * odometer everywhere, because the two answer different questions: the
+ * odometer is what a venture has COST, this is how much of it is DONE.
+ * Renders nothing when the board holds no jobs; an empty bar reading 0% would
+ * accuse a venture of being nowhere when nothing has been asked of it yet.
+ */
+export function TaskProgressBar({
+  progress,
+  className = '',
+}: {
+  progress: { done: number; total: number; pct: number }
+  className?: string
+}) {
+  if (progress.total === 0) return null
+  return (
+    <div className={className}>
+      <div className="flex items-baseline gap-2">
+        <span className="font-display text-[8.5px] font-semibold tracking-[0.18em] text-ink-faint">
+          {voice.workshop.tasks.label}
+        </span>
+        <span className="ml-auto text-[11px] text-ink-dim [font-variant-numeric:tabular-nums]">
+          {voice.workshop.tasks.count(progress)}
+        </span>
+        <span
+          className="font-display text-[11.5px] font-semibold [font-variant-numeric:tabular-nums]"
+          style={{ color: COPPER }}
+        >
+          {voice.workshop.tasks.pct(progress.pct)}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-pill bg-panel-2">
+        <div
+          className="h-full rounded-pill transition-[width] duration-300"
+          style={{
+            width: `${progress.pct}%`,
+            background: COPPER,
+            boxShadow: progress.pct > 0 ? '0 0 8px var(--glow-workshop)' : undefined,
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export function SheetLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="mb-2 mt-4 block font-display text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-faint">

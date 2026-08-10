@@ -12,6 +12,7 @@ import {
   daysUntil,
   milestoneProgress,
   nextMilestone,
+  taskProgress,
   ventureOfEvent,
   workshopStats,
 } from './lib'
@@ -30,6 +31,7 @@ export function WorkshopBriefing({
   const ventures = useWorkshopStore((s) => s.ventures)
   const sessions = useWorkshopStore((s) => s.sessions)
   const milestones = useWorkshopStore((s) => s.milestones)
+  const cards = useWorkshopStore((s) => s.cards)
   const bench = useWorkshopStore((s) => s.bench)
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
@@ -67,6 +69,16 @@ export function WorkshopBriefing({
       : null,
     awaiting: awaitingReport(events, sessions, now).length,
     ventureCount: active.length,
+    tasks: (() => {
+      let done = 0
+      let total = 0
+      for (const v of active) {
+        const p = taskProgress(cards, v.id)
+        done += p.done
+        total += p.total
+      }
+      return total > 0 ? { done, total } : null
+    })(),
     benchLive: bench ? { venture: nameOf(bench.ventureId) } : null,
     quiet,
     nextSession: upcoming

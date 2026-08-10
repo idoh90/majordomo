@@ -799,6 +799,13 @@ export const majordomoPack: VoicePack = {
     openVenture: '+ OPEN A VENTURE',
     lifetime: 'LIFETIME',
     odometer: 'LIFETIME · THE ODOMETER',
+    tasks: {
+      label: 'JOBS DONE',
+      count: ({ done, total }) => `${done} of ${total}`,
+      pct: (pct) => `${pct}%`,
+      none: 'No jobs on the board yet.',
+      allDone: 'Every job on the board is struck.',
+    },
     statusName: { spark: 'SPARK', building: 'BUILDING', shipped: 'SHIPPED', shelved: 'SHELVED' },
     rename: 'RENAME',
     ship: 'SHIP',
@@ -953,11 +960,18 @@ export const majordomoPack: VoicePack = {
         if (parts.length === 0) parts.push('Nothing awaits report and nothing is overdue.')
         return parts.join(' ')
       },
-      aside: ({ ventureCount, bookedH, fulfilledH, milestone }) => {
+      aside: ({ ventureCount, bookedH, fulfilledH, milestone, tasks }) => {
         const parts: string[] = []
         if (ventureCount > 0) {
           parts.push(
             `${sentence(word(ventureCount))} ${plural(ventureCount, 'venture is', 'ventures are')} on the shelf.`,
+          )
+        }
+        if (tasks) {
+          parts.push(
+            tasks.done === tasks.total
+              ? `Every job on the boards is struck — ${lower(tasks.total)} of ${lower(tasks.total)}.`
+              : `${sentence(word(tasks.done))} of ${lower(tasks.total)} ${plural(tasks.total, 'job', 'jobs')} struck across the boards.`,
           )
         }
         if (milestone) {

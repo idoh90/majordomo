@@ -13,6 +13,7 @@ import {
   SheetLabel,
   StatusPill,
   Stepper,
+  TaskProgressBar,
   fdate,
 } from './bits'
 import {
@@ -23,6 +24,7 @@ import {
   lifetimeHours,
   nextMilestone,
   pendingMilestones,
+  taskProgress,
   workshopStats,
 } from './lib'
 import { useWorkshopStore } from './store'
@@ -75,6 +77,7 @@ export function Board({
   const week = stats.perVenture[venture.id] ?? { fulfilledH: 0, bookedH: 0 }
   const lifetime = lifetimeHours(activeEvents, sessions, venture.id)
   const nextMs = nextMilestone(milestones, venture.id)
+  const tasks = taskProgress(cards, venture.id)
 
   const openEdit = (card: BoardCard) => {
     setEditCard(card)
@@ -104,6 +107,7 @@ export function Board({
             {voice.workshop.odometer}
           </span>
         </span>
+        <TaskProgressBar progress={tasks} className="w-[132px] flex-none" />
         <span className="flex items-center gap-2">
           <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden>
             <circle cx="14" cy="14" r="11" fill="none" stroke="var(--color-panel-2)" strokeWidth="3.5" />

@@ -83,24 +83,30 @@ export function TabBar({ view, onNav }: { view: string; onNav: (view: string) =>
   }
 
   return (
-    <nav
-      aria-label="Views"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-line px-3.5 pt-2 md:hidden"
-      style={{
-        background: 'color-mix(in srgb, var(--color-panel) 90%, transparent)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
-      }}
-    >
+    <>
+      {/* The fold's scrim is a SIBLING of the bar, never a child of it: the bar
+          carries a backdrop-filter, which makes it the containing block for any
+          fixed descendant — a `fixed inset-0` inside it covers the bar's own
+          65 px, not the screen, so tapping away would not close the fold. */}
       {wingsOpen && (
-        <>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={() => setWingsOpen(false)}
-            className="fixed inset-0 z-40 cursor-pointer"
-          />
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={() => setWingsOpen(false)}
+          className="fixed inset-0 z-40 cursor-pointer md:hidden"
+        />
+      )}
+      <nav
+        aria-label="Views"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-line px-3.5 pt-2 md:hidden"
+        style={{
+          background: 'color-mix(in srgb, var(--color-panel) 90%, transparent)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
+        }}
+      >
+        {wingsOpen && (
           <div className="menu-panel absolute bottom-full right-3.5 z-50 mb-2 flex min-w-[180px] flex-col py-1.5 animate-[fade-in_160ms_ease-out]">
             {folded.map((t) => {
               const on = view === t.id
@@ -129,9 +135,8 @@ export function TabBar({ view, onNav }: { view: string; onNav: (view: string) =>
               )
             })}
           </div>
-        </>
-      )}
-      <div className="flex items-center gap-1">
+        )}
+        <div className="flex items-center gap-1">
         {inline.map((t) => {
           const on = view === t.id
           return (
@@ -197,7 +202,8 @@ export function TabBar({ view, onNav }: { view: string; onNav: (view: string) =>
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
           </svg>
         </button>
-      </div>
-    </nav>
+        </div>
+      </nav>
+    </>
   )
 }

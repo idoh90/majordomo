@@ -20,6 +20,7 @@ import {
   SheetLabel,
   StatusPill,
   Stepper,
+  TaskProgressBar,
   VentureChips,
   fdate,
   hhmm,
@@ -36,8 +37,10 @@ import {
   pendingMilestones,
   projRef,
   reconcileMarkers,
+  taskProgress,
   ventureOfEvent,
   workshopStats,
+  type TaskProgress,
 } from './lib'
 import { useWorkshopStore } from './store'
 import { useWorkshopUi } from './uiStore'
@@ -691,6 +694,7 @@ function Shelf({
   butler: (msg: string) => void
 }) {
   const milestones = useWorkshopStore((s) => s.milestones)
+  const cards = useWorkshopStore((s) => s.cards)
   const [confirmArchive, setConfirmArchive] = useState<Venture | null>(null)
   const shipped = ventures.filter((v) => v.status === 'shipped').length
 
@@ -710,6 +714,7 @@ function Shelf({
             key={v.id}
             venture={v}
             ms={nextMilestone(milestones, v.id)}
+            tasks={taskProgress(cards, v.id)}
             events={events}
             sessions={sessions}
             now={now}
@@ -749,6 +754,7 @@ function Shelf({
 function ShelfCard({
   venture,
   ms,
+  tasks,
   events,
   sessions,
   now,
@@ -759,6 +765,7 @@ function ShelfCard({
 }: {
   venture: Venture
   ms: Milestone | null
+  tasks: TaskProgress
   events: CalendarEvent[]
   sessions: Record<string, SessionMeta>
   now: number
@@ -854,6 +861,7 @@ function ShelfCard({
         </div>
       ) : null}
       <div className="mt-1 text-[11.5px] text-ink-dim">{touchedLine}</div>
+      <TaskProgressBar progress={tasks} className="mt-2.5" />
       <div className="mt-2.5 flex gap-3">
         {act(voice.workshop.rename, onRename)}
         {(venture.status === 'spark' || venture.status === 'building') &&

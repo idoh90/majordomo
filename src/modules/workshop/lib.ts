@@ -3,7 +3,7 @@ import { hoursOf } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
 import { voice } from '../../core/voice'
-import type { Milestone, SessionMeta, Venture } from './types'
+import type { BoardCard, Milestone, SessionMeta, Venture } from './types'
 
 /* ------------------------------------------------------------- sourceRef
  * The wing's grammar on the shared calendar: bench-session events carry
@@ -169,6 +169,36 @@ export function daysSinceTouched(
   if (!last) return null
   const ms = startOfLocalDay(new Date(now)).getTime() - startOfLocalDay(new Date(last)).getTime()
   return Math.max(0, Math.round(ms / 86_400_000))
+}
+
+/* ------------------------------------------------------------- task progress
+ * How far along a venture IS, as opposed to how many hours it has eaten.
+ *
+ * The two are deliberately different readings and both are shown. Hours are
+ * effort spent and only ever climb; this is the fraction of the jobs on the
+ * board that are struck through, and it can go DOWN when you hang new work —
+ * which is honest about inventing, where finding the next three jobs is
+ * progress even though the percentage falls.
+ *
+ * Only `task` cards count. Notes and links are reference, not work: counting
+ * them would mean pinning a datasheet made the venture look less finished.
+ */
+export interface TaskProgress {
+  done: number
+  total: number
+  /** 0–100, rounded; 0 when the board holds no tasks at all */
+  pct: number
+}
+
+export function taskProgress(cards: BoardCard[], ventureId: string): TaskProgress {
+  let done = 0
+  let total = 0
+  for (const c of cards) {
+    if (c.ventureId !== ventureId || c.type !== 'task') continue
+    total++
+    if (c.done) done++
+  }
+  return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 }
 }
 
 /* ------------------------------------------------------------- milestones */
