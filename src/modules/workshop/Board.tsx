@@ -13,12 +13,10 @@ import {
   SheetLabel,
   StatusPill,
   Stepper,
-  TaskProgressBar,
   fdate,
 } from './bits'
 import {
-  BOARD_COLS,
-  boardColumns,
+  boardGroups,
   dayKeyToDate,
   daysUntil,
   lifetimeHours,
@@ -28,6 +26,7 @@ import {
   workshopStats,
 } from './lib'
 import { useWorkshopStore } from './store'
+import type { BoardGroup } from './lib'
 import type { BoardCard, CardType, Milestone, Venture } from './types'
 
 /**
@@ -40,13 +39,16 @@ import type { BoardCard, CardType, Milestone, Venture } from './types'
 
 const CARD_W = 240
 const COL_GAP = 44
-const SLOT_H = 190
 const PAD_X = 36
-const PAD_TOP = 46
-const PAD_BOTTOM = 30
-
-const colX = (col: number) => PAD_X + col * (CARD_W + COL_GAP)
-const rowY = (row: number) => PAD_TOP + row * SLOT_H
+const PAD_TOP = 40
+const PAD_BOTTOM = 60
+/** gap between two cards in the same column, and under a heading */
+const CARD_GAP_Y = 16
+const TITLE_GAP_Y = 12
+/** stand-in height until a card has been measured */
+const FALLBACK_H = 92
+/** the UNFILED rail, which stands in for a heading on the loose column */
+const LOOSE_RAIL_H = 26
 
 const RING_MINI_C = 2 * Math.PI * 11
 
@@ -72,6 +74,7 @@ export function Board({
   const [editCard, setEditCard] = useState<BoardCard | null>(null)
 
   const mine = cards.filter((c) => c.ventureId === venture.id)
+  const groups = boardGroups(mine)
   const myThreads = threads.filter((t) => t.ventureId === venture.id)
   const stats = workshopStats(activeEvents, sessions, ventures, now, weekStart)
   const week = stats.perVenture[venture.id] ?? { fulfilledH: 0, bookedH: 0 }
@@ -99,6 +102,20 @@ export function Board({
           {venture.name}
         </span>
         <StatusPill status={venture.status} />
+        {/* the jobs lead the chrome; the odometer follows them */}
+        {tasks.total > 0 && (
+          <span className="flex items-baseline gap-2">
+            <span
+              className="stat-num font-display text-[22px] font-semibold leading-none [font-variant-numeric:tabular-nums]"
+              style={{ color: COPPER }}
+            >
+              {voice.workshop.tasks.pct(tasks.pct)}
+            </span>
+            <span className="text-[10.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
+              {voice.workshop.tasks.count(tasks)} {voice.workshop.tasks.label.toLowerCase()}
+            </span>
+          </span>
+        )}
         <span className="flex flex-col">
           <span className="stat-num font-display text-[15px] font-semibold leading-none [font-variant-numeric:tabular-nums]">
             {lifetime.toFixed(1)} h
@@ -107,7 +124,6 @@ export function Board({
             {voice.workshop.odometer}
           </span>
         </span>
-        <TaskProgressBar progress={tasks} className="w-[132px] flex-none" />
         <span className="flex items-center gap-2">
           <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden>
             <circle cx="14" cy="14" r="11" fill="none" stroke="var(--color-panel-2)" strokeWidth="3.5" />
@@ -174,8 +190,8 @@ export function Board({
         <EmptyBoard onHang={() => setSheet('hang')} />
       ) : (
         <>
-          <DesktopBoard cards={mine} threads={myThreads} onEdit={openEdit} />
-          <MobileBoard cards={mine} threads={myThreads} onEdit={openEdit} />
+          <DesktopBoard groups={groups} threads={myThreads} onEdit={openEdit} />
+          <MobileBoard groups={groups} threads={myThreads} onEdit={openEdit} />
         </>
       )}
 
@@ -223,37 +239,101 @@ function EmptyBoard({ onHang }: { onHang: () => void }) {
 
 /* ---------------------------------------------------------------- desktop */
 
+interface Placed {
+  card: BoardCard
+  x: number
+  y: number
+  h: number
+}
+
+interface PlacedColumn {
+  x: number
+  title: Placed | null
+  children: Placed[]
+  /** y of the first free space under the column */
+  bottom: number
+}
+
+/**
+ * Where everything sits. Columns are groups; a heading tops its column and its
+ * work stacks beneath in order. Heights are MEASURED rather than assumed —
+ * cards differ by hundreds of pixels once descriptions are on them, and a
+ * fixed slot height either clipped the long ones or left craters under the
+ * short ones.
+ */
+function layout(
+  groups: BoardGroup[],
+  heights: Record<string, number>,
+): { cols: PlacedColumn[]; w: number; h: number } {
+  const hOf = (c: BoardCard) => heights[c.id] ?? (c.type === 'title' ? 44 : FALLBACK_H)
+  const cols: PlacedColumn[] = groups.map((g, i) => {
+    const x = PAD_X + i * (CARD_W + COL_GAP)
+    let y = PAD_TOP
+    let title: Placed | null = null
+    if (g.title) {
+      title = { card: g.title, x, y, h: hOf(g.title) }
+      y += title.h + TITLE_GAP_Y
+    } else {
+      // the loose column gets a rail of its own so its first card starts level
+      // with everyone else's rather than floating a heading's height higher
+      y += LOOSE_RAIL_H + TITLE_GAP_Y
+    }
+    const children: Placed[] = g.children.map((c) => {
+      const p = { card: c, x, y, h: hOf(c) }
+      y += p.h + CARD_GAP_Y
+      return p
+    })
+    return { x, title, children, bottom: y }
+  })
+  const w = PAD_X * 2 + Math.max(1, cols.length) * CARD_W + Math.max(0, cols.length - 1) * COL_GAP
+  const h = Math.max(...cols.map((c) => c.bottom), PAD_TOP + FALLBACK_H) + PAD_BOTTOM
+  return { cols, w, h }
+}
+
 interface Drag {
   id: string
-  /** pointer offset inside the card */
+  /** pointer offset inside the card, in board units */
   dx: number
   dy: number
-  /** current pointer position relative to the board */
   x: number
   y: number
   moved: boolean
 }
 
+interface Pan {
+  /** pointer position where the pan began, in SCREEN units */
+  sx: number
+  sy: number
+  /** the offset at that moment */
+  ox: number
+  oy: number
+}
+
+const ZOOM_MIN = 0.4
+const ZOOM_MAX = 1.6
+const VIEW_H = 560
+
 function DesktopBoard({
-  cards,
+  groups,
   threads,
   onEdit,
 }: {
-  cards: BoardCard[]
+  groups: BoardGroup[]
   threads: { id: string; from: string; to: string }[]
   onEdit: (card: BoardCard) => void
 }) {
-  const boardRef = useRef<HTMLDivElement | null>(null)
+  const viewRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef(new Map<string, HTMLDivElement>())
   const [heights, setHeights] = useState<Record<string, number>>({})
   const [drag, setDrag] = useState<Drag | null>(null)
+  const [pan, setPan] = useState<Pan | null>(null)
+  const [view, setView] = useState({ x: 0, y: 0, z: 1 })
 
-  const maxRow = cards.reduce((m, c) => Math.max(m, c.row), 0)
-  const boardW = PAD_X * 2 + BOARD_COLS * CARD_W + (BOARD_COLS - 1) * COL_GAP
-  const boardH = rowY(maxRow) + SLOT_H + PAD_BOTTOM
+  const { cols, w: boardW, h: boardH } = layout(groups, heights)
+  const all = groups.flatMap((g) => (g.title ? [g.title, ...g.children] : g.children))
 
-  // threads are arithmetic off the slots, but a card's HEIGHT is its own —
-  // one measure pass keeps the twine tied to real card bottoms
+  // the twine is arithmetic off the layout, but a card's HEIGHT is its own —
+  // one measure pass per commit keeps the stack and the twine honest
   useLayoutEffect(() => {
     const next: Record<string, number> = {}
     let changed = false
@@ -264,149 +344,322 @@ function DesktopBoard({
     if (changed || Object.keys(next).length !== Object.keys(heights).length) setHeights(next)
   })
 
-  const slotOf = (x: number, y: number) => {
-    const col = Math.max(
-      0,
-      Math.min(BOARD_COLS - 1, Math.round((x - PAD_X) / (CARD_W + COL_GAP))),
-    )
-    const row = Math.max(0, Math.min(maxRow + 1, Math.round((y - PAD_TOP) / SLOT_H)))
-    return { col, row }
+  /** screen point → board units, undoing the pan and the zoom */
+  const boardPoint = (e: { clientX: number; clientY: number }) => {
+    const r = viewRef.current!.getBoundingClientRect()
+    return {
+      x: (e.clientX - r.left - view.x) / view.z,
+      y: (e.clientY - r.top - view.y) / view.z,
+    }
   }
 
-  const boardPoint = (e: React.PointerEvent) => {
-    const rect = boardRef.current!.getBoundingClientRect()
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  /** which column, and where in it, a point lands */
+  const dropAt = (x: number, y: number) => {
+    let ci = 0
+    let best = Infinity
+    cols.forEach((c, i) => {
+      const d = Math.abs(x - (c.x + CARD_W / 2))
+      if (d < best) {
+        best = d
+        ci = i
+      }
+    })
+    const col = cols[ci]
+    const parentId = groups[ci]?.title?.id
+    // count the children whose middle sits above the drop point
+    let index = 0
+    for (const p of col.children) {
+      if (p.card.id === drag?.id) continue
+      if (y > p.y + p.h / 2) index++
+    }
+    return { ci, parentId, index }
   }
 
-  const down = (card: BoardCard) => (e: React.PointerEvent) => {
+  /* ------------------------------------------------------------ card drag */
+
+  const cardDown = (card: BoardCard, p: Placed) => (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('[data-nodrag]')) return
     if (e.button !== 0) return
-    const p = boardPoint(e)
+    e.stopPropagation() // a card drag is never also a pan
+    const pt = boardPoint(e)
     try {
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     } catch {
-      // a capture that can't be taken only means the drag ends on pointer-out
+      // a capture that cannot be taken only means the drag ends on pointer-out
     }
-    setDrag({ id: card.id, dx: p.x - colX(card.col), dy: p.y - rowY(card.row), x: p.x, y: p.y, moved: false })
+    setDrag({ id: card.id, dx: pt.x - p.x, dy: pt.y - p.y, x: pt.x, y: pt.y, moved: false })
   }
 
-  const move = (e: React.PointerEvent) => {
+  const cardMove = (e: React.PointerEvent) => {
     if (!drag) return
-    const p = boardPoint(e)
-    const moved = drag.moved || Math.hypot(p.x - drag.x, p.y - drag.y) > 6
-    setDrag({ ...drag, x: p.x, y: p.y, moved: drag.moved || moved })
+    const pt = boardPoint(e)
+    const moved = drag.moved || Math.hypot(pt.x - drag.x, pt.y - drag.y) > 6
+    setDrag({ ...drag, x: pt.x, y: pt.y, moved })
   }
 
-  const up = (card: BoardCard) => () => {
+  const cardUp = (card: BoardCard) => () => {
     if (!drag || drag.id !== card.id) return
     if (drag.moved) {
-      const s = slotOf(drag.x - drag.dx, drag.y - drag.dy)
-      useWorkshopStore.getState().moveCard(card.id, s.col, s.row)
+      const store = useWorkshopStore.getState()
+      const t = dropAt(drag.x - drag.dx + CARD_W / 2, drag.y - drag.dy)
+      if (card.type === 'title') store.moveTitle(card.id, t.ci)
+      else store.placeCard(card.id, t.parentId, t.index)
     } else {
       onEdit(card)
     }
     setDrag(null)
   }
 
-  const target = drag?.moved ? slotOf(drag.x - drag.dx, drag.y - drag.dy) : null
+  /* ------------------------------------------------------------ pan + zoom */
+
+  const surfaceDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    try {
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    } catch {
+      /* see above */
+    }
+    setPan({ sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y })
+  }
+
+  const surfaceMove = (e: React.PointerEvent) => {
+    if (!pan) return
+    setView((v) => ({ ...v, x: pan.ox + (e.clientX - pan.sx), y: pan.oy + (e.clientY - pan.sy) }))
+  }
+
+  /** zoom about a screen point, so the thing under the cursor stays under it */
+  const zoomAt = (factor: number, clientX?: number, clientY?: number) => {
+    const r = viewRef.current?.getBoundingClientRect()
+    setView((v) => {
+      const z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v.z * factor))
+      if (!r) return { ...v, z }
+      const px = (clientX ?? r.left + r.width / 2) - r.left
+      const py = (clientY ?? r.top + r.height / 2) - r.top
+      const k = z / v.z
+      return { x: px - (px - v.x) * k, y: py - (py - v.y) * k, z }
+    })
+  }
+
+  // wheel-to-zoom is bound natively rather than through React: the passive
+  // default on wheel listeners makes preventDefault a no-op, and without it
+  // the page scrolls away underneath the board
+  useEffect(() => {
+    const el = viewRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const target = drag?.moved ? dropAt(drag.x - drag.dx + CARD_W / 2, drag.y - drag.dy) : null
+  const targetCol = target ? cols[target.ci] : null
+  const targetY = targetCol
+    ? (() => {
+        const kids = targetCol.children.filter((p) => p.card.id !== drag?.id)
+        const at = Math.min(target!.index, kids.length)
+        return at < kids.length
+          ? kids[at].y - CARD_GAP_Y / 2
+          : (kids[kids.length - 1]?.y ?? targetCol.bottom - CARD_GAP_Y) +
+            (kids[kids.length - 1]?.h ?? 0) +
+            CARD_GAP_Y / 2
+      })()
+    : 0
 
   return (
-    <div className="trough hidden overflow-x-auto md:block">
+    <div className="trough relative hidden select-none md:block">
       <div
-        ref={boardRef}
-        className="relative"
-        style={{ width: boardW, height: boardH, ...PEGBOARD_BG }}
+        ref={viewRef}
+        onPointerDown={surfaceDown}
+        onPointerMove={(e) => {
+          surfaceMove(e)
+          cardMove(e)
+        }}
+        onPointerUp={() => setPan(null)}
+        onPointerCancel={() => setPan(null)}
+        className="relative overflow-hidden"
+        style={{ height: VIEW_H, cursor: pan ? 'grabbing' : 'grab', ...PEGBOARD_BG }}
       >
-        <Threads cards={cards} threads={threads} heights={heights} w={boardW} h={boardH} hideFor={drag?.moved ? drag.id : null} />
-        {target && (
-          <div
-            aria-hidden
-            className="absolute rounded-[3px] border-[1.5px] border-dashed"
-            style={{
-              left: colX(target.col),
-              top: rowY(target.row),
-              width: CARD_W,
-              height: 110,
-              borderColor: 'color-mix(in srgb, var(--color-w-workshop) 55%, transparent)',
-            }}
+        <div
+          className="absolute left-0 top-0 origin-top-left"
+          style={{
+            width: boardW,
+            height: boardH,
+            transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})`,
+            transition: pan || drag ? 'none' : 'transform 120ms ease-out',
+          }}
+        >
+          <Threads
+            placed={all.map((c) => ({ card: c, ...cardPos(cols, c.id) }))}
+            threads={threads}
+            w={boardW}
+            h={boardH}
+            hideFor={drag?.moved ? drag.id : null}
           />
-        )}
-        {cards.map((c) => {
-          const dragging = drag?.moved && drag.id === c.id
-          return (
+          {/* the insertion line, drawn where the card would land */}
+          {targetCol && drag && (
             <div
-              key={c.id}
-              ref={(el) => {
-                if (el) cardRefs.current.set(c.id, el)
-                else cardRefs.current.delete(c.id)
-              }}
-              onPointerDown={down(c)}
-              onPointerMove={move}
-              onPointerUp={up(c)}
-              onPointerCancel={() => setDrag(null)}
-              className="absolute select-none touch-none"
+              aria-hidden
+              className="absolute rounded-pill"
               style={{
-                left: dragging ? drag.x - drag.dx : colX(c.col),
-                top: dragging ? drag.y - drag.dy : rowY(c.row),
+                left: targetCol.x,
+                top: Math.max(PAD_TOP, targetY),
                 width: CARD_W,
-                zIndex: dragging ? 30 : 1,
-                cursor: dragging ? 'grabbing' : 'grab',
-                filter: dragging ? 'drop-shadow(0 10px 18px rgb(0 0 0 / 0.45))' : undefined,
-                transition: dragging ? 'none' : 'left 180ms ease-out, top 180ms ease-out',
+                height: 3,
+                background: COPPER,
+                boxShadow: '0 0 8px var(--glow-workshop)',
               }}
-            >
-              <CardFace card={c} />
-            </div>
-          )
-        })}
+            />
+          )}
+          {cols.map((col) =>
+            col.title ? null : (
+              <div
+                key="loose-rail"
+                aria-hidden
+                className="absolute pb-1.5 font-display text-[10px] font-semibold tracking-[0.2em] text-ink-faint"
+                style={{
+                  left: col.x,
+                  top: PAD_TOP,
+                  width: CARD_W,
+                  borderBottom: '2px solid var(--color-line)',
+                }}
+              >
+                {voice.workshop.board.loose}
+              </div>
+            ),
+          )}
+          {cols.map((col, ci) =>
+            [...(col.title ? [col.title] : []), ...col.children].map((p) => {
+              const dragging = drag?.moved && drag.id === p.card.id
+              return (
+                <div
+                  key={p.card.id}
+                  ref={(el) => {
+                    if (el) cardRefs.current.set(p.card.id, el)
+                    else cardRefs.current.delete(p.card.id)
+                  }}
+                  onPointerDown={cardDown(p.card, p)}
+                  onPointerUp={cardUp(p.card)}
+                  onPointerCancel={() => setDrag(null)}
+                  className="absolute touch-none"
+                  style={{
+                    left: dragging ? drag.x - drag.dx : p.x,
+                    top: dragging ? drag.y - drag.dy : p.y,
+                    width: CARD_W,
+                    zIndex: dragging ? 30 : p.card.type === 'title' ? 2 : 1,
+                    cursor: dragging ? 'grabbing' : 'grab',
+                    opacity: dragging ? 0.9 : 1,
+                    filter: dragging ? 'drop-shadow(0 10px 18px rgb(0 0 0 / 0.45))' : undefined,
+                    transition: dragging ? 'none' : 'left 180ms ease-out, top 180ms ease-out',
+                  }}
+                >
+                  <CardFace card={p.card} groupIndex={ci} />
+                </div>
+              )
+            }),
+          )}
+        </div>
+
+        <ZoomControls
+          zoom={view.z}
+          onIn={() => zoomAt(1.15)}
+          onOut={() => zoomAt(1 / 1.15)}
+          onReset={() => setView({ x: 0, y: 0, z: 1 })}
+        />
       </div>
     </div>
   )
 }
 
-/** orthogonal copper twine + junction squares, all coordinates slot-derived */
+/** where a card ended up, for the twine */
+function cardPos(cols: PlacedColumn[], id: string): { x: number; y: number; h: number } {
+  for (const c of cols) {
+    if (c.title?.card.id === id) return { x: c.title.x, y: c.title.y, h: c.title.h }
+    const kid = c.children.find((p) => p.card.id === id)
+    if (kid) return { x: kid.x, y: kid.y, h: kid.h }
+  }
+  return { x: 0, y: 0, h: 0 }
+}
+
+function ZoomControls({
+  zoom,
+  onIn,
+  onOut,
+  onReset,
+}: {
+  zoom: number
+  onIn: () => void
+  onOut: () => void
+  onReset: () => void
+}) {
+  const btn =
+    'flex h-8 w-8 items-center justify-center border border-line bg-panel text-[15px] leading-none text-ink-dim transition-colors hover:text-ink'
+  return (
+    <div
+      className="absolute right-3 top-3 flex items-center gap-1 rounded-[10px] p-1"
+      style={{ background: 'color-mix(in srgb, var(--color-panel) 82%, transparent)' }}
+      // the controls are chrome, not canvas: a press here must not pan
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <button type="button" aria-label={voice.workshop.board.zoomOut} onClick={onOut} className={`${btn} rounded-l-[8px]`}>
+        −
+      </button>
+      <button
+        type="button"
+        onClick={onReset}
+        className="min-w-[46px] px-1 text-center font-display text-[10.5px] font-semibold tracking-[0.1em] text-ink-dim transition-colors hover:text-ink [font-variant-numeric:tabular-nums]"
+        title={voice.workshop.board.zoomReset}
+      >
+        {Math.round(zoom * 100)}%
+      </button>
+      <button type="button" aria-label={voice.workshop.board.zoomIn} onClick={onIn} className={`${btn} rounded-r-[8px]`}>
+        +
+      </button>
+    </div>
+  )
+}
+
+/** orthogonal copper twine + junction squares, all coordinates layout-derived */
 function Threads({
-  cards,
+  placed,
   threads,
-  heights,
   w,
   h,
   hideFor,
 }: {
-  cards: BoardCard[]
+  placed: { card: BoardCard; x: number; y: number; h: number }[]
   threads: { id: string; from: string; to: string }[]
-  heights: Record<string, number>
   w: number
   h: number
   hideFor: string | null
 }) {
-  const byId = new Map(cards.map((c) => [c.id, c]))
+  const byId = new Map(placed.map((p) => [p.card.id, p]))
   const paths: { d: string; corners: [number, number][] }[] = []
 
   for (const t of threads) {
     let a = byId.get(t.from)
     let b = byId.get(t.to)
     if (!a || !b) continue
-    if (hideFor && (a.id === hideFor || b.id === hideFor)) continue
-    // draw top-to-bottom (reading order); same row draws left-to-right
-    if (a.row > b.row || (a.row === b.row && a.col > b.col)) [a, b] = [b, a]
-    const ha = heights[a.id] ?? 100
-    const ax = colX(a.col) + CARD_W / 2
-    const aBottom = rowY(a.row) + ha
-    const bx = colX(b.col) + CARD_W / 2
-    const bTop = rowY(b.row)
+    if (hideFor && (a.card.id === hideFor || b.card.id === hideFor)) continue
+    // draw top-to-bottom (reading order); level cards draw left-to-right
+    if (a.y > b.y || (a.y === b.y && a.x > b.x)) [a, b] = [b, a]
+    const ax = a.x + CARD_W / 2
+    const aBottom = a.y + a.h
+    const bx = b.x + CARD_W / 2
 
-    if (a.col === b.col && a.row !== b.row) {
-      paths.push({ d: `M${ax} ${aBottom} V${bTop}`, corners: [] })
-    } else if (a.row === b.row) {
-      const y = rowY(a.row) + 56
-      const left = colX(a.col) + CARD_W
-      const right = colX(b.col)
+    if (Math.abs(a.x - b.x) < 1) {
+      paths.push({ d: `M${ax} ${aBottom} V${b.y}`, corners: [] })
+    } else if (Math.abs(a.y - b.y) < 1) {
+      const y = a.y + Math.min(a.h, b.h) / 2
+      const left = Math.min(a.x, b.x) + CARD_W
+      const right = Math.max(a.x, b.x)
       paths.push({ d: `M${left} ${y} H${right}`, corners: [] })
     } else {
-      const yBand = bTop - 34
+      const yBand = Math.max(aBottom + CARD_GAP_Y / 2, b.y - CARD_GAP_Y / 2)
       paths.push({
-        d: `M${ax} ${aBottom} V${yBand} H${bx} V${bTop}`,
+        d: `M${ax} ${aBottom} V${yBand} H${bx} V${b.y}`,
         corners: [
           [ax, yBand],
           [bx, yBand],
@@ -437,8 +690,30 @@ function Threads({
 }
 
 /** one hung card: peg tabs, type label, state square, title, body/url */
-function CardFace({ card }: { card: BoardCard }) {
+function CardFace({ card, groupIndex = 0 }: { card: BoardCard; groupIndex?: number }) {
   const done = card.type === 'task' && card.done
+
+  // A heading is not a card, it is a rail: no peg tabs, no state square, a
+  // copper underline and the name in display type. Making it look like the
+  // work under it would defeat the point of having it.
+  if (card.type === 'title') {
+    return (
+      <div className="relative pb-1.5" style={{ borderBottom: `2px solid ${COPPER}` }}>
+        <div className="flex items-baseline gap-2">
+          <span className="font-display text-[8.5px] font-semibold tracking-[0.2em] text-ink-faint [font-variant-numeric:tabular-nums]">
+            {String(groupIndex + 1).padStart(2, '0')}
+          </span>
+          <span className="truncate font-display text-[15px] font-bold uppercase tracking-[0.12em] text-ink">
+            {card.title}
+          </span>
+        </div>
+        {card.body && (
+          <div className="mt-1 text-[11.5px] leading-snug text-ink-dim">{card.body}</div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
       className="relative rounded-[2px] border border-line px-3.5 py-3"
@@ -525,22 +800,23 @@ function CardFace({ card }: { card: BoardCard }) {
 /* ---------------------------------------------------------------- mobile */
 
 /**
- * The phone's answer from the design session: the board pages COLUMN BY
- * COLUMN. Each grid column is one snap page, stacked top to bottom, with the
- * twine drawn between consecutive cards it actually connects.
+ * The phone pages the wall one GROUP at a time: a heading and everything hung
+ * under it is a single snap page, so the organisation the headings give the
+ * board is exactly what a thumb swipes through. No pan and no zoom here —
+ * paging is the phone's navigation, and a pinch-scaled wall on a 390 px screen
+ * is a worse way to read the same cards.
  */
 function MobileBoard({
-  cards,
+  groups,
   threads,
   onEdit,
 }: {
-  cards: BoardCard[]
+  groups: BoardGroup[]
   threads: { id: string; from: string; to: string }[]
   onEdit: (card: BoardCard) => void
 }) {
   const [page, setPage] = useState(0)
   const scroller = useRef<HTMLDivElement | null>(null)
-  const cols = boardColumns(cards)
   const linked = (a: BoardCard, b: BoardCard) =>
     threads.some(
       (t) => (t.from === a.id && t.to === b.id) || (t.from === b.id && t.to === a.id),
@@ -556,30 +832,39 @@ function MobileBoard({
         }}
         className="flex snap-x snap-mandatory overflow-x-auto"
       >
-        {cols.map((col, i) => (
-          <div key={i} className="w-full flex-none snap-center px-6 pb-12 pt-5">
-            {col.length === 0 ? (
-              <div className="flex min-h-[180px] items-center justify-center text-[12px] italic text-ink-faint">
+        {groups.map((g, i) => (
+          <div key={g.title?.id ?? 'loose'} className="w-full flex-none snap-center px-6 pb-12 pt-5">
+            {g.title ? (
+              <div className="mb-4">
+                <CardFace card={g.title} groupIndex={i} />
+              </div>
+            ) : (
+              <div className="mb-4 font-display text-[10px] font-semibold tracking-[0.2em] text-ink-faint">
+                {voice.workshop.board.loose}
+              </div>
+            )}
+            {g.children.length === 0 ? (
+              <div className="flex min-h-[140px] items-center justify-center text-[12px] italic text-ink-faint">
                 {voice.workshop.board.empty}
               </div>
             ) : (
-              col.map((c, k) => (
+              g.children.map((c, k) => (
                 <div key={c.id}>
                   {k > 0 && (
                     <svg
                       width="100%"
-                      height="40"
+                      height="28"
                       className="block"
                       aria-hidden
                       style={{
-                        visibility: linked(col[k - 1], c) ? 'visible' : 'hidden',
+                        visibility: linked(g.children[k - 1], c) ? 'visible' : 'hidden',
                       }}
                     >
                       <line
                         x1="50%"
                         y1="0"
                         x2="50%"
-                        y2="40"
+                        y2="28"
                         stroke={COPPER}
                         strokeOpacity="0.55"
                         strokeWidth="2"
@@ -599,10 +884,14 @@ function MobileBoard({
                         onEdit(c)
                       }
                     }}
-                    className="block w-full cursor-pointer text-left"
+                    className={`block w-full cursor-pointer text-left ${k > 0 ? '' : 'mt-0'}`}
+                    style={k > 0 ? undefined : { marginTop: 0 }}
                   >
                     <CardFace card={c} />
                   </div>
+                  {k < g.children.length - 1 && !linked(c, g.children[k + 1]) && (
+                    <div className="h-3" />
+                  )}
                 </div>
               ))
             )}
@@ -610,9 +899,9 @@ function MobileBoard({
         ))}
       </div>
       <div className="pointer-events-none absolute inset-x-0 bottom-3.5 flex items-center justify-center gap-2">
-        {cols.map((_, i) => (
+        {groups.map((g, i) => (
           <span
-            key={i}
+            key={g.title?.id ?? 'loose'}
             className="block"
             style={{
               width: 14,
@@ -625,7 +914,7 @@ function MobileBoard({
           />
         ))}
         <span className="ml-2 font-display text-[8.5px] font-semibold tracking-[0.18em] text-ink-faint [font-variant-numeric:tabular-nums]">
-          {voice.workshop.board.colOf({ col: page + 1, total: cols.length })}
+          {voice.workshop.board.colOf({ col: page + 1, total: groups.length })}
         </span>
       </div>
     </div>
@@ -656,6 +945,7 @@ function HangCardSheet({
   const [body, setBody] = useState('')
   const [url, setUrl] = useState('')
   const [threadTo, setThreadTo] = useState('')
+  const [parentId, setParentId] = useState('')
 
   // (re)seed on open — a fresh hang or the tapped card's current state
   useEffect(() => {
@@ -665,9 +955,11 @@ function HangCardSheet({
     setBody(editing?.body ?? '')
     setUrl(editing?.url ?? '')
     setThreadTo('')
+    setParentId(editing?.parentId ?? '')
   }, [open, editing])
 
-  const others = cards.filter((c) => c.id !== editing?.id)
+  const titles = cards.filter((c) => c.type === 'title' && c.id !== editing?.id)
+  const others = cards.filter((c) => c.id !== editing?.id && c.type !== 'title')
   const existing = editing
     ? threads.filter((t) => t.from === editing.id || t.to === editing.id)
     : []
@@ -687,13 +979,24 @@ function HangCardSheet({
       body: type === 'link' ? undefined : body.trim() || undefined,
       url: type === 'link' ? url.trim() || undefined : undefined,
     }
+    // a heading never hangs under anything — see BoardCard.parentId
+    const under = type === 'title' ? undefined : parentId || undefined
     if (editing) {
       store.updateCard(editing.id, { type, title: trimmed, ...extra })
+      // moving columns is a PLACEMENT, not a field edit: it has to renumber
+      // the destination, which is what placeCard exists to do
+      if (type !== 'title' && (editing.parentId ?? '') !== (under ?? '')) {
+        store.placeCard(editing.id, under, Number.MAX_SAFE_INTEGER)
+      }
       if (threadTo) store.addThread(venture.id, editing.id, threadTo)
       butler(threadTo ? voice.workshop.toast.threaded : voice.workshop.toast.renamed)
     } else {
-      store.addCard(venture.id, type, trimmed, { ...extra, threadTo: threadTo || undefined })
-      butler(voice.workshop.toast.cardHung)
+      store.addCard(venture.id, type, trimmed, {
+        ...extra,
+        parentId: under,
+        threadTo: threadTo || undefined,
+      })
+      butler(type === 'title' ? voice.workshop.toast.titleHung : voice.workshop.toast.cardHung)
     }
     onClose()
   }
@@ -702,12 +1005,12 @@ function HangCardSheet({
     <Sheet open={open} onClose={onClose}>
       <h2 className="card-title">{voice.workshop.board.hang.replace(/^\+\s*/, '')}</h2>
       <div className="mt-4 inline-flex gap-1 rounded-pill border border-line bg-panel p-1">
-        {(['note', 'task', 'link'] as const).map((t) => (
+        {(['title', 'note', 'task', 'link'] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setType(t)}
-            className="rounded-pill px-4 py-2 font-display text-[10px] font-bold tracking-[0.14em] transition-colors"
+            className="rounded-pill px-3.5 py-2 font-display text-[10px] font-bold tracking-[0.14em] transition-colors"
             style={
               type === t
                 ? { background: COPPER, color: 'var(--color-bg)' }
@@ -757,7 +1060,34 @@ function HangCardSheet({
           />
         </>
       )}
-      {others.length > 0 && (
+      {type !== 'title' && titles.length > 0 && (
+        <>
+          <SheetLabel>{voice.workshop.sheet.under}</SheetLabel>
+          <div className="flex flex-wrap gap-1.5">
+            {[{ id: '', title: voice.workshop.sheet.underNone }, ...titles].map((t) => {
+              const on = parentId === t.id
+              return (
+                <button
+                  key={t.id || 'loose'}
+                  type="button"
+                  onClick={() => setParentId(t.id)}
+                  className="rounded-pill border px-3 py-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors"
+                  style={{
+                    borderColor: on ? COPPER : 'var(--color-line)',
+                    background: on
+                      ? 'color-mix(in srgb, var(--color-w-workshop) 12%, transparent)'
+                      : 'var(--color-panel-2)',
+                    color: on ? 'var(--color-ink)' : 'var(--color-ink-dim)',
+                  }}
+                >
+                  {t.title}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+      {type !== 'title' && others.length > 0 && (
         <>
           <SheetLabel>{voice.workshop.sheet.threadTo}</SheetLabel>
           <select

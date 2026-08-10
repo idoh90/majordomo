@@ -825,8 +825,13 @@ export const majordomoPack: VoicePack = {
       hang: '+ HANG A CARD',
       empty: 'A clean bench, sir. Pin the first card.',
       hangFirst: '+ HANG A CARD',
-      colOf: ({ col, total }) => `COLUMN ${col} / ${total}`,
+      colOf: ({ col, total }) => `${col} / ${total}`,
       done: 'DONE',
+      /** the column for work that has not been filed under a heading */
+      loose: 'UNFILED',
+      zoomIn: 'Closer',
+      zoomOut: 'Further back',
+      zoomReset: 'Back to full size',
     },
     emptyWing: 'The workshop stands ready, sir. Begin with a venture.',
     sheet: {
@@ -849,7 +854,9 @@ export const majordomoPack: VoicePack = {
       urlPlaceholder: 'https://…',
       threadTo: 'THREAD TO — OPTIONAL',
       noThread: 'No thread',
-      cardType: { note: 'NOTE', task: 'TASK', link: 'LINK' },
+      under: 'UNDER WHICH HEADING',
+      underNone: 'UNFILED',
+      cardType: { title: 'HEADING', note: 'NOTE', task: 'TASK', link: 'LINK' },
       titlePlaceholder: 'e.g. Re-rig the tail servo',
       msPlaceholder: 'Name the next marker…',
       msHint: "Each marker takes a chip on the Manor's week, sir.",
@@ -888,6 +895,7 @@ export const majordomoPack: VoicePack = {
       reopened: 'Back on the bench.',
       archived: 'Archived. The odometer stands.',
       cardHung: 'Hung.',
+      titleHung: 'A heading. Hang the work under it.',
       cardGone: 'Taken down.',
       threaded: 'Threaded.',
       msAdded: 'Marked. The chip has its day on the Manor.',
@@ -905,8 +913,12 @@ export const majordomoPack: VoicePack = {
     tileNextMs: 'until the next milestone',
     tileWeek: 'at the bench this week',
     briefingPanel: {
-      chips: ({ fulfilledH, bookedH, milestone, awaiting }) => [
-        { label: 'HOURS', value: `${fulfilledH.toFixed(1)} / ${bookedH.toFixed(1)} h` },
+      // jobs first: how far along the work is outranks how long it has taken
+      chips: ({ tasks, milestone, awaiting }) => [
+        {
+          label: 'JOBS',
+          value: tasks ? `${tasks.done} / ${tasks.total}` : '—',
+        },
         {
           label: 'MILESTONE',
           value: milestone

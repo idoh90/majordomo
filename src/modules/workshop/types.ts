@@ -24,13 +24,22 @@ export interface Venture {
   createdAt: string
 }
 
-export type CardType = 'note' | 'task' | 'link'
+/** `title` is the organising card: it heads a column and owns the cards
+ *  assigned to it. The other three are the work itself. */
+export type CardType = 'title' | 'note' | 'task' | 'link'
 
 /**
- * A card hung on the venture's pegboard. The board is a GRID, not a freeform
- * canvas — the pegboard direction's whole aesthetic is right angles, and a
- * (col, row) slot is also what makes the mobile column-pager honest: column i
- * of the grid IS page i of the pager.
+ * A card hung on the venture's pegboard.
+ *
+ * The board is COLUMNS, not a freeform canvas — the pegboard direction's whole
+ * aesthetic is right angles. A `title` card heads a column; every card naming
+ * it as `parentId` hangs beneath it in `row` order. Cards with no parent fall
+ * into the loose column at the end.
+ *
+ * `col` orders the COLUMNS (read from title cards and from loose cards only);
+ * `row` orders a card within its column. Both are ordering hints resolved at
+ * render, not absolute pixel slots — which is what lets a card be dropped into
+ * another column and simply belong there.
  */
 export interface BoardCard {
   id: string
@@ -44,6 +53,9 @@ export interface BoardCard {
   url?: string
   /** task state */
   done?: boolean
+  /** the `title` card this one hangs under; unset = loose. A title card never
+   *  has one — a heading under a heading is a tree, and this is a wall. */
+  parentId?: string
   col: number
   row: number
   /** ISO instant */

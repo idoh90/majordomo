@@ -869,6 +869,10 @@ export interface VoicePack {
       hangFirst: string
       colOf: (v: { col: number; total: number }) => string
       done: string
+      loose: string
+      zoomIn: string
+      zoomOut: string
+      zoomReset: string
     }
     emptyWing: string
     sheet: {
@@ -892,7 +896,10 @@ export interface VoicePack {
       urlPlaceholder: string
       threadTo: string
       noThread: string
-      cardType: { note: string; task: string; link: string }
+      /** which heading a card hangs under, and the loose option */
+      under: string
+      underNone: string
+      cardType: { title: string; note: string; task: string; link: string }
       titlePlaceholder: string
       msPlaceholder: string
       msHint: string
@@ -926,6 +933,7 @@ export interface VoicePack {
       reopened: string
       archived: string
       cardHung: string
+      titleHung: string
       cardGone: string
       threaded: string
       msAdded: string

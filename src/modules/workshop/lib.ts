@@ -280,28 +280,67 @@ export function reconcileMarkers(milestones: Milestone[], now: number): void {
   }
 }
 
-/* ------------------------------------------------------------- the board */
+/* ------------------------------------------------------------- the board
+ * The wall is columns. A `title` card heads one and owns whatever names it as
+ * parent; everything unassigned falls into a final loose column. Grouping is
+ * DERIVED on read — `col`/`row` are ordering hints, never pixel slots — which
+ * is what lets a card be dragged into another column and simply belong there,
+ * with no slot to vacate and no gap left behind.
+ */
 
-/** the pegboard's fixed column count — column i is page i of the mobile pager */
-export const BOARD_COLS = 4
-
-/** cards of one venture, grouped into columns, each column top-to-bottom */
-export function boardColumns<T extends { col: number; row: number }>(cards: T[]): T[][] {
-  const cols: T[][] = Array.from({ length: BOARD_COLS }, () => [])
-  for (const c of cards) {
-    const col = Math.max(0, Math.min(BOARD_COLS - 1, c.col))
-    cols[col].push(c)
-  }
-  for (const col of cols) col.sort((a, b) => a.row - b.row)
-  return cols
+export interface BoardGroup {
+  /** the heading card, or null for the loose column at the end */
+  title: BoardCard | null
+  children: BoardCard[]
 }
 
-/** first free (col,row) slot, filling columns left to right, rows downward */
-export function firstFreeSlot(cards: { col: number; row: number }[]): { col: number; row: number } {
-  const taken = new Set(cards.map((c) => `${c.col}:${c.row}`))
-  for (let row = 0; ; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      if (!taken.has(`${col}:${row}`)) return { col, row }
-    }
+const byOrder = (a: BoardCard, b: BoardCard) =>
+  a.row - b.row || a.createdAt.localeCompare(b.createdAt)
+
+/**
+ * One venture's wall, left to right. Title columns come first in `col` order,
+ * then the loose column — which is present only when it holds something, or
+ * when the wall has no headings at all (then it IS the wall).
+ */
+export function boardGroups(cards: BoardCard[]): BoardGroup[] {
+  const titles = cards
+    .filter((c) => c.type === 'title')
+    .sort((a, b) => a.col - b.col || a.createdAt.localeCompare(b.createdAt))
+  const titleIds = new Set(titles.map((t) => t.id))
+
+  const groups: BoardGroup[] = titles.map((t) => ({ title: t, children: [] }))
+  const byTitle = new Map(groups.map((g) => [g.title!.id, g]))
+  const loose: BoardCard[] = []
+
+  for (const c of cards) {
+    if (c.type === 'title') continue
+    // a parent that has been taken down leaves its children loose rather than
+    // invisible — an orphan must never fall off the wall
+    const g = c.parentId && titleIds.has(c.parentId) ? byTitle.get(c.parentId) : undefined
+    if (g) g.children.push(c)
+    else loose.push(c)
   }
+
+  for (const g of groups) g.children.sort(byOrder)
+  loose.sort(byOrder)
+
+  if (loose.length > 0 || groups.length === 0) {
+    groups.push({ title: null, children: loose })
+  }
+  return groups
+}
+
+/** the order value that puts a card at the end of its column */
+export function nextRow(cards: BoardCard[], parentId: string | undefined): number {
+  const siblings = cards.filter((c) =>
+    c.type === 'title' ? false : (c.parentId ?? undefined) === parentId,
+  )
+  return siblings.reduce((m, c) => Math.max(m, c.row + 1), 0)
+}
+
+/** the order value that puts a new heading at the right-hand end of the wall */
+export function nextCol(cards: BoardCard[]): number {
+  return cards
+    .filter((c) => c.type === 'title')
+    .reduce((m, c) => Math.max(m, c.col + 1), 0)
 }

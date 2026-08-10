@@ -3,7 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- maximum-scale + user-scalable=no: the app is an installed instrument,
+         not a document, and a stray pinch on the Workshop's board or the
+         Manor's week left the whole page scaled with no obvious way back.
+         Zooming lives INSIDE the board, on desktop, where it has controls and
+         a reset. Note this is the one accessibility trade the app makes; text
+         still scales with the OS setting, which is the thing most people
+         actually rely on. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#0c1017" />
     <meta name="description" content="Majordomo — the calendar that survives your schedule" />
     <!-- the manifest link + service-worker registration are injected at build

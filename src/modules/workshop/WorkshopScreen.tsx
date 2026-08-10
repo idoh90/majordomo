@@ -323,16 +323,24 @@ function VentureRing({
   const goal = venture.goalH
   const frac = goal > 0 ? Math.min(1, fh / goal) : 0
   const noGoal = goal <= 0
+  const hasJobs = tasks.total > 0
+
+  /**
+   * THE JOBS ARE THE HEADLINE. The fat inner ring and the big centre figure
+   * are how much of the board is struck; hours at the bench are the thin outer
+   * arc and the small line under the name. Effort used to lead and it read
+   * wrong — a venture three jobs from flying looked identical to one that had
+   * merely had a lot of evenings poured into it.
+   *
+   * A venture with no jobs on its board has no progress to report, so the ring
+   * falls back to the hours rather than sitting at a dishonest 0%.
+   */
   return (
     <div className="flex w-[104px] flex-none flex-col items-center gap-2 py-1">
       <div className="relative h-[96px] w-[96px]">
         <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden>
-          {/* OUTER: how much of the board is struck — the venture's progress.
-              INNER: hours at the bench this week — its effort. Two readings,
-              deliberately different: effort only climbs, progress can fall
-              when new jobs are hung. The outer arc is drawn thinner and
-              paler so the hours stay the ring's headline. */}
-          {tasks.total > 0 && (
+          {/* OUTER, thin: hours against the weekly goal */}
+          {hasJobs && !noGoal && (
             <>
               <circle
                 cx="48"
@@ -350,12 +358,13 @@ function VentureRing({
                 stroke={COPPER}
                 strokeWidth="3"
                 strokeLinecap="round"
-                strokeDasharray={`${((RING_OUTER_C * tasks.pct) / 100).toFixed(1)} ${RING_OUTER_C.toFixed(1)}`}
+                strokeDasharray={`${(RING_OUTER_C * frac).toFixed(1)} ${RING_OUTER_C.toFixed(1)}`}
                 transform="rotate(-90 48 48)"
-                opacity="0.75"
+                opacity="0.55"
               />
             </>
           )}
+          {/* INNER, fat: the jobs — or the hours, when there are no jobs */}
           <circle cx="48" cy="48" r="38" fill="none" stroke="var(--color-panel-2)" strokeWidth="8" />
           <circle
             cx="48"
@@ -365,17 +374,26 @@ function VentureRing({
             stroke={COPPER}
             strokeWidth="8"
             strokeLinecap="round"
-            strokeDasharray={`${(noGoal ? RING_C : RING_C * frac).toFixed(1)} ${RING_C.toFixed(1)}`}
+            strokeDasharray={`${(hasJobs
+              ? (RING_C * tasks.pct) / 100
+              : noGoal
+                ? RING_C
+                : RING_C * frac
+            ).toFixed(1)} ${RING_C.toFixed(1)}`}
             transform="rotate(-90 48 48)"
-            opacity={noGoal ? 0.22 : 1}
+            opacity={!hasJobs && noGoal ? 0.22 : 1}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="stat-num font-display text-[22px] font-semibold leading-none">
-            {fh.toFixed(1)}
+          <div className="stat-num font-display text-[24px] font-semibold leading-none">
+            {hasJobs ? voice.workshop.tasks.pct(tasks.pct) : fh.toFixed(1)}
           </div>
           <div className="mt-0.5 text-[9px] text-ink-dim [font-variant-numeric:tabular-nums]">
-            {noGoal ? voice.workshop.ringNoGoal : voice.workshop.ringOfGoal(goal)}
+            {hasJobs
+              ? voice.workshop.tasks.count(tasks)
+              : noGoal
+                ? voice.workshop.ringNoGoal
+                : voice.workshop.ringOfGoal(goal)}
           </div>
         </div>
       </div>
@@ -384,18 +402,8 @@ function VentureRing({
       </div>
       {/* the slot is always here, filled or not: the row centres its tiles, and
           a caption on some of them would push those rings out of line */}
-      <div
-        className="-mt-1 h-[13px] text-[10px] font-semibold leading-[13px] [font-variant-numeric:tabular-nums]"
-        style={{ color: COPPER }}
-      >
-        {tasks.total > 0 && (
-          <>
-            {voice.workshop.tasks.pct(tasks.pct)}{' '}
-            <span className="font-normal text-ink-faint">
-              {voice.workshop.tasks.count(tasks)}
-            </span>
-          </>
-        )}
+      <div className="-mt-1 h-[13px] text-[10px] leading-[13px] text-ink-faint [font-variant-numeric:tabular-nums]">
+        {hasJobs && (noGoal ? `${fh.toFixed(1)} h` : `${fh.toFixed(1)} / ${goal.toFixed(1)} h`)}
       </div>
     </div>
   )
@@ -899,16 +907,36 @@ function ShelfCard({
         </span>
         <StatusPill status={venture.status} />
       </div>
+      {/* jobs first, hours second — see VentureRing for why round this way */}
       <div className="mt-2.5 flex items-baseline gap-2">
-        <span
-          className="stat-num font-display text-[24px] font-semibold leading-none [font-variant-numeric:tabular-nums]"
-          style={{ color: dim ? 'var(--color-ink-dim)' : 'var(--color-ink)' }}
-        >
-          {lifetime.toFixed(1)} h
-        </span>
-        <span className="text-[8.5px] tracking-[0.18em] text-ink-faint">
-          {voice.workshop.lifetime}
-        </span>
+        {tasks.total > 0 ? (
+          <>
+            <span
+              className="stat-num font-display text-[26px] font-semibold leading-none [font-variant-numeric:tabular-nums]"
+              style={{ color: dim ? 'var(--color-ink-dim)' : COPPER }}
+            >
+              {voice.workshop.tasks.pct(tasks.pct)}
+            </span>
+            <span className="text-[11px] text-ink-dim [font-variant-numeric:tabular-nums]">
+              {voice.workshop.tasks.count(tasks)}
+            </span>
+            <span className="ml-auto text-[11px] text-ink-faint [font-variant-numeric:tabular-nums]">
+              {lifetime.toFixed(1)} h
+            </span>
+          </>
+        ) : (
+          <>
+            <span
+              className="stat-num font-display text-[24px] font-semibold leading-none [font-variant-numeric:tabular-nums]"
+              style={{ color: dim ? 'var(--color-ink-dim)' : 'var(--color-ink)' }}
+            >
+              {lifetime.toFixed(1)} h
+            </span>
+            <span className="text-[8.5px] tracking-[0.18em] text-ink-faint">
+              {voice.workshop.lifetime}
+            </span>
+          </>
+        )}
       </div>
       {venture.status === 'shipped' ? (
         <div className="mt-2 text-[11.5px] italic text-ink-dim">{t.shippedLine}</div>
@@ -923,7 +951,7 @@ function ShelfCard({
         </div>
       ) : null}
       <div className="mt-1 text-[11.5px] text-ink-dim">{touchedLine}</div>
-      <TaskProgressBar progress={tasks} className="mt-2.5" />
+      <TaskProgressBar progress={tasks} bare className="mt-2.5" />
       <div className="mt-2.5 flex gap-3">
         {act(voice.workshop.rename, onRename)}
         {(venture.status === 'spark' || venture.status === 'building') &&

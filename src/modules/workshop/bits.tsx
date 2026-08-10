@@ -58,28 +58,33 @@ export function StatusPill({ status }: { status: VentureStatus }) {
 export function TaskProgressBar({
   progress,
   className = '',
+  bare = false,
 }: {
   progress: { done: number; total: number; pct: number }
   className?: string
+  /** just the track — for surfaces whose headline already states the figures */
+  bare?: boolean
 }) {
   if (progress.total === 0) return null
   return (
     <div className={className}>
-      <div className="flex items-baseline gap-2">
-        <span className="font-display text-[8.5px] font-semibold tracking-[0.18em] text-ink-faint">
-          {voice.workshop.tasks.label}
-        </span>
-        <span className="ml-auto text-[11px] text-ink-dim [font-variant-numeric:tabular-nums]">
-          {voice.workshop.tasks.count(progress)}
-        </span>
-        <span
-          className="font-display text-[11.5px] font-semibold [font-variant-numeric:tabular-nums]"
-          style={{ color: COPPER }}
-        >
-          {voice.workshop.tasks.pct(progress.pct)}
-        </span>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-pill bg-panel-2">
+      {!bare && (
+        <div className="flex items-baseline gap-2">
+          <span className="font-display text-[8.5px] font-semibold tracking-[0.18em] text-ink-faint">
+            {voice.workshop.tasks.label}
+          </span>
+          <span className="ml-auto text-[11px] text-ink-dim [font-variant-numeric:tabular-nums]">
+            {voice.workshop.tasks.count(progress)}
+          </span>
+          <span
+            className="font-display text-[11.5px] font-semibold [font-variant-numeric:tabular-nums]"
+            style={{ color: COPPER }}
+          >
+            {voice.workshop.tasks.pct(progress.pct)}
+          </span>
+        </div>
+      )}
+      <div className={`${bare ? '' : 'mt-1'} h-1.5 overflow-hidden rounded-pill bg-panel-2`}>
         <div
           className="h-full rounded-pill transition-[width] duration-300"
           style={{

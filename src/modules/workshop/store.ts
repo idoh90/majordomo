@@ -5,7 +5,7 @@ import { localDayKey } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import { voice } from '../../core/voice'
 import { noteDeleted } from '../../core/sync/intent'
-import { effectiveMsDay, firstFreeSlot, msRef, projRef, syncMarker } from './lib'
+import { effectiveMsDay, msRef, nextCol, nextRow, projRef, syncMarker } from './lib'
 import type {
   Bench,
   BoardCard,
@@ -55,12 +55,15 @@ interface WorkshopState {
     ventureId: string,
     type: CardType,
     title: string,
-    extra?: { body?: string; url?: string; threadTo?: string },
+    extra?: { body?: string; url?: string; threadTo?: string; parentId?: string },
   ) => BoardCard
   updateCard: (id: string, patch: Partial<Omit<BoardCard, 'id' | 'ventureId'>>) => void
   toggleCardDone: (id: string) => void
-  /** move to a slot; a card already there swaps into the mover's old slot */
-  moveCard: (id: string, col: number, row: number) => void
+  /** hang a card under a heading (or loose, with `undefined`) at a position in
+   *  that column — the one write behind every board drag */
+  placeCard: (id: string, parentId: string | undefined, index: number) => void
+  /** slide a heading, and its whole column with it, along the wall */
+  moveTitle: (id: string, index: number) => void
   deleteCard: (id: string) => void
 
   addThread: (ventureId: string, from: string, to: string) => void
@@ -157,7 +160,10 @@ export const useWorkshopStore = create<WorkshopState>()(
       },
 
       addCard: (ventureId, type, title, extra) => {
-        const slot = firstFreeSlot(get().cards.filter((c) => c.ventureId === ventureId))
+        const mine = get().cards.filter((c) => c.ventureId === ventureId)
+        // a heading joins the wall at its right-hand end; anything else joins
+        // the foot of the column it was assigned to
+        const parentId = type === 'title' ? undefined : extra?.parentId
         const card: BoardCard = {
           id: makeId(),
           ventureId,
@@ -165,8 +171,9 @@ export const useWorkshopStore = create<WorkshopState>()(
           title,
           body: extra?.body,
           url: extra?.url,
-          col: slot.col,
-          row: slot.row,
+          parentId,
+          col: type === 'title' ? nextCol(mine) : 0,
+          row: type === 'title' ? 0 : nextRow(mine, parentId),
           createdAt: new Date().toISOString(),
         }
         set((s) => ({ cards: [...s.cards, card] }))
@@ -181,19 +188,50 @@ export const useWorkshopStore = create<WorkshopState>()(
         set((s) => ({
           cards: s.cards.map((c) => (c.id === id ? { ...c, done: !c.done } : c)),
         })),
-      moveCard: (id, col, row) =>
+      /**
+       * Reordering is a RENUMBER of the destination column, not a swap: the
+       * card is spliced in at `index` and every sibling is renumbered 0..n.
+       * Swapping was right when a slot could only hold one card; a column that
+       * grows and shrinks needs the whole run rewritten, or two cards end up
+       * sharing an order and the wall reshuffles itself on the next render.
+       */
+      placeCard: (id, parentId, index) =>
         set((s) => {
           const mover = s.cards.find((c) => c.id === id)
-          if (!mover) return s
-          const occupant = s.cards.find(
-            (c) => c.id !== id && c.ventureId === mover.ventureId && c.col === col && c.row === row,
-          )
+          if (!mover || mover.type === 'title') return s
+          const siblings = s.cards
+            .filter(
+              (c) =>
+                c.ventureId === mover.ventureId &&
+                c.type !== 'title' &&
+                c.id !== id &&
+                (c.parentId ?? undefined) === parentId,
+            )
+            .sort((a, b) => a.row - b.row || a.createdAt.localeCompare(b.createdAt))
+          const at = Math.max(0, Math.min(siblings.length, index))
+          const ordered = [...siblings.slice(0, at), mover, ...siblings.slice(at)]
+          const rowOf = new Map(ordered.map((c, i) => [c.id, i]))
           return {
-            cards: s.cards.map((c) => {
-              if (c.id === id) return { ...c, col, row }
-              if (occupant && c.id === occupant.id) return { ...c, col: mover.col, row: mover.row }
-              return c
-            }),
+            cards: s.cards.map((c) =>
+              rowOf.has(c.id)
+                ? { ...c, parentId: c.id === id ? parentId : c.parentId, row: rowOf.get(c.id)! }
+                : c,
+            ),
+          }
+        }),
+
+      moveTitle: (id, index) =>
+        set((s) => {
+          const mover = s.cards.find((c) => c.id === id)
+          if (!mover || mover.type !== 'title') return s
+          const others = s.cards
+            .filter((c) => c.ventureId === mover.ventureId && c.type === 'title' && c.id !== id)
+            .sort((a, b) => a.col - b.col || a.createdAt.localeCompare(b.createdAt))
+          const at = Math.max(0, Math.min(others.length, index))
+          const ordered = [...others.slice(0, at), mover, ...others.slice(at)]
+          const colOf = new Map(ordered.map((c, i) => [c.id, i]))
+          return {
+            cards: s.cards.map((c) => (colOf.has(c.id) ? { ...c, col: colOf.get(c.id)! } : c)),
           }
         }),
       deleteCard: (id) => {
@@ -201,7 +239,11 @@ export const useWorkshopStore = create<WorkshopState>()(
         noteDeleted('workshop', 'thread', cut.map((t) => t.id))
         noteDeleted('workshop', 'card', [id])
         set((s) => ({
-          cards: s.cards.filter((c) => c.id !== id),
+          // taking down a heading does NOT take down the work under it: the
+          // children come loose and stay on the wall
+          cards: s.cards
+            .filter((c) => c.id !== id)
+            .map((c) => (c.parentId === id ? { ...c, parentId: undefined } : c)),
           threads: s.threads.filter((t) => t.from !== id && t.to !== id),
         }))
       },
@@ -379,26 +421,50 @@ if (import.meta.env.DEV) {
         vent('demo-vent-pickle', 'Pickle Works', 'shipped', 0, 3, iso(60)),
       ],
       cards: [
+        // three headings, each with its work hanging under it, plus one loose
+        // card — the shape the wall is meant to be read in
+        card('demo-title-airframe', 'demo-vent-orni', 'title', 'AIRFRAME', 0, 0),
         card('demo-card-spar', 'demo-vent-orni', 'note', 'Wing spar — swap to carbon', 0, 0, {
+          parentId: 'demo-title-airframe',
           body: '3 mm tube from drawer stock; balsa cracks at the root.',
         }),
-        card('demo-card-cells', 'demo-vent-orni', 'task', 'Order 2S cells', 1, 0, { done: true }),
-        card('demo-card-battery', 'demo-vent-orni', 'note', 'Battery maths', 2, 0, {
-          body: '2S 650 runs 38 g. Weight budget 41 g with lead.',
-        }),
-        card('demo-card-dihedral', 'demo-vent-orni', 'link', 'Dihedral thread — Flite Test', 3, 0, {
-          url: 'https://flitetest.com',
-        }),
         card('demo-card-weigh', 'demo-vent-orni', 'task', 'Weigh the fuselage', 0, 1, {
+          parentId: 'demo-title-airframe',
           body: 'Bare frame, no battery. Target is 41 g all in.',
         }),
-        card('demo-card-servo', 'demo-vent-orni', 'task', 'Re-rig the tail servo', 1, 1),
-        card('demo-card-suppliers', 'demo-vent-orni', 'link', 'Spar suppliers shortlist', 2, 1, {
+        card('demo-card-suppliers', 'demo-vent-orni', 'link', 'Spar suppliers shortlist', 0, 2, {
+          parentId: 'demo-title-airframe',
           url: 'https://docs.google.com',
         }),
-        card('demo-card-criteria', 'demo-vent-orni', 'note', 'Ship criteria', 3, 1, {
+
+        card('demo-title-power', 'demo-vent-orni', 'title', 'POWER', 1, 0),
+        card('demo-card-cells', 'demo-vent-orni', 'task', 'Order 2S cells', 1, 0, {
+          parentId: 'demo-title-power',
+          done: true,
+        }),
+        card('demo-card-battery', 'demo-vent-orni', 'note', 'Battery maths', 1, 1, {
+          parentId: 'demo-title-power',
+          body: '2S 650 runs 38 g. Weight budget 41 g with lead.',
+        }),
+
+        card('demo-title-flight', 'demo-vent-orni', 'title', 'FLIGHT', 2, 0),
+        card('demo-card-servo', 'demo-vent-orni', 'task', 'Re-rig the tail servo', 2, 0, {
+          parentId: 'demo-title-flight',
+        }),
+        card('demo-card-dihedral', 'demo-vent-orni', 'link', 'Dihedral thread — Flite Test', 2, 1, {
+          parentId: 'demo-title-flight',
+          url: 'https://flitetest.com',
+        }),
+        card('demo-card-criteria', 'demo-vent-orni', 'note', 'Ship criteria', 2, 2, {
+          parentId: 'demo-title-flight',
           body: 'Sixty seconds sustained, hands off, no repairs.',
         }),
+
+        // deliberately unassigned: the loose column has to be demonstrated too
+        card('demo-card-log', 'demo-vent-orni', 'note', 'Field log — 12 Aug', 0, 0, {
+          body: 'Wind 12 kt gusting. Too much for a first hop.',
+        }),
+
         card('demo-card-enlarger', 'demo-vent-dark', 'note', 'Enlarger lens seized', 0, 0, {
           body: 'Penetrating oil overnight, then the strap wrench.',
         }),
