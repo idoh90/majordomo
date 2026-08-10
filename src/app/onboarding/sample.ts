@@ -1,4 +1,5 @@
 import { applyQuietly } from '../../core/sync/engine'
+import { localDayKey } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
 import { useCapitalStore } from '../../modules/capital/store'
@@ -7,6 +8,8 @@ import { useStudyStore } from '../../modules/study/store'
 import type { Subject } from '../../modules/study/types'
 import { useWorkoutStore } from '../../modules/training/store'
 import type { Workout } from '../../modules/training/types'
+import { useWorkshopStore } from '../../modules/workshop/store'
+import type { BoardCard, Milestone, Thread, Venture } from '../../modules/workshop/types'
 
 /**
  * The walk's costume department: a wing the user left EMPTY is dressed with
@@ -60,6 +63,7 @@ export function dressWing(wing: string): void {
   if (wing === 'watch') dressWatch()
   else if (wing === 'training') dressGrounds()
   else if (wing === 'study') dressStudy()
+  else if (wing === 'workshop') dressWorkshop()
   else if (wing === 'capital') dressLedger()
 }
 
@@ -206,6 +210,108 @@ function dressStudy(): void {
 }
 
 /**
+ * The Workshop: one venture with hours already at the bench (so the ring has
+ * something to fill and the odometer a figure), a milestone a fortnight out,
+ * and a dressed pegboard — the board is the stop's whole point and an empty
+ * one would demonstrate nothing.
+ *
+ * The MILESTONE is deliberately given no Manor marker: markers are drawn by a
+ * heal pass that mints its own event ids, which the sweep could not reclaim.
+ * The Study's docket is left alone for exactly this reason. The countdown card
+ * reads from the record, so the stop still has its figure.
+ *
+ * The guard is CARDS, not ventures — the only wing where that is true. A user
+ * who named a venture at setup owns a shelf but not yet a board, and the stop's
+ * third beat is a board: it would narrate a pegboard while showing an empty
+ * one. So a costume venture stands BESIDE theirs (never on it — their records
+ * are still never touched) purely so there is something hung up to point at.
+ */
+function dressWorkshop(): void {
+  if (useWorkshopStore.getState().cards.length > 0) return
+
+  const now = iso(new Date())
+  const venture: Venture = {
+    id: id(),
+    name: 'The Ornithopter',
+    status: 'building',
+    goalH: 6,
+    order: 0,
+    createdAt: now,
+  }
+
+  const card = (
+    type: BoardCard['type'],
+    title: string,
+    col: number,
+    row: number,
+    extra?: Partial<BoardCard>,
+  ): BoardCard => ({ id: id(), ventureId: venture.id, type, title, col, row, createdAt: now, ...extra })
+
+  const spar = card('note', 'Wing spar — swap to carbon', 0, 0, {
+    body: '3 mm tube from drawer stock; balsa cracks at the root.',
+  })
+  const cells = card('task', 'Order 2S cells', 1, 0, { done: true })
+  const maths = card('note', 'Battery maths', 2, 0, {
+    body: '2S 650 runs 38 g. Weight budget 41 g with lead.',
+  })
+  const suppliers = card('link', 'Spar suppliers shortlist', 0, 1, {
+    url: 'https://example.com',
+  })
+  const servo = card('task', 'Re-rig the tail servo', 1, 1)
+  const cards = [spar, cells, maths, suppliers, servo]
+
+  const thread = (from: string, to: string): Thread => ({
+    id: id(),
+    ventureId: venture.id,
+    from,
+    to,
+  })
+  const threads = [thread(spar.id, suppliers.id), thread(cells.id, maths.id)]
+
+  const milestone: Milestone = {
+    id: id(),
+    ventureId: venture.id,
+    title: 'Prototype flight',
+    on: localDayKey(at(14, 12)),
+    done: false,
+    countFrom: iso(at(-21, 12)),
+  }
+
+  const bench = (day: number, startH: number, endH: number): CalendarEvent => ({
+    id: id(),
+    source: 'workshop',
+    kind: 'workshop',
+    title: venture.name,
+    start: iso(at(day, startH)),
+    end: iso(at(day, endH)),
+    sourceRef: `proj:${venture.id}`,
+    updatedAt: now,
+  })
+  const done1 = bench(-2, 20, 22)
+  const done2 = bench(-1, 20, 21.5)
+  const ahead = bench(2, 20, 22)
+
+  applyQuietly(() => {
+    useWorkshopStore.setState((s) => ({
+      ventures: [...s.ventures, venture],
+      cards: [...s.cards, ...cards],
+      threads: [...s.threads, ...threads],
+      milestones: [...s.milestones, milestone],
+      sessions: {
+        ...s.sessions,
+        [done1.id]: { fulfillment: 'done' as const },
+        // the live one proves the timer's own mark in the week's ledger
+        [done2.id]: { fulfillment: 'done' as const, live: true },
+        [ahead.id]: { fulfillment: 'planned' as const },
+      },
+    }))
+    useEventsStore.setState((s) => ({
+      events: [...s.events, done1, done2, ahead].sort((a, b) => a.start.localeCompare(b.start)),
+    }))
+  })
+}
+
+/**
  * The Ledger: four accounts and five monthly snapshots climbing gently, so the
  * Vault has a figure, the chart a history, the allocation its bars. No budget,
  * no holdings — those are scalars and live feeds, not records a prefix can
@@ -286,6 +392,24 @@ export function sweepSample(): void {
       })
     }
 
+    const ws = useWorkshopStore.getState()
+    if (
+      ws.ventures.some(isSample) ||
+      Object.keys(ws.sessions).some((k) => k.startsWith(PREFIX))
+    ) {
+      useWorkshopStore.setState({
+        ventures: ws.ventures.filter((v) => !isSample(v)),
+        cards: ws.cards.filter((c) => !isSample(c)),
+        threads: ws.threads.filter((t) => !isSample(t)),
+        milestones: ws.milestones.filter((m) => !isSample(m)),
+        sessions: Object.fromEntries(
+          Object.entries(ws.sessions).filter(([k]) => !k.startsWith(PREFIX)),
+        ),
+        // a costume venture must never leave a clock running behind it
+        bench: ws.bench && ws.bench.ventureId.startsWith(PREFIX) ? null : ws.bench,
+      })
+    }
+
     const cap = useCapitalStore.getState()
     if (cap.accounts.some(isSample) || cap.snapshots.some(isSample)) {
       useCapitalStore.setState({
@@ -302,6 +426,7 @@ export function sampleDressed(): boolean {
     useEventsStore.getState().events.some(isSample) ||
     useWorkoutStore.getState().workouts.some(isSample) ||
     useStudyStore.getState().subjects.some(isSample) ||
+    useWorkshopStore.getState().ventures.some(isSample) ||
     useCapitalStore.getState().accounts.some(isSample)
   )
 }

@@ -1207,6 +1207,7 @@ export interface VoicePack {
         dayJob: string
         training: string
         study: string
+        projects: string
         money: string
       }
       /** under the chips: nothing picked is allowed, and what that means */
@@ -1262,6 +1263,18 @@ export interface VoicePack {
       /** enrolling nothing is a real answer, and the line must not sulk */
       none: string
     }
+    /** the first venture — the Study's question in the Workshop's terms */
+    workshop: {
+      title: string
+      prompt: string
+      goalLabel: string
+      add: string
+      opened: (n: number) => string
+      /** the same name again — a re-run must not double the shelf */
+      duplicate: string
+      /** opening nothing is a real answer here too */
+      none: string
+    }
     preset: {
       title: string
       prompt: string
@@ -1303,6 +1316,17 @@ export interface VoicePack {
         meaning: string
         dashboard: string
         use: (v: { subjects: number }) => string
+      }
+      /**
+       * The Workshop runs four beats: the extra one is `board`, where the
+       * pegboard opens itself rather than being described. It sits third so
+       * the stop still closes on `use`, like every other.
+       */
+      workshop: {
+        meaning: string
+        dashboard: string
+        board: string
+        use: (v: { ventures: number }) => string
       }
       /** the Ledger still asks for nothing on a first run — its beats say so */
       ledger: {

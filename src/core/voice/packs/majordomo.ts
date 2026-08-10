@@ -1439,8 +1439,8 @@ export const majordomoPack: VoicePack = {
     },
     intro: {
       lines: [
-        'Majordomo puts your whole life on one calendar — work, training, study, money. One week, all of it in view.',
-        'Each part gets its own wing: the Watch for work shifts, the Grounds for training, the Study for coursework, the Ledger for money. All four write to the same week.',
+        'Majordomo puts your whole life on one calendar — work, training, study, projects, money. One week, all of it in view.',
+        'Each part gets its own wing: the Watch for work shifts, the Grounds for training, the Study for coursework, the Workshop for your own projects, the Ledger for money. All of them write to the same week.',
         'Everything is kept on this device and works offline. No account needed.',
       ],
     },
@@ -1452,6 +1452,7 @@ export const majordomoPack: VoicePack = {
         dayJob: 'A day job',
         training: 'Training',
         study: 'Studying',
+        projects: 'Side projects',
         money: 'Money to track',
       },
       hint: "I only ask about what you pick. Pick nothing and I'll skip ahead.",
@@ -1502,6 +1503,16 @@ export const majordomoPack: VoicePack = {
       duplicate: 'That one is already on the list.',
       none: 'Nothing to study is a perfectly good answer.',
     },
+    workshop: {
+      title: 'YOUR PROJECTS',
+      prompt:
+        'Building anything of your own? Name it and I will keep the hours it takes.',
+      goalLabel: 'HOURS A WEEK',
+      add: 'OPEN',
+      opened: (n) => `${word(n)} ${plural(n, 'venture', 'ventures')} opened.`,
+      duplicate: 'That one is already on the shelf.',
+      none: 'Nothing on the bench yet is a fine place to start.',
+    },
     preset: {
       title: 'THE LOOK',
       prompt: 'Three themes. Tap one to try it — it changes straight away.',
@@ -1551,6 +1562,18 @@ export const majordomoPack: VoicePack = {
           subjects > 0
             ? `${word(subjects)} ${plural(subjects, 'subject is', 'subjects are')} set up. Book a session and it lands on the calendar.`
             : 'Add subjects here whenever you have coursework to keep track of.',
+      },
+      workshop: {
+        meaning:
+          'The Workshop is for what you build in your own time — a venture for each one. Start the timer when you sit down, and the hours record themselves.',
+        dashboard:
+          'A ring per venture for the week, and beside it the shelf: what each one has taken in its whole life, and what it ships next.',
+        board:
+          'Every venture has a pegboard. Notes, jobs to do and links, hung on it and threaded together — drag a card and the twine follows.',
+        use: ({ ventures }) =>
+          ventures > 0
+            ? 'Press TO THE BENCH when you start work. Press it again when you stop, and the hours are on the calendar without you writing anything down.'
+            : 'Best used the moment an idea becomes a project: open a venture, and the hours it takes stop being invisible.',
       },
       ledger: {
         meaning:

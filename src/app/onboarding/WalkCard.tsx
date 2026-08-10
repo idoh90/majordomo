@@ -5,6 +5,8 @@ import { useShellStore } from '../../core/store/shell'
 import { voice } from '../../core/voice'
 import { useStudyStore } from '../../modules/study/store'
 import { useWorkoutStore } from '../../modules/training/store'
+import { useWorkshopStore } from '../../modules/workshop/store'
+import { useWorkshopUi } from '../../modules/workshop/uiStore'
 import { shiftsOf, watchStats } from '../../modules/watch/lib'
 import { BeatDots, GroundsDemo, type GroundsDemoKind } from './GroundsDemo'
 import { dressWing, sampleDressed, sweepSample } from './sample'
@@ -38,6 +40,7 @@ const WING_ACCENT: Record<string, string> = {
   watch: 'var(--color-w-watch)',
   training: 'var(--color-w-grounds)',
   study: 'var(--color-w-study)',
+  workshop: 'var(--color-w-workshop)',
   capital: 'var(--color-w-ledger)',
 }
 
@@ -47,8 +50,21 @@ const BEATS = 3
 /** …and the Grounds adds two demonstrations after them, in this order */
 const GROUNDS_DEMOS: GroundsDemoKind[] = ['run', 'muscles']
 
+/**
+ * The Workshop runs one beat long, and that beat is a change of room rather
+ * than a change of sentence: the pegboard is the best thing in the wing and it
+ * sits one tap behind the shelf, so the stop opens it and narrates from there.
+ * It goes third, not last, so this stop still CLOSES on how the wing is best
+ * used — the shape every other stop keeps.
+ */
+const BOARD_BEAT = 2
+
 const beatsOf = (stage: OnboardStage) =>
-  stage === 'walk-grounds' ? BEATS + GROUNDS_DEMOS.length : BEATS
+  stage === 'walk-grounds'
+    ? BEATS + GROUNDS_DEMOS.length
+    : stage === 'walk-workshop'
+      ? BEATS + 1
+      : BEATS
 
 export function WalkCard({ stage }: { stage: OnboardStage }) {
   const advance = useOnboarding((s) => s.advance)
@@ -76,6 +92,21 @@ export function WalkCard({ stage }: { stage: OnboardStage }) {
   const [beat, setBeat] = useState(0)
   useEffect(() => setBeat(0), [stage])
 
+  // the Workshop's fourth beat opens a venture's pegboard through the wing's
+  // own mailbox — the same door the bench chip uses, so the tour cannot drift
+  // from the screen the user will actually meet. Whichever venture is first is
+  // the one dressed a moment ago (or their own, if they opened one at setup).
+  useEffect(() => {
+    if (stage !== 'walk-workshop' || beat < BOARD_BEAT) return
+    const ws = useWorkshopStore.getState()
+    const live = ws.ventures.filter((v) => !v.archived)
+    // the one with a board on it — a venture named at setup has none yet, and
+    // opening THAT would narrate a pegboard over an empty wall
+    const best =
+      live.find((v) => ws.cards.some((c) => c.ventureId === v.id)) ?? live[0]
+    if (best) useWorkshopUi.getState().requestBoard(best.id)
+  }, [stage, beat])
+
   // subscribing to the stores above keeps this honest through dress and sweep
   const dressed = !closing && sampleDressed()
   const accent = WING_ACCENT[wing] ?? 'var(--color-accent)'
@@ -91,7 +122,10 @@ export function WalkCard({ stage }: { stage: OnboardStage }) {
     line = voice.onboarding.close.line
   } else if (!demoKind) {
     const stop = walkStop(stage, { events, weekStart, goal, subjects })
-    line = beat === 0 ? stop.meaning : beat === 1 ? stop.dashboard : stop.use
+    // `board` is a middle beat where a stop has one, so every stop still ends
+    // on `use` however many beats it runs
+    const lines = [stop.meaning, stop.dashboard, ...(stop.board ? [stop.board] : []), stop.use]
+    line = lines[beat] ?? stop.use
   }
 
   const lastBeat = closing || beat >= beats - 1
@@ -189,7 +223,7 @@ function walkStop(
     goal: number
     subjects: ReturnType<typeof useStudyStore.getState>['subjects']
   },
-): { meaning: string; dashboard: string; use: string } {
+): { meaning: string; dashboard: string; use: string; board?: string } {
   const own = <T extends { id: string }>(xs: T[]) => xs.filter((x) => !x.id.startsWith('onb-demo-'))
 
   if (stage === 'walk-watch') {
@@ -219,6 +253,16 @@ function walkStop(
       meaning: s.meaning,
       dashboard: s.dashboard,
       use: s.use({ subjects: own(facts.subjects).filter((x) => !x.archived).length }),
+    }
+  }
+  if (stage === 'walk-workshop') {
+    const w = voice.onboarding.walk.workshop
+    const ventures = own(useWorkshopStore.getState().ventures).filter((v) => !v.archived)
+    return {
+      meaning: w.meaning,
+      dashboard: w.dashboard,
+      board: w.board,
+      use: w.use({ ventures: ventures.length }),
     }
   }
   const l = voice.onboarding.walk.ledger

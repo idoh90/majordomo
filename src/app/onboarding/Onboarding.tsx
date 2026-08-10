@@ -22,7 +22,13 @@ export function Onboarding() {
   ) {
     return <WelcomeStage stage={stage} />
   }
-  if (stage === 'work' || stage === 'training' || stage === 'study' || stage === 'preset') {
+  if (
+    stage === 'work' ||
+    stage === 'training' ||
+    stage === 'study' ||
+    stage === 'workshop' ||
+    stage === 'preset'
+  ) {
     return <SetupPanel stage={stage} />
   }
   return <WalkCard stage={stage} />

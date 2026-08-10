@@ -6,6 +6,7 @@ import { PRESET_SKIN_IDS, SKINS } from '../../core/ui/skins'
 import { voice } from '../../core/voice'
 import { useStudyStore } from '../../modules/study/store'
 import { useWorkoutStore } from '../../modules/training/store'
+import { useWorkshopStore } from '../../modules/workshop/store'
 import { DAY_MIN, hhmmOfMin, planWatchPost } from '../../modules/watch/lib'
 import { useWatchStore } from '../../modules/watch/store'
 import { setupStages, useOnboarding, type OnboardStage } from './store'
@@ -60,7 +61,9 @@ export function SetupPanel({ stage }: { stage: OnboardStage }) {
         ? voice.onboarding.training
         : stage === 'study'
           ? voice.onboarding.study
-          : voice.onboarding.preset
+          : stage === 'workshop'
+            ? voice.onboarding.workshop
+            : voice.onboarding.preset
 
   const prompt =
     stage === 'work' && dayJob ? voice.onboarding.work.dayJobPrompt : copy.prompt
@@ -81,6 +84,7 @@ export function SetupPanel({ stage }: { stage: OnboardStage }) {
             {stage === 'work' && <WorkStage dayJob={dayJob} note={note} onRemark={remark} />}
             {stage === 'training' && <TrainingStage />}
             {stage === 'study' && <StudyStage note={note} onRemark={remark} />}
+            {stage === 'workshop' && <WorkshopStage note={note} onRemark={remark} />}
             {stage === 'preset' && <PresetStage />}
           </div>
         </div>
@@ -548,6 +552,105 @@ function StudyStage({ note, onRemark }: { note: string | null; onRemark: (m: str
           (subjects.length > 0
             ? voice.onboarding.study.enrolled(subjects.length)
             : voice.onboarding.study.none)}
+      </p>
+    </>
+  )
+}
+
+/* -------------------------------------------------------------- workshop */
+
+/**
+ * The first venture. The same shape as the Study's question because it is the
+ * same bargain — a name and an intention in hours — but the hint underneath
+ * says the thing that makes this wing different: a goal of nought is a real
+ * answer here, since most side projects get the hours they get.
+ */
+function WorkshopStage({ note, onRemark }: { note: string | null; onRemark: (m: string) => void }) {
+  const ventures = useWorkshopStore((s) => s.ventures)
+  const addVenture = useWorkshopStore((s) => s.addVenture)
+  const [name, setName] = useState('')
+  const [goalH, setGoalH] = useState('4')
+  const [opened, setOpened] = useState<string[]>([])
+
+  const open = () => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      onRemark(voice.workshop.toast.nameFirst)
+      return
+    }
+    // re-running the setup must not open the same venture twice
+    const already = useWorkshopStore
+      .getState()
+      .ventures.some((v) => v.name.trim().toLowerCase() === trimmed.toLowerCase())
+    if (already) {
+      onRemark(voice.onboarding.workshop.duplicate)
+      setName('')
+      return
+    }
+    const hours = Number(goalH)
+    addVenture(trimmed, Number.isFinite(hours) && hours > 0 ? hours : 0)
+    setOpened((v) => [...v, trimmed])
+    setName('')
+  }
+
+  return (
+    <>
+      <div className="flex gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              open()
+            }
+          }}
+          placeholder={voice.workshop.sheet.namePlaceholder}
+          className="card min-w-0 flex-1 px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent/60"
+        />
+        <div className="w-20 flex-none">
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step={0.5}
+            value={goalH}
+            onChange={(e) => setGoalH(e.target.value)}
+            className="card w-full px-3 py-2.5 text-sm text-ink outline-none [font-variant-numeric:tabular-nums] focus:border-accent/60"
+          />
+        </div>
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-3">
+        <span className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
+          {voice.onboarding.workshop.goalLabel}
+        </span>
+        <button
+          type="button"
+          onClick={open}
+          className="btn-soft px-4 py-2 text-[11.5px] tracking-[0.14em]"
+        >
+          {voice.onboarding.workshop.add}
+        </button>
+      </div>
+
+      {opened.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {opened.map((n) => (
+            <span
+              key={n}
+              className="chip border border-accent/40 px-2.5 py-1 text-[12px] text-accent"
+            >
+              {n}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-3 text-[12.5px] text-ink-dim">
+        {note ??
+          (ventures.length > 0
+            ? voice.onboarding.workshop.opened(ventures.length)
+            : voice.onboarding.workshop.none)}
       </p>
     </>
   )

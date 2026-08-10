@@ -6,6 +6,7 @@ import { useShellStore } from '../../core/store/shell'
 import { offReason } from '../../core/sync/gate'
 import { useStudyStore } from '../../modules/study/store'
 import { useWorkoutStore } from '../../modules/training/store'
+import { useWorkshopStore } from '../../modules/workshop/store'
 import { sweepSample } from './sample'
 
 /**
@@ -38,11 +39,13 @@ export type OnboardStage =
   | 'work'
   | 'training'
   | 'study'
+  | 'workshop'
   | 'preset'
   /* --- the walk: one stop per wing, three beats at each --- */
   | 'walk-watch'
   | 'walk-grounds'
   | 'walk-study'
+  | 'walk-workshop'
   | 'walk-ledger'
   | 'close'
 
@@ -52,6 +55,7 @@ export interface Composition {
   dayJob: boolean
   training: boolean
   study: boolean
+  projects: boolean
   money: boolean
 }
 
@@ -60,6 +64,7 @@ export const EMPTY_COMPOSITION: Composition = {
   dayJob: false,
   training: false,
   study: false,
+  projects: false,
   money: false,
 }
 
@@ -69,6 +74,7 @@ const ASK_ALL: Composition = {
   dayJob: true,
   training: true,
   study: true,
+  projects: true,
   money: true,
 }
 
@@ -84,6 +90,7 @@ export function setupStages(c: Composition | null): OnboardStage[] {
   if (comp.shift || comp.dayJob) stages.push('work')
   if (comp.training) stages.push('training')
   if (comp.study) stages.push('study')
+  if (comp.projects) stages.push('workshop')
   stages.push('preset')
   return stages
 }
@@ -93,6 +100,7 @@ const WALK_STAGES: OnboardStage[] = [
   'walk-watch',
   'walk-grounds',
   'walk-study',
+  'walk-workshop',
   'walk-ledger',
 ]
 
@@ -105,6 +113,7 @@ const ALL_STAGES: OnboardStage[] = [
   'work',
   'training',
   'study',
+  'workshop',
   'preset',
   ...WALK_STAGES,
   'close',
@@ -119,6 +128,7 @@ export const WALK_WING: Partial<Record<OnboardStage, string>> = {
   'walk-watch': 'watch',
   'walk-grounds': 'training',
   'walk-study': 'study',
+  'walk-workshop': 'workshop',
   'walk-ledger': 'capital',
 }
 
@@ -248,7 +258,8 @@ export function estateEmpty(): boolean {
   return (
     useEventsStore.getState().events.length === 0 &&
     useWorkoutStore.getState().workouts.length === 0 &&
-    useStudyStore.getState().subjects.length === 0
+    useStudyStore.getState().subjects.length === 0 &&
+    useWorkshopStore.getState().ventures.length === 0
   )
 }
 

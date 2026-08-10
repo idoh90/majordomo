@@ -274,6 +274,7 @@ function CompositionStage() {
     { key: 'dayJob', label: voice.onboarding.composition.chips.dayJob },
     { key: 'training', label: voice.onboarding.composition.chips.training },
     { key: 'study', label: voice.onboarding.composition.chips.study },
+    { key: 'projects', label: voice.onboarding.composition.chips.projects },
     { key: 'money', label: voice.onboarding.composition.chips.money },
   ]
 
