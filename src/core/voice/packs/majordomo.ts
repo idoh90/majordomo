@@ -177,6 +177,11 @@ export const majordomoPack: VoicePack = {
       back: '‹ Templates',
       wontFit: "Won't fit here.",
     },
+    bench: {
+      row: 'At the bench…',
+      ventureLabel: 'WHICH VENTURE',
+      book: 'ON THE BOOKS',
+    },
     occupied:'That hour is already taken.',
     occupiedShort: 'taken',
     moved: 'Moved.',

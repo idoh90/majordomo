@@ -463,7 +463,12 @@ function CardFace({ card }: { card: BoardCard }) {
             data-nodrag
             aria-label={voice.workshop.board.done}
             aria-pressed={!!card.done}
-            onClick={() => useWorkshopStore.getState().toggleCardDone(card.id)}
+            onClick={(e) => {
+              // the mobile card is itself pressable — ticking must not also
+              // open the editor behind it
+              e.stopPropagation()
+              useWorkshopStore.getState().toggleCardDone(card.id)
+            }}
             className="relative ml-auto h-[9px] w-[9px] after:absolute after:-inset-3 after:content-['']"
             style={{
               border: `1.5px solid ${COPPER}`,
@@ -575,9 +580,23 @@ function MobileBoard({
                       />
                     </svg>
                   )}
-                  <button type="button" onClick={() => onEdit(c)} className="block w-full text-left">
+                  {/* a div, not a button: a task card carries its own DONE
+                      checkbox, and a button inside a button is invalid HTML —
+                      the browser reparents it and the tick stops working */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onEdit(c)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onEdit(c)
+                      }
+                    }}
+                    className="block w-full cursor-pointer text-left"
+                  >
                     <CardFace card={c} />
-                  </button>
+                  </div>
                 </div>
               ))
             )}

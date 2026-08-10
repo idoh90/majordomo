@@ -17,7 +17,9 @@ import { useIsMobile } from '../useIsMobile'
 import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
 import { ManorLegend } from './Legend'
 import { TILT, TILT_MOBILE, useGhostTilt } from './dragTilt'
-import { CustomEventForm } from './fields'
+import { useWorkshopStore } from '../../modules/workshop/store'
+import { projRef } from '../../modules/workshop/lib'
+import { BenchForm, CustomEventForm, type QuickAddPick } from './fields'
 import { EventEditSheet, MobileEventSheet, MobileQuickAddSheet } from './MobileSheets'
 import { nearWatch, warnableBlock } from './nearWatch'
 import { StrainBar } from './StrainBar'
@@ -789,7 +791,7 @@ export function WeekGrid({
     return true
   }
 
-  const quickAddPick = (tpl: { kind: EventKind; title: string; hours: number }) => {
+  const quickAddPick = (tpl: QuickAddPick) => {
     if (!quickAdd) return
     // no fit-the-column clamp: a 19:00 night watch or a 23:30 sleep simply
     // crosses midnight — natural data; the grid splits it at the seam
@@ -800,13 +802,23 @@ export function WeekGrid({
       return
     }
     const start = new Date(columns[quickAdd.col].start.getTime() + ts * HOUR_MS)
+    const end = new Date(start.getTime() + tpl.hours * HOUR_MS)
+    // a bench block booked here is the WORKSHOP's, written exactly as its own
+    // sheet writes one — same source, same `proj:` ref, same fulfillment rule
+    // (an hour already past files as done). Anything else stays a manual entry.
     const added = addEvent({
-      source: 'manual',
+      source: tpl.ventureId ? 'workshop' : 'manual',
+      sourceRef: tpl.ventureId ? projRef(tpl.ventureId) : undefined,
       kind: tpl.kind,
       title: tpl.title,
       start: start.toISOString(),
-      end: new Date(start.getTime() + tpl.hours * HOUR_MS).toISOString(),
+      end: end.toISOString(),
     })
+    if (tpl.ventureId) {
+      useWorkshopStore.getState().setSessionMeta(added.id, {
+        fulfillment: end.getTime() <= now ? 'done' : 'planned',
+      })
+    }
     setQuickAdd(null)
     if (!sandbox) {
       setLastAction({ type: 'add', id: added.id })
@@ -1691,14 +1703,21 @@ function QuickAddPopover({
 }: {
   quickAdd: QuickAdd
   columns: ColumnWindow[]
-  onPick: (tpl: { kind: EventKind; title: string; hours: number }) => void
+  onPick: (tpl: QuickAddPick) => void
   onClose: () => void
   /** would a block of `hours` fit the slot this popover opened on? */
   fits: (hours: number) => boolean
   style: React.CSSProperties
 }) {
   const when = new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS)
-  const [custom, setCustom] = useState(false)
+  const [screen, setScreen] = useState<'templates' | 'custom' | 'bench'>('templates')
+  const custom = screen !== 'templates'
+  // filtered in a memo, never in the selector — see MobileQuickAddSheet
+  const allVentures = useWorkshopStore((s) => s.ventures)
+  const ventures = useMemo(
+    () => allVentures.filter((v) => !v.archived && v.status !== 'shipped'),
+    [allVentures],
+  )
   const [ref, top] = usePinnedTop(quickAdd.y)
   return (
     <div
@@ -1722,8 +1741,15 @@ function QuickAddPopover({
           ✕
         </button>
       </div>
-      {custom ? (
-        <CustomEventForm fits={fits} onBook={onPick} onBack={() => setCustom(false)} />
+      {screen === 'custom' ? (
+        <CustomEventForm fits={fits} onBook={onPick} onBack={() => setScreen('templates')} />
+      ) : screen === 'bench' ? (
+        <BenchForm
+          ventures={ventures}
+          fits={fits}
+          onBook={onPick}
+          onBack={() => setScreen('templates')}
+        />
       ) : (
         <div className="mt-2 flex flex-col gap-1.5">
           {voice.manor.templates.map((tpl) => {
@@ -1757,9 +1783,26 @@ function QuickAddPopover({
               </button>
             )
           })}
+          {ventures.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setScreen('bench')}
+              className="card flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs transition-colors"
+              onMouseEnter={(e) =>
+                ((e.currentTarget as HTMLElement).style.borderColor = 'var(--color-w-workshop)')
+              }
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '')}
+            >
+              <span
+                className="h-[7px] w-[7px] flex-none rounded-full"
+                style={{ background: 'var(--color-w-workshop)' }}
+              />
+              {voice.manor.bench.row}
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => setCustom(true)}
+            onClick={() => setScreen('custom')}
             className="card flex w-full items-center gap-2 border-dashed px-2.5 py-2 text-left text-xs text-ink-dim transition-colors hover:text-ink"
           >
             {voice.manor.custom.row}

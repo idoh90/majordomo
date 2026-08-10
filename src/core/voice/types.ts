@@ -251,6 +251,13 @@ export interface VoicePack {
       /** shown against a template that cannot fit the chosen slot */
       wontFit: string
     }
+    /** quick-add's bench row — booking an hour against a Workshop venture
+     *  without leaving the week. Hidden when the shelf is empty. */
+    bench: {
+      row: string
+      ventureLabel: string
+      book: string
+    }
     /** drop rejected: the target slot overlaps something */
     occupied: string
     /** drag ghost time-line when the slot is taken */

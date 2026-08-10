@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CalendarEvent, EventKind } from '../../core/events/types'
 import { hoursOf } from '../../core/events/lib'
 import { localDayKey } from '../../core/dates'
 import { useNavStore } from '../../core/store/nav'
 import { Sheet } from '../../core/ui/Sheet'
 import { voice } from '../../core/voice'
-import { CustomEventForm, Stepper, TitleField } from './fields'
+import { useWorkshopStore } from '../../modules/workshop/store'
+import { BenchForm, CustomEventForm, Stepper, TitleField, type QuickAddPick } from './fields'
 import { KIND_META, eventMeta, hhmm } from './kinds'
 import type { NearWatch } from './nearWatch'
 
@@ -38,13 +39,22 @@ export function MobileQuickAddSheet({
   when: Date | null
   /** would a block of `hours` fit the tapped slot? */
   fits: (hours: number) => boolean
-  onPick: (tpl: { kind: EventKind; title: string; hours: number }) => void
+  onPick: (tpl: QuickAddPick) => void
   onClose: () => void
 }) {
-  const [custom, setCustom] = useState(false)
+  const [screen, setScreen] = useState<'templates' | 'custom' | 'bench'>('templates')
+  // the shelf, minus what is finished — you do not book hours against a
+  // venture you have already shipped. Filtered in a memo, NOT in the selector:
+  // a selector returning a fresh array is a new snapshot on every render, and
+  // zustand's store subscription then re-renders forever.
+  const allVentures = useWorkshopStore((s) => s.ventures)
+  const ventures = useMemo(
+    () => allVentures.filter((v) => !v.archived && v.status !== 'shipped'),
+    [allVentures],
+  )
   // each opening starts on the fast path, whatever the last one ended on
   useEffect(() => {
-    if (open) setCustom(false)
+    if (open) setScreen('templates')
   }, [open])
   const free = fits(0.5)
   return (
@@ -67,8 +77,15 @@ export function MobileQuickAddSheet({
               ✕
             </button>
           </div>
-          {custom ? (
-            <CustomEventForm fits={fits} onBook={onPick} onBack={() => setCustom(false)} />
+          {screen === 'custom' ? (
+            <CustomEventForm fits={fits} onBook={onPick} onBack={() => setScreen('templates')} />
+          ) : screen === 'bench' ? (
+            <BenchForm
+              ventures={ventures}
+              fits={fits}
+              onBook={onPick}
+              onBack={() => setScreen('templates')}
+            />
           ) : (
             <>
               <div className="mt-2.5 flex flex-col gap-1.5">
@@ -95,9 +112,22 @@ export function MobileQuickAddSheet({
                     </button>
                   )
                 })}
+                {ventures.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setScreen('bench')}
+                    className="card flex h-[46px] w-full items-center gap-2.5 px-3.5 text-left text-[13px] font-semibold transition-colors"
+                  >
+                    <span
+                      className="h-2 w-2 flex-none rounded-full"
+                      style={{ background: 'var(--color-w-workshop)' }}
+                    />
+                    {voice.manor.bench.row}
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setCustom(true)}
+                  onClick={() => setScreen('custom')}
                   className="card flex h-[46px] w-full items-center gap-2.5 border-dashed px-3.5 text-left text-[13px] font-semibold text-ink-dim transition-colors"
                 >
                   {voice.manor.custom.row}

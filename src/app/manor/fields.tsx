@@ -50,7 +50,109 @@ export function Stepper({
 }
 
 /** every kind a free-form block may claim, in wing order */
-const KINDS: EventKind[] = ['shift', 'sleep', 'training', 'study', 'marker']
+const KINDS: EventKind[] = ['shift', 'sleep', 'training', 'study', 'workshop', 'marker']
+
+/**
+ * What quick-add hands back. `ventureId` is the one field that changes what
+ * gets WRITTEN rather than how it looks: with it the block is the Workshop's
+ * (its own source and `proj:` ref, and a fulfillment record), without it the
+ * block is a plain manual entry. A workshop-KIND block chosen from the custom
+ * form carries no venture and lands unfiled — the wing's AWAITING REPORT queue
+ * is where it gets claimed, exactly as an unfiled study block is.
+ */
+export interface QuickAddPick {
+  kind: EventKind
+  title: string
+  hours: number
+  ventureId?: string
+}
+
+/**
+ * Quick-add's bench row: choose the venture, choose the hours. This exists
+ * because the hours a venture takes are the wing's whole point, and until now
+ * the only doors to them were inside the Workshop itself — so an hour you
+ * planned while looking at your week had to be entered somewhere else.
+ */
+export function BenchForm({
+  ventures,
+  fits,
+  onBook,
+  onBack,
+}: {
+  ventures: { id: string; name: string }[]
+  fits: (hours: number) => boolean
+  onBook: (v: QuickAddPick) => void
+  onBack: () => void
+}) {
+  const [ventureId, setVentureId] = useState(ventures[0]?.id ?? '')
+  const [hours, setHours] = useState(2)
+  const roomFor = fits(hours)
+  const venture = ventures.find((v) => v.id === ventureId) ?? null
+  const accent = 'var(--color-w-workshop)'
+
+  return (
+    <div>
+      <div className="mt-3">
+        <span className="text-[10px] tracking-[0.2em] text-ink-dim">
+          {voice.manor.bench.ventureLabel}
+        </span>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {ventures.map((v) => {
+            const on = v.id === ventureId
+            return (
+              <button
+                key={v.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setVentureId(v.id)}
+                className="chip px-2.5 py-1 text-[10px] tracking-[0.08em] transition-colors"
+                style={{
+                  borderColor: on ? accent : 'var(--color-line)',
+                  background: on
+                    ? 'color-mix(in srgb, var(--color-w-workshop) 12%, transparent)'
+                    : 'transparent',
+                  color: on ? 'var(--color-ink)' : 'var(--color-ink-dim)',
+                }}
+              >
+                {v.name}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <Stepper
+        label={voice.manor.eventSheet.durationLabel}
+        value={`${hours.toFixed(1)} h`}
+        onDec={() => setHours((h) => Math.max(0.5, h - 0.5))}
+        onInc={() => setHours((h) => Math.min(24, h + 0.5))}
+      />
+      {!roomFor && (
+        <div className="mt-2 text-[11px] italic" style={{ color: 'var(--color-danger)' }}>
+          {voice.manor.custom.wontFit}
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={!venture || !roomFor}
+        onClick={() =>
+          venture &&
+          onBook({ kind: 'workshop', title: venture.name, hours, ventureId: venture.id })
+        }
+        className="btn-cta mt-3 h-11 w-full font-display text-[12.5px] font-semibold tracking-[0.18em] disabled:opacity-40"
+        style={{ background: accent, color: 'var(--color-bg)', boxShadow: 'none' }}
+      >
+        {voice.manor.bench.book}
+      </button>
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-2 w-full text-[11px] text-ink-dim transition-colors hover:text-ink"
+      >
+        {voice.manor.custom.back}
+      </button>
+    </div>
+  )
+}
 
 /**
  * Quick-add's free-form row: a title, a kind and a duration, for the hours the
@@ -69,7 +171,7 @@ export function CustomEventForm({
 }: {
   /** would a block of `hours` fit the chosen slot? */
   fits: (hours: number) => boolean
-  onBook: (v: { kind: EventKind; title: string; hours: number }) => void
+  onBook: (v: QuickAddPick) => void
   onBack: () => void
 }) {
   const [title, setTitle] = useState('')
