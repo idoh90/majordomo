@@ -22,11 +22,18 @@ export function MethodStep({ onChoose }: MethodStepProps) {
         caption="Distance and pace. Feeds recovery, not the weekly count."
         onClick={() => onChoose('run')}
       />
-      <Choice
-        title={voice.grounds.sport.methodTitle}
-        caption={voice.grounds.sport.methodCaption}
-        onClick={() => onChoose('sport')}
-      />
+      {/* OTHER SPORT is DEV-ONLY for now: the flow works, but the sport roster
+          and its muscle maps want more work before they ship. Only the DOOR is
+          shut — every read path (history, the strain engine, the Manor block)
+          still understands a sport session, so one logged before this went dark
+          still reads correctly rather than turning into a nameless record. */}
+      {import.meta.env.DEV && (
+        <Choice
+          title={voice.grounds.sport.methodTitle}
+          caption={voice.grounds.sport.methodCaption}
+          onClick={() => onChoose('sport')}
+        />
+      )}
     </div>
   )
 }
