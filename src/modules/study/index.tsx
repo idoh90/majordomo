@@ -59,7 +59,7 @@ function Briefing() {
 
   if (subjects.filter((s) => !s.archived).length === 0) return null
 
-  return <StudyBriefing />
+  return <StudyBriefing variant="row" />
 }
 
 function Icon() {

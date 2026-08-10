@@ -1,4 +1,5 @@
 import { useNow } from '../../core/useNow'
+import { BriefingRow } from '../../core/ui/BriefingLedger'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { CapitalBriefingFacts } from '../../core/voice/types'
@@ -23,7 +24,10 @@ import { useCapitalStore } from './store'
  * is the Vault's rule too: a lone snapshot has nothing to be compared with,
  * and "▲ ₪0 vs last" is a claim rather than a figure.
  */
-export function LedgerBriefing({ className = '' }: { className?: string } = {}) {
+export function LedgerBriefing({
+  className = '',
+  variant = 'panel',
+}: { className?: string; variant?: 'panel' | 'row' } = {}) {
   const accounts = useCapitalStore((s) => s.accounts)
   const snapshots = useCapitalStore((s) => s.snapshots)
   const holdings = useCapitalStore((s) => s.holdings)
@@ -105,6 +109,23 @@ export function LedgerBriefing({ className = '' }: { className?: string } = {}) 
     perDay: pace.perDay > 0 ? formatILS(Math.round(pace.perDay)) : null,
     fixed: breakdown.fixed > 0 ? formatILS(breakdown.fixed) : null,
     underPace: pace.underPace,
+    // what is left, divided by the days that are left — the one budget figure
+    // the panel could state and never did. Dropped when the month is over or
+    // the budget already is: there is no allowance to name in either case.
+    allowancePerDay:
+      hasBudget && !over && daysInMonth - dayOfMonth > 0
+        ? formatILS(Math.round((monthlyBudget - spent) / (daysInMonth - dayOfMonth)))
+        : null,
+    accountCount: accounts.length,
+    // the same strictness the totals use: a row with no ₪ rate isn't in ₪, so
+    // it can't be compared against rows that are, let alone crowned the largest
+    topHolding:
+      port.unconverted.length === 0 && rows.length > 0
+        ? (() => {
+            const top = rows.reduce((a, b) => (b.marketValue > a.marketValue ? b : a))
+            return { symbol: top.holding.symbol.toUpperCase(), value: formatILS(top.marketValue) }
+          })()
+        : null,
     // dropped entirely when some row has no ₪ rate: the totals then cover only
     // the converted rows, and this panel has nowhere to say so
     portfolio:
@@ -119,15 +140,19 @@ export function LedgerBriefing({ className = '' }: { className?: string } = {}) 
         : null,
   }
 
-  return (
-    <BriefingPanel
-      className={className}
-      accent="var(--color-w-ledger)"
-      scope={voice.modules.capital.name}
-      chips={voice.capital.briefingPanel.chips(facts)}
-      headline={voice.capital.briefingPanel.headline(facts)}
-      detail={voice.capital.briefingPanel.detail(facts)}
-      blurFigures={blurAmounts}
-    />
+  const p = voice.capital.briefingPanel
+  const said = {
+    scope: voice.modules.capital.name,
+    chips: p.chips(facts),
+    headline: p.headline(facts),
+    detail: p.detail(facts),
+    aside: p.aside(facts),
+    blurFigures: blurAmounts,
+  }
+
+  return variant === 'row' ? (
+    <BriefingRow id="capital" accent="var(--color-w-ledger)" {...said} />
+  ) : (
+    <BriefingPanel className={className} accent="var(--color-w-ledger)" {...said} />
   )
 }

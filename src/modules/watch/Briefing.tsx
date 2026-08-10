@@ -3,10 +3,11 @@ import { eventsInRange, weeklyHoursSeries } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
+import { BriefingRow } from '../../core/ui/BriefingLedger'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { WatchBriefingFacts } from '../../core/voice/types'
-import { watchStats } from './lib'
+import { cycleStats, watchStats } from './lib'
 
 /** A watch that ends on a later calendar day than it began — the 19:00 → 08:00
  *  shape, whatever hours it was actually posted with. */
@@ -21,7 +22,10 @@ function isNight(startIso: string, endIso: string): boolean {
  * duty ring reads — so the strip and the ring can never disagree about how
  * many hours have been stood.
  */
-export function WatchBriefing({ className = '' }: { className?: string } = {}) {
+export function WatchBriefing({
+  className = '',
+  variant = 'panel',
+}: { className?: string; variant?: 'panel' | 'row' } = {}) {
   const events = useEventsStore((s) => s.events)
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
@@ -60,16 +64,23 @@ export function WatchBriefing({ className = '' }: { className?: string } = {}) {
     weeklyH: weeklyHoursSeries(events, ['shift'], 8, nowDate, weekStart, 'startAnchored'),
     aheadCount: stats.ahead.length,
     nextWeekCount,
+    // the same figure the Cycle card prints, from the same call — a gap stated
+    // twice from two derivations is a gap stated wrongly once
+    turnaroundH: cycleStats(events, now, weekStart).turnaroundH,
   }
 
-  return (
-    <BriefingPanel
-      className={className}
-      accent="var(--color-w-watch)"
-      scope={voice.modules.watch.name}
-      chips={voice.watch.briefingPanel.chips(facts)}
-      headline={voice.watch.briefingPanel.headline(facts)}
-      detail={voice.watch.briefingPanel.detail(facts)}
-    />
+  const p = voice.watch.briefingPanel
+  const said = {
+    scope: voice.modules.watch.name,
+    chips: p.chips(facts),
+    headline: p.headline(facts),
+    detail: p.detail(facts),
+    aside: p.aside(facts),
+  }
+
+  return variant === 'row' ? (
+    <BriefingRow id="watch" accent="var(--color-w-watch)" {...said} />
+  ) : (
+    <BriefingPanel className={className} accent="var(--color-w-watch)" {...said} />
   )
 }

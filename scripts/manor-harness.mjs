@@ -605,9 +605,25 @@ async function desktopChecks(browser) {
 async function briefingChecks(browser) {
   const { page } = await fresh(browser, { width: 1440, height: 1200 })
 
+  /* The Manor's briefings are now ROWS in one panel and their prose is folded
+     away until pressed — and a closed fold sets `visibility: hidden`, which
+     takes the text out of innerText entirely. So the Study's row is opened
+     before every read. Without this both checks below go red for a reason that
+     has nothing to do with M-03: the sentence is correct, it is just shut. */
+  const openStudyRow = () =>
+    page.evaluate(async () => {
+      const rows = [...document.querySelectorAll('.briefing-row')]
+      const btn = rows
+        .map((r) => r.querySelector('button'))
+        .find((b) => b && /THE STUDY|THE ACADEMY/i.test(b.innerText))
+      if (btn && btn.getAttribute('aria-expanded') === 'false') btn.click()
+      await new Promise((r) => setTimeout(r, 400))
+    })
+
   /** what each surface currently claims about the run-up to the exam */
-  const readClaims = () =>
-    page.evaluate(() => {
+  const readClaims = async () => {
+    await openStudyRow()
+    return page.evaluate(() => {
       const text = document.body.innerText
       return {
         // the Manor's heads-up appears ONLY when nothing is booked ahead
@@ -621,6 +637,7 @@ async function briefingChecks(browser) {
         briefingAhead: text.match(/.*\band ([^.]+?) more (?:on the books|booked)/i)?.[1] ?? null,
       }
     })
+  }
 
   /* --- state 1: work done, nothing booked ahead -------------------------- */
   await page.evaluate(() => {

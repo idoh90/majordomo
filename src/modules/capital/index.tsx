@@ -60,7 +60,7 @@ function Briefing() {
 
   if (!hasSpend && !hasWorth) return null
 
-  return <LedgerBriefing />
+  return <LedgerBriefing variant="row" />
 }
 
 function Icon() {

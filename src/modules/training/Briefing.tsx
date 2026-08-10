@@ -3,6 +3,7 @@ import { dayNameLabel } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
+import { BriefingRow } from '../../core/ui/BriefingLedger'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { GroundsBriefingFacts } from '../../core/voice/types'
@@ -24,7 +25,8 @@ import { useWorkoutStore } from './store'
 export function GroundsBriefing({
   strains: given,
   className = '',
-}: { strains?: StrainMap; className?: string } = {}) {
+  variant = 'panel',
+}: { strains?: StrainMap; className?: string; variant?: 'panel' | 'row' } = {}) {
   const workouts = useWorkoutStore((s) => s.workouts)
   const weeklyGoal = useWorkoutStore((s) => s.weeklyGoal)
   const profile = useWorkoutStore((s) => s.profile)
@@ -58,6 +60,15 @@ export function GroundsBriefing({
     )
     .sort((a, b) => a.start.localeCompare(b.start))
 
+  // the freshest group, and how long the body has been left alone. Both are
+  // read off the same strain map the heat colours use, so the sentence and the
+  // body map can't disagree about which muscle is coldest.
+  const coldest = ALL_MUSCLE_IDS.reduce((best, m) => (strains[m] < strains[best] ? m : best))
+  const lastAt = workouts.reduce<number | null>((latest, w) => {
+    const t = new Date(w.performedAt).getTime()
+    return latest === null || t > latest ? t : latest
+  }, null)
+
   const facts: GroundsBriefingFacts = {
     done: thisWeekCount(workouts, nowDate, weekStart),
     goal: weeklyGoal,
@@ -70,22 +81,32 @@ export function GroundsBriefing({
     readiness: readiness(strains),
     kcal: macros.calories,
     protein: macros.protein,
+    carbs: macros.carbs,
+    fat: macros.fat,
     meals: profile.mealsPerDay,
     isTrainingDay: macros.isTrainingDay,
+    sinceLastH: lastAt === null ? null : Math.max(0, (now - lastAt) / 3_600_000),
+    // named only when the map has something to rank — with nothing logged every
+    // group reads 0 and "chest is your freshest" would be a coin toss
+    coldest: hottest && strains[hottest] > 0 ? muscleLabel(coldest) : null,
     nextBlock: ahead[0]
       ? { title: ahead[0].title, dayLabel: dayNameLabel(ahead[0].start, nowDate) }
       : null,
     blocksAhead: ahead.length,
   }
 
-  return (
-    <BriefingPanel
-      className={className}
-      accent="var(--color-w-grounds)"
-      scope={voice.modules.training.name}
-      chips={voice.grounds.briefingPanel.chips(facts)}
-      headline={voice.grounds.briefingPanel.headline(facts)}
-      detail={voice.grounds.briefingPanel.detail(facts)}
-    />
+  const p = voice.grounds.briefingPanel
+  const said = {
+    scope: voice.modules.training.name,
+    chips: p.chips(facts),
+    headline: p.headline(facts),
+    detail: p.detail(facts),
+    aside: p.aside(facts),
+  }
+
+  return variant === 'row' ? (
+    <BriefingRow id="grounds" accent="var(--color-w-grounds)" {...said} />
+  ) : (
+    <BriefingPanel className={className} accent="var(--color-w-grounds)" {...said} />
   )
 }

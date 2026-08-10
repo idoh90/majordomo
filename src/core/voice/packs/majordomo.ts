@@ -121,8 +121,11 @@ export const majordomoPack: VoicePack = {
   },
   briefing: {
     label: 'THE BRIEFING',
+    subtitle: 'each wing, in its own numbers',
     expand: 'Show the full briefing',
     collapse: 'Show less',
+    rowExpand: (scope) => `Read the briefing for ${scope}`,
+    rowCollapse: (scope) => `Close the briefing for ${scope}`,
   },
   appName: 'Majordomo',
   wordmark: { lead: 'MAJORDOMO', accent: '' },
@@ -298,7 +301,16 @@ export const majordomoPack: VoicePack = {
         }
         return `${week}, and ${lower(hot)} ${plural(hot, 'muscle group is', 'muscle groups are')} still hot. ${top.name} leads at ${top.strain.toFixed(1)}.`
       },
-      detail: ({ readiness, kcal, protein, meals, isTrainingDay, nextBlock, blocksAhead }) => {
+      detail: ({
+        readiness,
+        kcal,
+        protein,
+        meals,
+        isTrainingDay,
+        nextBlock,
+        blocksAhead,
+        sinceLastH,
+      }) => {
         const bandWord = {
           fresh: 'fresh',
           ready: 'ready',
@@ -306,6 +318,19 @@ export const majordomoPack: VoicePack = {
           spent: 'spent',
         }[readiness.band]
         const parts = [`Readiness ${readiness.score} of 100, ${bandWord}.`]
+        // how long the body has been left alone is the other half of a
+        // readiness score — the number says how recovered, this says since when
+        if (sinceLastH === null) {
+          parts.push('Nothing has been logged yet.')
+        } else if (sinceLastH < 1) {
+          parts.push('Your last session was less than an hour ago.')
+        } else if (sinceLastH < 24) {
+          const h = Math.round(sinceLastH)
+          parts.push(`Your last session was ${lower(h)} ${plural(h, 'hour', 'hours')} ago.`)
+        } else {
+          const d = Math.floor(sinceLastH / 24)
+          parts.push(`${sentence(word(d))} ${plural(d, 'day has', 'days have')} passed since the last session.`)
+        }
         if (kcal > 0) {
           parts.push(
             `You need ${kcal.toLocaleString('en-US')} kcal on ${isTrainingDay ? 'a training day' : 'a rest day'}, and ${protein} g of protein across ${lower(meals)} ${plural(meals, 'meal', 'meals')}.`,
@@ -321,6 +346,25 @@ export const majordomoPack: VoicePack = {
           parts.push('Nothing else is booked on the Manor.')
         }
         return parts.join(' ')
+      },
+      aside: ({ carbs, fat, kcal, coldest, done, goal }) => {
+        const parts: string[] = []
+        // the carb/fat split was the Grounds' own summary card; the briefing
+        // only ever quoted the two headline macros, so opening it now finishes
+        // the plate rather than sending the reader to another screen
+        if (kcal > 0) {
+          parts.push(`${carbs} g of carbohydrate and ${fat} g of fat complete the day.`)
+        }
+        if (coldest) parts.push(`${coldest} is your freshest group.`)
+        if (goal > 0) {
+          const left = goal - done
+          parts.push(
+            left > 0
+              ? `${sentence(word(left))} more ${plural(left, 'session', 'sessions')} ${plural(left, 'meets', 'meet')} the weekly goal.`
+              : 'The weekly goal is met.',
+          )
+        }
+        return parts.length > 0 ? parts.join(' ') : null
       },
     },
     scheduledTitle: 'Coming up',
@@ -608,7 +652,15 @@ export const majordomoPack: VoicePack = {
             : 'nothing more booked'
         return `${read} The ${exam.subject} exam is ${when}, with ${behind} and ${ahead}.`
       },
-      detail: ({ awaiting, dueCount, syllabusPct, syllabusSubject, nextSession }) => {
+      detail: ({
+        awaiting,
+        dueCount,
+        syllabusPct,
+        syllabusSubject,
+        nextSession,
+        fulfilledH,
+        goalH,
+      }) => {
         const parts: string[] = []
         const clauses: string[] = []
         if (awaiting > 0) {
@@ -635,10 +687,48 @@ export const majordomoPack: VoicePack = {
               : `${clauses.slice(0, -1).join(', ')}, and ${clauses[clauses.length - 1]}`
           parts.push(`${sentence(joined)}.`)
         }
+        if (goalH > 0) {
+          const gap = goalH - fulfilledH
+          parts.push(
+            gap > 0.05
+              ? `You are ${hoursWord(gap)} ${plural(Math.round(gap), 'hour', 'hours')} short of the weekly goal.`
+              : 'The weekly goal is met.',
+          )
+        }
         if (nextSession) {
           parts.push(`${nextSession.dayLabel}'s block is ${nextSession.subject}.`)
         }
         return parts.join(' ')
+      },
+      aside: ({ subjectCount, topicsLeft, syllabusSubject, bookedH, fulfilledH }) => {
+        const parts: string[] = []
+        if (subjectCount > 0) {
+          parts.push(
+            `${sentence(word(subjectCount))} ${plural(subjectCount, 'subject is', 'subjects are')} on the books.`,
+          )
+        }
+        if (topicsLeft !== null && topicsLeft > 0) {
+          const where = syllabusSubject ? `the ${syllabusSubject} syllabus` : 'your syllabi'
+          parts.push(
+            `${sentence(word(topicsLeft))} ${plural(topicsLeft, 'topic', 'topics')} left on ${where}.`,
+          )
+        } else if (topicsLeft === 0) {
+          parts.push(
+            syllabusSubject
+              ? `The ${syllabusSubject} syllabus is fully covered.`
+              : 'Every syllabus is fully covered.',
+          )
+        }
+        // NOT "still ahead of you" — a booked hour that passed unlogged is
+        // behind you and undone, and the two are not the same claim
+        const undone = bookedH - fulfilledH
+        if (undone > 0.05) {
+          const n = Math.round(undone)
+          parts.push(
+            `${sentence(hoursWord(undone))} ${plural(n, 'hour', 'hours')} of this week's booking ${plural(n, 'is', 'are')} not done.`,
+          )
+        }
+        return parts.length > 0 ? parts.join(' ') : null
       },
     },
   },
@@ -772,7 +862,16 @@ export const majordomoPack: VoicePack = {
           : ''
         return `${stood}. ${tally}.${upNext}`
       },
-      detail: ({ nights, days, sleepH, weeklyH, expectedH, nextWeekCount, aheadCount }) => {
+      detail: ({
+        nights,
+        days,
+        sleepH,
+        weeklyH,
+        doneH,
+        expectedH,
+        nextWeekCount,
+        aheadCount,
+      }) => {
         const parts: string[] = []
         if (nights + days > 0) {
           const shape = [
@@ -786,6 +885,14 @@ export const majordomoPack: VoicePack = {
               ? `, plus ${hoursWord(sleepH)} ${plural(Math.round(sleepH), 'hour', 'hours')} of sleep blocked out after them`
               : ''
           parts.push(`${sentence(shape)} this week${withSleep}.`)
+        }
+        // only once some hours ARE behind you: with none stood the headline has
+        // just said "no hours worked out of 52" and this would repeat the 52
+        if (doneH > 0.05 && expectedH - doneH > 0.05) {
+          const left = expectedH - doneH
+          parts.push(
+            `${sentence(hoursWord(left))} ${plural(Math.round(left), 'hour is', 'hours are')} still to stand.`,
+          )
         }
         // only claim a record when there is enough history to have one
         const prior = weeklyH.slice(0, -1).filter((h) => h > 0)
@@ -806,6 +913,36 @@ export const majordomoPack: VoicePack = {
           parts.push('Nothing is booked beyond this week.')
         }
         return parts.join(' ')
+      },
+      aside: ({ doneH, expectedH, sleepH, weeklyH, turnaroundH }) => {
+        const parts: string[] = []
+        if (expectedH > 0) {
+          parts.push(`${Math.round((doneH / expectedH) * 100)}% of the week's duty is behind you.`)
+          const prior = weeklyH.slice(0, -1).filter((h) => h > 0)
+          if (prior.length >= 2) {
+            const avg = prior.reduce((t, h) => t + h, 0) / prior.length
+            const diff = expectedH - avg
+            const n = Math.round(Math.abs(diff))
+            // the subject is named rather than left as "that" — the sentence
+            // before it ends on a percentage, and "that" would point at it
+            parts.push(
+              Math.abs(diff) >= 1
+                ? `This week's ${expectedH.toFixed(1)} scheduled hours sit ${hoursWord(Math.abs(diff))} ${plural(n, 'hour', 'hours')} ${diff > 0 ? 'above' : 'below'} your ${prior.length}-week average of ${avg.toFixed(1)}.`
+                : `That is level with your ${prior.length}-week average of ${avg.toFixed(1)}.`,
+            )
+          }
+        }
+        if (turnaroundH !== null && turnaroundH < 12) {
+          const n = Math.round(turnaroundH)
+          parts.push(
+            `${sentence(hoursWord(turnaroundH))} ${plural(n, 'hour', 'hours')} is the shortest gap between two of this week's watches.`,
+          )
+        }
+        if (expectedH + sleepH > 0) {
+          const share = Math.round(((expectedH + sleepH) / 168) * 100)
+          parts.push(`Duty and the sleep pencilled around it take ${share}% of the week.`)
+        }
+        return parts.length > 0 ? parts.join(' ') : null
       },
     },
   },
@@ -855,6 +992,36 @@ export const majordomoPack: VoicePack = {
         }
         if (parts.length === 0) parts.push('Nothing more to report.')
         return parts.join(' ')
+      },
+      aside: ({
+        allowancePerDay,
+        accountCount,
+        topHolding,
+        dayOfMonth,
+        daysInMonth,
+        over,
+        hasBudget,
+      }) => {
+        const parts: string[] = []
+        if (hasBudget) {
+          const daysLeft = Math.max(0, daysInMonth - dayOfMonth)
+          if (over) {
+            parts.push('The budget is spent. Anything further this month is over it.')
+          } else if (allowancePerDay && daysLeft > 0) {
+            parts.push(
+              `${allowancePerDay} a day for the ${lower(daysLeft)} ${plural(daysLeft, 'day', 'days')} left keeps you inside it.`,
+            )
+          }
+        }
+        if (accountCount > 0) {
+          parts.push(
+            `${sentence(word(accountCount))} ${plural(accountCount, 'account makes', 'accounts make')} up the total.`,
+          )
+        }
+        if (topHolding) {
+          parts.push(`${topHolding.symbol} is your largest position at ${topHolding.value}.`)
+        }
+        return parts.length > 0 ? parts.join(' ') : null
       },
     },
     vaultEmpty:
@@ -1176,6 +1343,8 @@ export const majordomoPack: VoicePack = {
         'Where two wings clash — training booked right after a shift, or a subject with a goal and nothing scheduled. The fix is one tap.',
       briefing:
         'How this wing is doing right now. Closed, you get the headline. Open it for the detail behind it.',
+      briefingLedger:
+        'Every wing on one row, in its own three figures. Open a wing and the Majordomo says the rest of it.',
     },
     watch: {
       onDuty:

@@ -34,6 +34,9 @@ export interface WatchBriefingFacts {
   aheadCount: number
   /** …of which this many fall in next week */
   nextWeekCount: number
+  /** the shortest gap between two of this week's watches, or null when there
+   *  are fewer than two to sit between */
+  turnaroundH: number | null
 }
 
 export interface GroundsBriefingFacts {
@@ -48,6 +51,13 @@ export interface GroundsBriefingFacts {
   protein: number
   meals: number
   isTrainingDay: boolean
+  /** the rest of the plate — the split DailySummary used to own alone */
+  carbs: number
+  fat: number
+  /** hours since the last logged session, or null when nothing is logged yet */
+  sinceLastH: number | null
+  /** the least-strained group — what the body is actually offering today */
+  coldest: string | null
   /** the next training block booked on the Manor */
   nextBlock: { title: string; dayLabel: string } | null
   blocksAhead: number
@@ -67,6 +77,10 @@ export interface StudyBriefingFacts {
    *  and the line must say so rather than imply one */
   syllabusSubject: string | null
   nextSession: { subject: string; dayLabel: string } | null
+  /** how many subjects are live on the books */
+  subjectCount: number
+  /** topics still uncovered on the syllabus the percentage is of */
+  topicsLeft: number | null
 }
 
 export interface CapitalBriefingFacts {
@@ -86,6 +100,13 @@ export interface CapitalBriefingFacts {
   /** Σ this month's fixed commitments, or null when nothing recurs */
   fixed: string | null
   underPace: boolean
+  /** what a day may cost from here to month-end and still land inside the
+   *  budget — null when there is no budget, nothing left, or no days left */
+  allowancePerDay: string | null
+  /** how many accounts the total is made of */
+  accountCount: number
+  /** the largest position, when every row could be converted to ₪ */
+  topHolding: { symbol: string; value: string } | null
   portfolio: {
     value: string
     dayPL: string
@@ -143,8 +164,15 @@ export interface VoicePack {
   briefing: {
     /** scope label prefix: "THE BRIEFING · THE WATCH" */
     label: string
+    /** the Manor's consolidated panel: one note beside the title, saying what
+     *  the four rows below it are */
+    subtitle: string
     expand: string
     collapse: string
+    /** accessible name on a wing's row inside that panel — it says what the
+     *  press will do, not which way the chevron happens to point */
+    rowExpand: (scope: string) => string
+    rowCollapse: (scope: string) => string
   }
   /** product name — document.title, exports, about */
   appName: string
@@ -406,6 +434,10 @@ export interface VoicePack {
       chips: (v: WatchBriefingFacts) => BriefingChip[]
       headline: (v: WatchBriefingFacts) => string
       detail: (v: WatchBriefingFacts) => string
+      /** the third line, shown only where the briefing has been opened — the
+       *  figures a reader who asked for more is entitled to. Null when the
+       *  wing has nothing further that is actually true. */
+      aside: (v: WatchBriefingFacts) => string | null
     }
   }
   grounds: {
@@ -438,6 +470,8 @@ export interface VoicePack {
       chips: (v: GroundsBriefingFacts) => BriefingChip[]
       headline: (v: GroundsBriefingFacts) => string
       detail: (v: GroundsBriefingFacts) => string
+      /** see watch.briefingPanel.aside */
+      aside: (v: GroundsBriefingFacts) => string | null
     }
     /** card of upcoming training sessions booked on the Manor */
     scheduledTitle: string
@@ -721,6 +755,8 @@ export interface VoicePack {
       chips: (v: StudyBriefingFacts) => BriefingChip[]
       headline: (v: StudyBriefingFacts) => string
       detail: (v: StudyBriefingFacts) => string
+      /** see watch.briefingPanel.aside */
+      aside: (v: StudyBriefingFacts) => string | null
     }
   }
   /** wing chip labels per event kind */
@@ -742,6 +778,8 @@ export interface VoicePack {
       chips: (v: CapitalBriefingFacts) => BriefingChip[]
       headline: (v: CapitalBriefingFacts) => string
       detail: (v: CapitalBriefingFacts) => string
+      /** see watch.briefingPanel.aside */
+      aside: (v: CapitalBriefingFacts) => string | null
     }
     /** Vault empty state — no accounts/snapshots yet */
     vaultEmpty: string
@@ -1134,7 +1172,10 @@ export interface VoicePack {
       rail: string
       signal: string
       pattern: string
+      /** one wing's own briefing panel, as the wing screens render it */
       briefing: string
+      /** the Manor's consolidated panel, where a wing is a row that folds */
+      briefingLedger: string
     }
     watch: {
       onDuty: string

@@ -36,7 +36,7 @@ function Briefing() {
   // itself. DailySummary is left in place rather than deleted: its carb/fat
   // split and per-muscle wording are a feature of the Grounds, and where the
   // design omits an old feature the old feature wins.
-  return <GroundsBriefing strains={strains} />
+  return <GroundsBriefing strains={strains} variant="row" />
 }
 
 /** Menu-tile stat: sessions this calendar week vs the weekly goal. */

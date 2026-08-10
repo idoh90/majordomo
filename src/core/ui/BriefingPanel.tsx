@@ -27,6 +27,7 @@ export function BriefingPanel({
   chips,
   headline,
   detail,
+  aside,
   extra,
   blurFigures = false,
   className = '',
@@ -39,6 +40,9 @@ export function BriefingPanel({
   chips: BriefingChip[]
   headline: string
   detail?: string
+  /** the third line — the figures a reader who opened the fold is owed. Same
+   *  copy the Manor's row shows, so the two surfaces never differ. */
+  aside?: string | null
   /** anything the wing wants under the detail line (deltas, a readiness tile) */
   extra?: ReactNode
   /** the Ledger's privacy toggle. Prose can't blur one number at a time the
@@ -50,7 +54,7 @@ export function BriefingPanel({
   className?: string
 }) {
   const [expanded, setExpanded] = useState(false)
-  const hasMore = Boolean(detail) || Boolean(extra)
+  const hasMore = Boolean(detail) || Boolean(aside) || Boolean(extra)
   const blur = blurFigures
     ? 'blur-[6px] transition-[filter] duration-150 hover:blur-none'
     : ''
@@ -127,6 +131,11 @@ export function BriefingPanel({
               {detail && (
                 <p className={`mt-1.5 text-[12.5px] leading-relaxed text-ink-dim ${blur}`}>
                   {detail}
+                </p>
+              )}
+              {aside && (
+                <p className={`mt-1.5 text-[12.5px] leading-relaxed text-ink-faint ${blur}`}>
+                  {aside}
                 </p>
               )}
               {extra && <div className="mt-2">{extra}</div>}

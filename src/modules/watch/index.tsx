@@ -43,5 +43,7 @@ export const watchConsole: ConsoleModule = {
   Icon,
   Tile,
   Screen: WatchScreen,
-  Briefing: WatchBriefing,
+  // on the Manor the briefing is a ROW in the one consolidated panel; the wing
+  // screen keeps the full panel, where there is only one of it to consolidate
+  Briefing: () => <WatchBriefing variant="row" />,
 }

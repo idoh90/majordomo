@@ -2,6 +2,7 @@ import { dayNameLabel, localDayKey } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
+import { BriefingRow } from '../../core/ui/BriefingLedger'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { StudyBriefingFacts } from '../../core/voice/types'
@@ -26,7 +27,10 @@ import { useStudyStore } from './store'
  * the other belonged — so both are named in words rather than collapsed into
  * a single "on the books".
  */
-export function StudyBriefing({ className = '' }: { className?: string } = {}) {
+export function StudyBriefing({
+  className = '',
+  variant = 'panel',
+}: { className?: string; variant?: 'panel' | 'row' } = {}) {
   const events = useEventsStore((s) => s.events)
   const subjects = useStudyStore((s) => s.subjects)
   const sessions = useStudyStore((s) => s.sessions)
@@ -80,16 +84,24 @@ export function StudyBriefing({ className = '' }: { className?: string } = {}) {
           dayLabel: dayNameLabel(upcoming.start, nowDate),
         }
       : null,
+    subjectCount: active.length,
+    // scoped exactly as syllabusPct is — a count taken over one set and a
+    // percentage taken over another would be two answers to one question
+    topicsLeft: scoped.length > 0 ? scoped.length - covered : null,
   }
 
-  return (
-    <BriefingPanel
-      className={className}
-      accent="var(--color-w-study)"
-      scope={voice.modules.study.name}
-      chips={voice.study.briefingPanel.chips(facts)}
-      headline={voice.study.briefingPanel.headline(facts)}
-      detail={voice.study.briefingPanel.detail(facts)}
-    />
+  const p = voice.study.briefingPanel
+  const said = {
+    scope: voice.modules.study.name,
+    chips: p.chips(facts),
+    headline: p.headline(facts),
+    detail: p.detail(facts),
+    aside: p.aside(facts),
+  }
+
+  return variant === 'row' ? (
+    <BriefingRow id="study" accent="var(--color-w-study)" {...said} />
+  ) : (
+    <BriefingPanel className={className} accent="var(--color-w-study)" {...said} />
   )
 }

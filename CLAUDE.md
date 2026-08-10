@@ -235,9 +235,14 @@ export type ConsoleModule = {
 ```
 
 Components are prop-less: a console reads its own stores inside its wrappers
-(see `modules/training/index.tsx`). Every wing's `Briefing` renders on the
-**Manor only** (`ManorScreen.tsx`, below the grid) — not on the wing screens;
-navigation is the tab header (desktop) / `TabBar` (mobile) over `CONSOLES` in
+(see `modules/training/index.tsx`). `ConsoleModule.Briefing` renders on the
+**Manor only** (`ManorScreen.tsx`, below the grid), as one **row** in the single
+`BriefingLedger` panel — dot, wing name, three figures, and an accordion fold
+holding headline + detail + aside. The wing screens render the same wing's
+briefing as a full `BriefingPanel` (`variant="panel"`, the default); the row
+variant exists only because four stacked panels was ~650 px of repeated frame.
+Both variants read the same voice-pack copy, so they can never disagree.
+Navigation is the tab header (desktop) / `TabBar` (mobile) over `CONSOLES` in
 `app/consoles.ts`. The header's Log Workout button renders **only while the
 Grounds is open** and reaches the add sheet via a one-shot mailbox
 (`modules/training/uiStore.ts` `requestAddSheet`) — never lift console state

@@ -12,6 +12,7 @@ import type { CalendarEvent, EventKind } from '../../core/events/types'
 import { useWorkoutStore } from '../../modules/training/store'
 import { CONSOLES } from '../consoles'
 import { entryStage, useOnboarding } from '../onboarding/store'
+import { BriefingLedger } from '../../core/ui/BriefingLedger'
 import { BriefingStrip } from './BriefingStrip'
 import { KIND_META } from './kinds'
 import { MonthView, monthCells, monthLabel } from './MonthView'
@@ -271,12 +272,14 @@ export function ManorScreen() {
       {/* room for the mobile diff drawer over the grid's last hours */}
       {sandbox && <div className="h-32 md:hidden" />}
 
-      {/* every wing reports in below the grid, in registry order. The wrapper
-          is load-bearing: the panels carry no margin of their own, so without
-          it they butt against each other and against the calendar. */}
-      <div className="mt-4 flex flex-col gap-4">
+      {/* every wing reports in below the grid, in registry order — as ROWS in
+          one panel now, not four panels of their own. The frame, the monogram
+          and the fold belong to BriefingLedger; the wings still own their
+          figures and their copy, and a wing with nothing to say renders
+          nothing and simply isn't a row. */}
+      <BriefingLedger>
         {CONSOLES.map((c) => c.Briefing && <c.Briefing key={c.id} />)}
-      </div>
+      </BriefingLedger>
 
       {sandbox && (
         <div

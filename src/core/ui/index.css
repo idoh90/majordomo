@@ -247,6 +247,16 @@ input[type='datetime-local'] {
       );
   }
 
+  /* THE BRIEFING panel on the Manor: a frame around whatever rows the wings
+     chose to render. When every wing declines — an estate with no accounts, no
+     subjects, nothing logged — the frame must go too, and it decides that
+     here rather than by having each row report its existence up into React's
+     render pass. `:has()` is the whole mechanism; where it is unsupported the
+     worst case is a header with nothing under it. */
+  .briefing-ledger:not(:has(.briefing-row)) {
+    display: none;
+  }
+
   /* sub-surface: tiles, rows, option buttons, inputs */
   .card {
     background: var(--card-bg, var(--color-panel-2));
