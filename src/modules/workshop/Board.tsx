@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { localDayKey } from '../../core/dates'
+import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { Sheet } from '../../core/ui/Sheet'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
@@ -295,6 +296,7 @@ export function Board({
         }}
         heading={mine.find((c) => c.id === columnOf && c.type === 'title') ?? null}
         rows={groups.find((g) => g.title?.id === columnOf)?.children ?? []}
+        threads={myThreads}
         now={now}
         onOpenCard={(card) => openFromColumn(card, null)}
         onHangHere={(index) =>
@@ -1549,6 +1551,22 @@ function MobileBoard({
 
 /* ---------------------------------------------------------------- sheets */
 
+/** the one icon in the wing: a bin, so the destructive control is recognised
+ *  before its label is read. Stroked in currentColor, like every other glyph. */
+function TrashGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path
+        d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9a1 1 0 0 0 1 .95h4.6a1 1 0 0 0 1-.95L12 4"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 /**
  * A deadline is edited as a DAY and an HOUR and stored as one instant. The
  * split is only the input's — two native pickers get the phone's own date and
@@ -1594,6 +1612,7 @@ function ColumnSheet({
   onClose,
   heading,
   rows,
+  threads,
   now,
   onOpenCard,
   onHangHere,
@@ -1603,11 +1622,14 @@ function ColumnSheet({
   onClose: () => void
   heading: BoardCard | null
   rows: BoardCard[]
+  /** the venture's twine, so the confirm can say what a delete would cut */
+  threads: Thread[]
   now: number
   onOpenCard: (card: BoardCard) => void
   onHangHere: (index: number) => void
   butler: (msg: string) => void
 }) {
+  const [confirm, setConfirm] = useState<BoardCard | null>(null)
   if (!heading) return null
   const store = () => useWorkshopStore.getState()
 
@@ -1715,16 +1737,16 @@ function ColumnSheet({
               >
                 ↓
               </button>
+              {/* the same destruction as the card sheet's button, so it asks
+                  the same question — a row here is a smaller target than that
+                  one, not a lesser act */}
               <button
                 type="button"
                 aria-label={voice.workshop.board.takeDown}
-                onClick={() => {
-                  store().deleteCard(c.id)
-                  butler(voice.workshop.toast.cardGone)
-                }}
-                className="relative flex-none text-[13px] text-ink-faint transition-colors after:absolute after:-inset-2 after:content-[''] hover:text-danger"
+                onClick={() => setConfirm(c)}
+                className="relative flex-none text-ink-faint transition-colors after:absolute after:-inset-2 after:content-[''] hover:text-danger"
               >
-                ×
+                <TrashGlyph />
               </button>
             </div>
           )
@@ -1756,6 +1778,26 @@ function ColumnSheet({
           {voice.workshop.sheet.cancel}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={!!confirm}
+        title={voice.workshop.sheet.takeDownTitle}
+        message={
+          confirm
+            ? voice.workshop.sheet.takeDownBody({
+                title: confirm.title,
+                threads: threads.filter((t) => t.from === confirm.id || t.to === confirm.id).length,
+              })
+            : undefined
+        }
+        confirmLabel={voice.workshop.sheet.takeDownYes}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          store().deleteCard(confirm!.id)
+          butler(voice.workshop.toast.cardGone)
+          setConfirm(null)
+        }}
+      />
     </Sheet>
   )
 }
@@ -1788,10 +1830,12 @@ function HangCardSheet({
   const [parentId, setParentId] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [dueTime, setDueTime] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   // (re)seed on open — a fresh hang or the tapped card's current state
   useEffect(() => {
     if (!open) return
+    setConfirmDelete(false)
     setType(editing?.type ?? 'note')
     setTitle(editing?.title ?? '')
     setBody(editing?.body ?? '')
@@ -2046,23 +2090,49 @@ function HangCardSheet({
           ))}
         </div>
       )}
+      {/* Taking a card down was a 10 px line of faint text whose label was the
+          TOAST — "TAKEN DOWN.", past tense, full stop — so it read as a status
+          the sheet was reporting rather than a button. It is now a real
+          bordered control saying what it will do, and because a control this
+          size is easy to hit by accident and the delete cascades the card's
+          twine with it, it asks first. */}
       {editing && (
         <button
           type="button"
-          onClick={() => {
-            useWorkshopStore.getState().deleteCard(editing.id)
-            butler(voice.workshop.toast.cardGone)
-            onClose()
+          onClick={() => setConfirmDelete(true)}
+          className="mt-5 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-[10px] border py-3 font-display text-[11px] font-bold uppercase tracking-[0.14em] transition-colors"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--color-danger) 45%, transparent)',
+            background: 'color-mix(in srgb, var(--color-danger) 10%, transparent)',
+            color: 'var(--color-danger)',
           }}
-          className="mt-4 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-faint transition-colors hover:text-danger"
         >
-          {voice.workshop.toast.cardGone.toUpperCase()}
+          <TrashGlyph />
+          {voice.workshop.sheet.takeDown}
         </button>
       )}
       <SheetActions
         cta={editing ? voice.workshop.sheet.ctaSaveCard : voice.workshop.sheet.ctaHang}
         onCancel={onClose}
         onSave={save}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        title={voice.workshop.sheet.takeDownTitle}
+        message={
+          editing
+            ? voice.workshop.sheet.takeDownBody({ title: editing.title, threads: existing.length })
+            : undefined
+        }
+        confirmLabel={voice.workshop.sheet.takeDownYes}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => {
+          if (!editing) return
+          setConfirmDelete(false)
+          useWorkshopStore.getState().deleteCard(editing.id)
+          butler(voice.workshop.toast.cardGone)
+          onClose()
+        }}
       />
     </Sheet>
   )

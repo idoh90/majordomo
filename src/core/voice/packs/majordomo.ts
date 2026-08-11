@@ -935,6 +935,13 @@ export const majordomoPack: VoicePack = {
       ctaSaveCard: 'SAVE',
       ctaMs: 'MARK THE DAY',
       cancel: 'CANCEL',
+      takeDown: 'TAKE THIS CARD DOWN',
+      takeDownTitle: 'Take this card down?',
+      takeDownBody: ({ title, threads }) =>
+        threads > 0
+          ? `${title} comes off the wall, and the ${lower(threads)} ${plural(threads, 'thread', 'threads')} to it ${plural(threads, 'is', 'are')} cut. This cannot be undone.`
+          : `${title} comes off the wall. This cannot be undone.`,
+      takeDownYes: 'Take it down',
     },
     milestonesTitle: (name) => `MILESTONES — ${name}`,
     addMs: '+ ADD',

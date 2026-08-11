@@ -959,6 +959,13 @@ export interface VoicePack {
       ctaSaveCard: string
       ctaMs: string
       cancel: string
+      /** taking a card off the wall: the button, and the question it asks
+       *  first. The label is an INSTRUCTION — `toast.cardGone` is the report
+       *  afterwards, and the two must never be the same string. */
+      takeDown: string
+      takeDownTitle: string
+      takeDownBody: (v: { title: string; threads: number }) => string
+      takeDownYes: string
     }
     milestonesTitle: (name: string) => string
     addMs: string
