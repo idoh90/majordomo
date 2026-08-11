@@ -66,6 +66,16 @@ export interface BoardCard {
   parentId?: string
   col: number
   row: number
+  /**
+   * Freeform position on the DESKTOP wall, in board units. Optional on
+   * purpose: a card that has never been dragged sits where the column layout
+   * would have put it, so boards from before the freeform pivot open
+   * unchanged and only a drag commits a card to a spot of its own. The phone
+   * ignores these entirely — it pages the same cards as grouped columns off
+   * `parentId`/`row`, which every placement path still maintains.
+   */
+  fx?: number
+  fy?: number
   /** ISO instant */
   createdAt: string
 }

@@ -66,7 +66,15 @@ interface WorkshopState {
     ventureId: string,
     type: CardType,
     title: string,
-    extra?: { body?: string; url?: string; threadTo?: string; parentId?: string; dueAt?: string },
+    extra?: {
+      body?: string
+      url?: string
+      threadTo?: string
+      parentId?: string
+      dueAt?: string
+      /** freeform spot on the desktop wall — where the press asked for it */
+      at?: { x: number; y: number }
+    },
   ) => BoardCard
   updateCard: (id: string, patch: Partial<Omit<BoardCard, 'id' | 'ventureId'>>) => void
   toggleCardDone: (id: string) => void
@@ -207,6 +215,10 @@ export const useWorkshopStore = create<WorkshopState>()(
           parentId,
           col: type === 'title' ? nextCol(mine) : 0,
           row: type === 'title' ? 0 : nextRow(mine, parentId),
+          // a press on bare desktop board said WHERE; without one the card
+          // takes the column layout's default spot (see BoardCard.fx)
+          fx: extra?.at?.x,
+          fy: extra?.at?.y,
           createdAt: new Date().toISOString(),
         }
         set((s) => ({ cards: [...s.cards, card] }))

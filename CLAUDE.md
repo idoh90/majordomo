@@ -210,12 +210,21 @@ src/
                   dated milestones as trailing allDay markers ('ms:'), the app's
                   only live timer (persisted `bench`, DOWN TOOLS writes a
                   born-done event, refused mid-sandbox, app-wide header chip),
-                  and a per-venture PEGBOARD: cards (note/task/link) on a fixed
-                  (col,row) grid, orthogonal copper threads (slot arithmetic —
-                  never a freeform canvas), drag-to-swap on desktop, column
-                  pager on mobile. Design: 'Workshop Wing - Pegboard.dc.html'
-                  in the Claude Design project. The 6th tab folds the mobile
-                  bar's overflow behind a WINGS tab (TabBar INLINE_WINGS).
+                  task delivery deadlines as trailing allDay markers ('due:',
+                  hour in the chip title), and a per-venture PEGBOARD: on
+                  desktop a FREEFORM wall — cards (note/task/link) carry an
+                  optional (fx,fy), the old column layout is only the default
+                  for never-dragged cards, drag-to-place writes fx/fy, a
+                  heading drop re-ranks `col` by x so the phone's page order
+                  follows, orthogonal copper threads route off live positions,
+                  child→heading ties draw as faint stitched lines, hover glows
+                  the card and marches its lines (thread: away from hand;
+                  tie: toward heading), eyelet-drag threads/cuts; the phone
+                  keeps the grouped column pager (col/row still maintained)
+                  with two-tap threading. Design: 'Workshop Wing -
+                  Pegboard.dc.html' in the Claude Design project (pre-freeform;
+                  directional). The 6th tab folds the mobile bar's overflow
+                  behind a WINGS tab (TabBar INLINE_WINGS).
     capital/      'WAYNE FUND' — net worth + budget console (see below)
 ```
 

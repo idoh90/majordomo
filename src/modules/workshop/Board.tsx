@@ -32,11 +32,20 @@ import type { BoardGroup } from './lib'
 import type { BoardCard, CardType, Milestone, Thread, Venture } from './types'
 
 /**
- * THE VENTURE BOARD — the pegboard. Cards hang on a fixed (col, row) grid;
- * threads route between them at right angles. The grid is the whole trick:
- * every position is arithmetic off the slot, so the threads never need to
- * chase a freeform canvas, and column i of the grid IS page i of the phone's
- * pager. Desktop drags cards between slots; the phone pages columns.
+ * THE VENTURE BOARD — the pegboard. On DESKTOP it is a freeform wall: every
+ * card can be dragged anywhere and remembers its spot (`fx`/`fy`); the old
+ * column layout survives only as the DEFAULT, so a card that has never been
+ * touched sits exactly where the grid would have put it and an old board
+ * opens unchanged. Threads still route at right angles — they just route
+ * from wherever the cards actually are — and a card's tie to its heading is
+ * drawn as a faint stitched line, so the organisation stays visible however
+ * far the wall is scattered.
+ *
+ * The PHONE keeps the grouped column pager: freeform positions are a desktop
+ * reading, and the same `parentId`/`row` order both surfaces already share
+ * is what the phone pages. The one bridge back: dragging a HEADING re-ranks
+ * `col` by where the headings stand, so the phone's page order follows the
+ * desktop's left-to-right arrangement.
  */
 
 const CARD_W = 240
@@ -53,6 +62,18 @@ const FALLBACK_H = 92
 const LOOSE_RAIL_H = 26
 
 const RING_MINI_C = 2 * Math.PI * 11
+
+/**
+ * Where a new card was asked for. The desktop press hands over a freeform
+ * spot (`at`); the phone's column-foot button hands over a heading and a
+ * position in it (`parentId`/`index`). Both may be absent — the chrome's
+ * HANG A CARD button knows nothing, and the card falls to its defaults.
+ */
+interface PlaceSpot {
+  parentId?: string
+  index?: number
+  at?: { x: number; y: number }
+}
 
 export function Board({
   venture,
@@ -75,7 +96,7 @@ export function Board({
   const [sheet, setSheet] = useState<'hang' | 'milestones' | null>(null)
   const [editCard, setEditCard] = useState<BoardCard | null>(null)
   /** where a press on bare board asked for the new card to go */
-  const [placeAt, setPlaceAt] = useState<{ parentId?: string; index: number } | null>(null)
+  const [placeAt, setPlaceAt] = useState<PlaceSpot | null>(null)
 
   const mine = cards.filter((c) => c.ventureId === venture.id)
   const groups = boardGroups(mine)
@@ -92,9 +113,9 @@ export function Board({
     setSheet('hang')
   }
 
-  const openCreateAt = (parentId: string | undefined, index: number) => {
+  const openCreateAt = (spot: PlaceSpot) => {
     setEditCard(null)
-    setPlaceAt({ parentId, index })
+    setPlaceAt(spot)
     setSheet('hang')
   }
 
@@ -320,6 +341,34 @@ function layout(
 }
 
 /**
+ * Where everything sits on the desktop wall. The column layout above is
+ * computed first and serves as the DEFAULT: a card that has never been
+ * dragged sits exactly where the grid would have put it. A card that HAS
+ * been dragged sits at its own (fx, fy) — the columns are the starting
+ * arrangement, not a law. The board's extent grows to hold the farthest
+ * card, so nothing placed can ever leave the SVG the twine is drawn in.
+ */
+function freeLayout(
+  groups: BoardGroup[],
+  heights: Record<string, number>,
+): { placed: Placed[]; w: number; h: number } {
+  const { cols, w, h } = layout(groups, heights)
+  const placed: Placed[] = []
+  for (const col of cols) {
+    for (const p of [...(col.title ? [col.title] : []), ...col.children]) {
+      placed.push({ card: p.card, x: p.card.fx ?? p.x, y: p.card.fy ?? p.y, h: p.h })
+    }
+  }
+  let W = w
+  let H = h
+  for (const p of placed) {
+    W = Math.max(W, p.x + CARD_W + PAD_X)
+    H = Math.max(H, p.y + p.h + PAD_BOTTOM)
+  }
+  return { placed, w: W, h: H }
+}
+
+/**
  * Run or cut the twine between two cards. The one write behind every thread
  * gesture — the desktop drag and the phone's two taps both come through here,
  * so they can never disagree about what landing on an ALREADY threaded card
@@ -405,8 +454,8 @@ function DesktopBoard({
   threads: Thread[]
   now: number
   onEdit: (card: BoardCard) => void
-  /** a press on bare board: hang something under this heading, at this place */
-  onCreateAt: (parentId: string | undefined, index: number) => void
+  /** a press on bare board: hang something at that spot on the wall */
+  onCreateAt: (spot: PlaceSpot) => void
   butler: (msg: string) => void
 }) {
   const viewRef = useRef<HTMLDivElement | null>(null)
@@ -416,9 +465,14 @@ function DesktopBoard({
   const [twine, setTwine] = useState<TwineDrag | null>(null)
   const [pan, setPan] = useState<Pan | null>(null)
   const [view, setView] = useState({ x: 0, y: 0, z: 1 })
+  /** the card under the mouse — feeds the glow and the marching twine */
+  const [hover, setHover] = useState<string | null>(null)
 
-  const { cols, w: boardW, h: boardH } = layout(groups, heights)
-  const all = groups.flatMap((g) => (g.title ? [g.title, ...g.children] : g.children))
+  const { placed, w: boardW, h: boardH } = freeLayout(groups, heights)
+  const byId = new Map(placed.map((p) => [p.card.id, p]))
+  // the "01" numerals on the rails follow the phone's page order, not x —
+  // a heading dragged about keeps its number until its RANK actually changes
+  const titleIndex = new Map(groups.map((g, i) => [g.title?.id, i]))
 
   // the twine is arithmetic off the layout, but a card's HEIGHT is its own —
   // one measure pass per commit keeps the stack and the twine honest
@@ -439,28 +493,6 @@ function DesktopBoard({
       x: (e.clientX - r.left - view.x) / view.z,
       y: (e.clientY - r.top - view.y) / view.z,
     }
-  }
-
-  /** which column, and where in it, a point lands */
-  const dropAt = (x: number, y: number) => {
-    let ci = 0
-    let best = Infinity
-    cols.forEach((c, i) => {
-      const d = Math.abs(x - (c.x + CARD_W / 2))
-      if (d < best) {
-        best = d
-        ci = i
-      }
-    })
-    const col = cols[ci]
-    const parentId = groups[ci]?.title?.id
-    // count the children whose middle sits above the drop point
-    let index = 0
-    for (const p of col.children) {
-      if (p.card.id === drag?.id) continue
-      if (y > p.y + p.h / 2) index++
-    }
-    return { ci, parentId, index }
   }
 
   /* ------------------------------------------------------------ card drag */
@@ -489,9 +521,22 @@ function DesktopBoard({
     if (!drag || drag.id !== card.id) return
     if (drag.moved) {
       const store = useWorkshopStore.getState()
-      const t = dropAt(drag.x - drag.dx + CARD_W / 2, drag.y - drag.dy)
-      if (card.type === 'title') store.moveTitle(card.id, t.ci)
-      else store.placeCard(card.id, t.parentId, t.index)
+      // the drop point IS the position — clamped only at the top-left, since
+      // the board can grow rightward and downward but the SVG cannot go
+      // negative, and a card at (-300, y) would shed its own twine
+      const x = Math.max(8, drag.x - drag.dx)
+      const y = Math.max(8, drag.y - drag.dy)
+      store.updateCard(card.id, { fx: x, fy: y })
+      if (card.type === 'title') {
+        // the phone pages headings in `col` order — re-rank by where the
+        // headings now stand, so the wall's left-to-right IS the page order.
+        // Inductively sound: every x change comes through this drop, so the
+        // others' col order already matches their x order.
+        const index = placed.filter(
+          (p) => p.card.type === 'title' && p.card.id !== card.id && p.x < x,
+        ).length
+        store.moveTitle(card.id, index)
+      }
     } else {
       onEdit(card)
     }
@@ -508,10 +553,9 @@ function DesktopBoard({
   /** the card whose face covers a board point — headings excluded, as in the
    *  sheet's picker: a heading is a rail, and twine to a rail says nothing */
   const cardAt = (x: number, y: number): BoardCard | null => {
-    for (const col of cols) {
-      for (const p of col.children) {
-        if (x >= p.x && x <= p.x + CARD_W && y >= p.y && y <= p.y + p.h) return p.card
-      }
+    for (const p of placed) {
+      if (p.card.type === 'title') continue
+      if (x >= p.x && x <= p.x + CARD_W && y >= p.y && y <= p.y + p.h) return p.card
     }
     return null
   }
@@ -576,8 +620,10 @@ function DesktopBoard({
 
   /**
    * A press on bare pegboard that never became a drag is an instruction to
-   * hang something THERE: the column decides the heading, the height decides
-   * the position, and the sheet opens already knowing both.
+   * hang something THERE — the point itself is the position now, and the
+   * sheet opens with the spot already known. Which heading it belongs to is
+   * the sheet's question: on a freeform wall the nearest column no longer
+   * says anything about intent.
    */
   const surfaceUp = (e: React.PointerEvent) => {
     const p = pan
@@ -587,8 +633,8 @@ function DesktopBoard({
     if (twineUp()) return
     if (!p || p.moved || drag) return
     const pt = boardPoint(e)
-    const t = dropAt(pt.x, pt.y)
-    onCreateAt(t.parentId, t.index)
+    // centre the card on the press, and keep it out of the negative quadrant
+    onCreateAt({ at: { x: Math.max(8, pt.x - CARD_W / 2), y: Math.max(8, pt.y) } })
   }
 
   /** zoom about a screen point, so the thing under the cursor stays under it */
@@ -618,20 +664,6 @@ function DesktopBoard({
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  const target = drag?.moved ? dropAt(drag.x - drag.dx + CARD_W / 2, drag.y - drag.dy) : null
-  const targetCol = target ? cols[target.ci] : null
-  const targetY = targetCol
-    ? (() => {
-        const kids = targetCol.children.filter((p) => p.card.id !== drag?.id)
-        const at = Math.min(target!.index, kids.length)
-        return at < kids.length
-          ? kids[at].y - CARD_GAP_Y / 2
-          : (kids[kids.length - 1]?.y ?? targetCol.bottom - CARD_GAP_Y) +
-            (kids[kids.length - 1]?.h ?? 0) +
-            CARD_GAP_Y / 2
-      })()
-    : 0
-
   return (
     <div className="trough relative hidden select-none md:block">
       <div
@@ -660,83 +692,65 @@ function DesktopBoard({
           }}
         >
           <Threads
-            placed={all.map((c) => ({ card: c, ...cardPos(cols, c.id) }))}
+            placed={placed}
             threads={threads}
             w={boardW}
             h={boardH}
+            hover={drag || twine ? null : hover}
             hideFor={drag?.moved ? drag.id : null}
           />
-          {/* the insertion line, drawn where the card would land */}
-          {targetCol && drag && (
-            <div
-              aria-hidden
-              className="absolute rounded-pill"
-              style={{
-                left: targetCol.x,
-                top: Math.max(PAD_TOP, targetY),
-                width: CARD_W,
-                height: 3,
-                background: COPPER,
-                boxShadow: '0 0 8px var(--glow-workshop)',
-              }}
-            />
-          )}
-          {cols.map((col) =>
-            col.title ? null : (
+          {placed.map((p) => {
+            const dragging = drag?.moved && drag.id === p.card.id
+            const hovered = hover === p.card.id && !dragging && !pan?.moved
+            return (
               <div
-                key="loose-rail"
-                aria-hidden
-                className="absolute pb-1.5 font-display text-[10px] font-semibold tracking-[0.2em] text-ink-faint"
+                key={p.card.id}
+                ref={(el) => {
+                  if (el) cardRefs.current.set(p.card.id, el)
+                  else cardRefs.current.delete(p.card.id)
+                }}
+                onPointerDown={cardDown(p.card, p)}
+                onPointerUp={cardUp(p.card)}
+                onPointerCancel={() => setDrag(null)}
+                // mouse only: on a touch screen "hover" is just a stale tap
+                onPointerEnter={(e) => {
+                  if (e.pointerType === 'mouse') setHover(p.card.id)
+                }}
+                onPointerLeave={(e) => {
+                  if (e.pointerType === 'mouse')
+                    setHover((h) => (h === p.card.id ? null : h))
+                }}
+                className="absolute touch-none"
                 style={{
-                  left: col.x,
-                  top: PAD_TOP,
+                  left: dragging ? drag.x - drag.dx : p.x,
+                  top: dragging ? drag.y - drag.dy : p.y,
                   width: CARD_W,
-                  borderBottom: '2px solid var(--color-line)',
+                  zIndex: dragging ? 30 : hovered ? 4 : p.card.type === 'title' ? 2 : 1,
+                  cursor: dragging ? 'grabbing' : 'grab',
+                  opacity: dragging ? 0.9 : 1,
+                  filter: dragging
+                    ? 'drop-shadow(0 10px 18px rgb(0 0 0 / 0.45))'
+                    : hovered
+                      ? 'drop-shadow(0 0 9px var(--glow-workshop))'
+                      : undefined,
+                  transition: dragging
+                    ? 'none'
+                    : 'left 180ms ease-out, top 180ms ease-out, filter 160ms ease-out',
                 }}
               >
-                {voice.workshop.board.loose}
+                <CardFace
+                  card={p.card}
+                  groupIndex={titleIndex.get(p.card.id) ?? 0}
+                  now={now}
+                  thread={
+                    p.card.type === 'title'
+                      ? undefined
+                      : { role: twineRole(p.card.id), onPointerDown: twineDown(p.card) }
+                  }
+                />
               </div>
-            ),
-          )}
-          {cols.map((col, ci) =>
-            [...(col.title ? [col.title] : []), ...col.children].map((p) => {
-              const dragging = drag?.moved && drag.id === p.card.id
-              return (
-                <div
-                  key={p.card.id}
-                  ref={(el) => {
-                    if (el) cardRefs.current.set(p.card.id, el)
-                    else cardRefs.current.delete(p.card.id)
-                  }}
-                  onPointerDown={cardDown(p.card, p)}
-                  onPointerUp={cardUp(p.card)}
-                  onPointerCancel={() => setDrag(null)}
-                  className="absolute touch-none"
-                  style={{
-                    left: dragging ? drag.x - drag.dx : p.x,
-                    top: dragging ? drag.y - drag.dy : p.y,
-                    width: CARD_W,
-                    zIndex: dragging ? 30 : p.card.type === 'title' ? 2 : 1,
-                    cursor: dragging ? 'grabbing' : 'grab',
-                    opacity: dragging ? 0.9 : 1,
-                    filter: dragging ? 'drop-shadow(0 10px 18px rgb(0 0 0 / 0.45))' : undefined,
-                    transition: dragging ? 'none' : 'left 180ms ease-out, top 180ms ease-out',
-                  }}
-                >
-                  <CardFace
-                    card={p.card}
-                    groupIndex={ci}
-                    now={now}
-                    thread={
-                      p.card.type === 'title'
-                        ? undefined
-                        : { role: twineRole(p.card.id), onPointerDown: twineDown(p.card) }
-                    }
-                  />
-                </div>
-              )
-            }),
-          )}
+            )
+          })}
 
           {/* the twine in flight — a straight pull from the eyelet to the hand.
               Right angles are what a HUNG thread looks like; a taut line is
@@ -752,7 +766,8 @@ function DesktopBoard({
               aria-hidden
             >
               {(() => {
-                const a = cardPos(cols, twine.from)
+                const a = byId.get(twine.from)
+                if (!a) return null
                 return (
                   <>
                     <path
@@ -791,16 +806,6 @@ function DesktopBoard({
       </div>
     </div>
   )
-}
-
-/** where a card ended up, for the twine */
-function cardPos(cols: PlacedColumn[], id: string): { x: number; y: number; h: number } {
-  for (const c of cols) {
-    if (c.title?.card.id === id) return { x: c.title.x, y: c.title.y, h: c.title.h }
-    const kid = c.children.find((p) => p.card.id === id)
-    if (kid) return { x: kid.x, y: kid.y, h: kid.h }
-  }
-  return { x: 0, y: 0, h: 0 }
 }
 
 /** the zoom trio. Positioned by its caller — the desktop board and the phone
@@ -846,51 +851,103 @@ function ZoomControls({
   )
 }
 
-/** orthogonal copper twine + junction squares, all coordinates layout-derived */
+/**
+ * A right-angle route between two boxes, oriented a → b. Freeform positions
+ * mean any pair of boxes anywhere, so the route picks its plane by the
+ * DOMINANT axis: mostly-sideways pairs leave through the facing side edges,
+ * mostly-vertical pairs through top/bottom, with one elbow midway. The
+ * orientation matters beyond geometry — the marching-dot animation runs
+ * toward the path's END, so callers put the destination second.
+ */
+function route(
+  a: { x: number; y: number; h: number },
+  b: { x: number; y: number; h: number },
+): { d: string; corners: [number, number][] } {
+  const acx = a.x + CARD_W / 2
+  const acy = a.y + a.h / 2
+  const bcx = b.x + CARD_W / 2
+  const bcy = b.y + b.h / 2
+  const dx = bcx - acx
+  const dy = bcy - acy
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    const sx = dx >= 0 ? a.x + CARD_W : a.x
+    const ex = dx >= 0 ? b.x : b.x + CARD_W
+    if (Math.abs(acy - bcy) < 1) return { d: `M${sx} ${acy} H${ex}`, corners: [] }
+    const midX = (sx + ex) / 2
+    return {
+      d: `M${sx} ${acy} H${midX} V${bcy} H${ex}`,
+      corners: [
+        [midX, acy],
+        [midX, bcy],
+      ],
+    }
+  }
+  const sy = dy >= 0 ? a.y + a.h : a.y
+  const ey = dy >= 0 ? b.y : b.y + b.h
+  if (Math.abs(acx - bcx) < 1) return { d: `M${acx} ${sy} V${ey}`, corners: [] }
+  const midY = (sy + ey) / 2
+  return {
+    d: `M${acx} ${sy} V${midY} H${bcx} V${ey}`,
+    corners: [
+      [acx, midY],
+      [bcx, midY],
+    ],
+  }
+}
+
+/**
+ * The twine layer: copper card-to-card threads, and a fainter stitched line
+ * from every filed card up to its heading — on a freeform wall that tie is
+ * no longer implied by geometry, so it has to be drawn to stay legible.
+ *
+ * Hovering a card sets the lines that touch it marching: dashes flow along
+ * the path, and the paths are ORIENTED so the flow reads as direction —
+ * a heading link always runs child → heading (the work points home), a
+ * thread runs from the hovered card toward the far end.
+ */
 function Threads({
   placed,
   threads,
   w,
   h,
+  hover,
   hideFor,
 }: {
-  placed: { card: BoardCard; x: number; y: number; h: number }[]
+  placed: Placed[]
   threads: { id: string; from: string; to: string }[]
   w: number
   h: number
+  hover: string | null
   hideFor: string | null
 }) {
   const byId = new Map(placed.map((p) => [p.card.id, p]))
-  const paths: { d: string; corners: [number, number][] }[] = []
+  const lines: { d: string; corners: [number, number][]; parent: boolean; flow: boolean }[] = []
 
   for (const t of threads) {
     let a = byId.get(t.from)
     let b = byId.get(t.to)
     if (!a || !b) continue
     if (hideFor && (a.card.id === hideFor || b.card.id === hideFor)) continue
-    // draw top-to-bottom (reading order); level cards draw left-to-right
-    if (a.y > b.y || (a.y === b.y && a.x > b.x)) [a, b] = [b, a]
-    const ax = a.x + CARD_W / 2
-    const aBottom = a.y + a.h
-    const bx = b.x + CARD_W / 2
+    const flow = hover === a.card.id || hover === b.card.id
+    // resting twine draws in reading order; hovered twine leads from the
+    // card under the mouse, so its dots flow outward from the hand
+    if (hover === b.card.id) [a, b] = [b, a]
+    else if (!flow && (a.y > b.y || (a.y === b.y && a.x > b.x))) [a, b] = [b, a]
+    lines.push({ ...route(a, b), parent: false, flow })
+  }
 
-    if (Math.abs(a.x - b.x) < 1) {
-      paths.push({ d: `M${ax} ${aBottom} V${b.y}`, corners: [] })
-    } else if (Math.abs(a.y - b.y) < 1) {
-      const y = a.y + Math.min(a.h, b.h) / 2
-      const left = Math.min(a.x, b.x) + CARD_W
-      const right = Math.max(a.x, b.x)
-      paths.push({ d: `M${left} ${y} H${right}`, corners: [] })
-    } else {
-      const yBand = Math.max(aBottom + CARD_GAP_Y / 2, b.y - CARD_GAP_Y / 2)
-      paths.push({
-        d: `M${ax} ${aBottom} V${yBand} H${bx} V${b.y}`,
-        corners: [
-          [ax, yBand],
-          [bx, yBand],
-        ],
-      })
-    }
+  for (const p of placed) {
+    if (p.card.type === 'title' || !p.card.parentId) continue
+    const t = byId.get(p.card.parentId)
+    if (!t) continue
+    if (hideFor && (p.card.id === hideFor || t.card.id === hideFor)) continue
+    // always child → heading, whichever end is hovered: dots run toward the
+    // heading, because that is what the tie MEANS
+    lines.push({
+      ...route(p, t),
+      parent: true,
+      flow: hover === p.card.id || hover === t.card.id,
+    })
   }
 
   return (
@@ -902,12 +959,27 @@ function Threads({
       fill="none"
       aria-hidden
     >
-      {paths.map((p, i) => (
+      {/* scoped here rather than in the app stylesheet: the march is this
+          board's own hardware, and core must not know the workshop exists */}
+      <style>{`@keyframes ws-march { to { stroke-dashoffset: -16; } }`}</style>
+      {lines.map((l, i) => (
         <g key={i}>
-          <path d={p.d} stroke={COPPER} strokeOpacity="0.55" strokeWidth="2" />
-          {p.corners.map(([x, y], k) => (
-            <rect key={k} x={x - 3} y={y - 3} width="6" height="6" fill={COPPER} />
-          ))}
+          <path
+            d={l.d}
+            stroke={COPPER}
+            strokeWidth={l.parent ? 1.5 : 2}
+            strokeOpacity={l.flow ? 0.95 : l.parent ? 0.28 : 0.55}
+            strokeDasharray={l.flow || l.parent ? '2 6' : undefined}
+            strokeLinecap={l.flow || l.parent ? 'round' : undefined}
+            style={l.flow ? { animation: 'ws-march 480ms linear infinite' } : undefined}
+          />
+          {/* junction hardware only on resting twine — marching dots passing
+              through a fixed square read as a snag, not a joint */}
+          {!l.flow &&
+            !l.parent &&
+            l.corners.map(([x, y], k) => (
+              <rect key={k} x={x - 3} y={y - 3} width="6" height="6" fill={COPPER} />
+            ))}
         </g>
       ))}
     </svg>
@@ -1134,7 +1206,7 @@ function MobileBoard({
   threads: Thread[]
   now: number
   onEdit: (card: BoardCard) => void
-  onCreateAt: (parentId: string | undefined, index: number) => void
+  onCreateAt: (spot: PlaceSpot) => void
   butler: (msg: string) => void
 }) {
   const [page, setPage] = useState(0)
@@ -1309,7 +1381,7 @@ function MobileBoard({
                 touch screen is a thing nobody finds */}
             <button
               type="button"
-              onClick={() => onCreateAt(g.title?.id, g.children.length)}
+              onClick={() => onCreateAt({ parentId: g.title?.id, index: g.children.length })}
               className="mt-3 w-full rounded-[2px] border-[1.5px] border-dashed border-line py-3 text-center font-display text-[9.5px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
             >
               {voice.workshop.board.hangHere}
@@ -1390,7 +1462,7 @@ function HangCardSheet({
   threads: { id: string; from: string; to: string }[]
   editing: BoardCard | null
   /** set when the sheet was opened by pressing a spot on the board */
-  placeAt: { parentId?: string; index: number } | null
+  placeAt: PlaceSpot | null
   butler: (msg: string) => void
 }) {
   const [type, setType] = useState<CardType>('note')
@@ -1468,10 +1540,16 @@ function HangCardSheet({
         ...extra,
         parentId: under,
         threadTo: threadTo || undefined,
+        // the desktop press said WHERE on the wall — the card is born there
+        at: placeAt?.at,
       })
-      // a card asked for at a spot lands AT that spot, not at the foot of the
-      // column — the press said where, and addCard only ever appends
-      if (placeAt && type !== 'title' && (under ?? undefined) === placeAt.parentId) {
+      // the phone's column-foot button said where IN THE COLUMN instead —
+      // the press said where, and addCard only ever appends
+      if (
+        placeAt?.index != null &&
+        type !== 'title' &&
+        (under ?? undefined) === placeAt.parentId
+      ) {
         store.placeCard(made.id, under, placeAt.index)
       }
       butler(type === 'title' ? voice.workshop.toast.titleHung : voice.workshop.toast.cardHung)
