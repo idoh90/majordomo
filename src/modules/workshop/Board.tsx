@@ -93,10 +93,15 @@ export function Board({
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
 
-  const [sheet, setSheet] = useState<'hang' | 'milestones' | null>(null)
+  const [sheet, setSheet] = useState<'hang' | 'milestones' | 'column' | null>(null)
   const [editCard, setEditCard] = useState<BoardCard | null>(null)
   /** where a press on bare board asked for the new card to go */
   const [placeAt, setPlaceAt] = useState<PlaceSpot | null>(null)
+  /** the heading whose column list is open — or was, behind a card sheet */
+  const [columnOf, setColumnOf] = useState<string | null>(null)
+  /** a card reached FROM a column list goes back to it when it closes, so the
+   *  list is a place you work from rather than a door that shuts behind you */
+  const [backToColumn, setBackToColumn] = useState(false)
 
   const mine = cards.filter((c) => c.ventureId === venture.id)
   const groups = boardGroups(mine)
@@ -107,16 +112,45 @@ export function Board({
   const nextMs = nextMilestone(milestones, venture.id)
   const tasks = taskProgress(cards, venture.id)
 
+  /**
+   * Pressing a HEADING opens its column rather than its own edit sheet: what
+   * a heading is for is the work under it, and the rename it used to open is
+   * one button inside the list. Pressing anything else opens that card.
+   */
   const openEdit = (card: BoardCard) => {
+    if (card.type === 'title') {
+      setColumnOf(card.id)
+      setBackToColumn(false)
+      setSheet('column')
+      return
+    }
     setEditCard(card)
     setPlaceAt(null)
+    setBackToColumn(false)
     setSheet('hang')
   }
 
   const openCreateAt = (spot: PlaceSpot) => {
     setEditCard(null)
     setPlaceAt(spot)
+    setBackToColumn(false)
     setSheet('hang')
+  }
+
+  /** from inside a column list: open one of its cards, and remember the way back */
+  const openFromColumn = (card: BoardCard | null, spot: PlaceSpot | null) => {
+    setEditCard(card)
+    setPlaceAt(spot)
+    setBackToColumn(true)
+    setSheet('hang')
+  }
+
+  const closeHangSheet = () => {
+    setEditCard(null)
+    setPlaceAt(null)
+    // back to the column it was opened from, if that is where it came from
+    setSheet(backToColumn && columnOf ? 'column' : null)
+    setBackToColumn(false)
   }
 
   return (
@@ -245,16 +279,27 @@ export function Board({
 
       <HangCardSheet
         open={sheet === 'hang'}
-        onClose={() => {
-          setSheet(null)
-          setEditCard(null)
-          setPlaceAt(null)
-        }}
+        onClose={closeHangSheet}
         venture={venture}
         cards={mine}
         threads={myThreads}
         editing={editCard}
         placeAt={placeAt}
+        butler={butler}
+      />
+      <ColumnSheet
+        open={sheet === 'column'}
+        onClose={() => {
+          setSheet(null)
+          setColumnOf(null)
+        }}
+        heading={mine.find((c) => c.id === columnOf && c.type === 'title') ?? null}
+        rows={groups.find((g) => g.title?.id === columnOf)?.children ?? []}
+        now={now}
+        onOpenCard={(card) => openFromColumn(card, null)}
+        onHangHere={(index) =>
+          openFromColumn(null, { parentId: columnOf ?? undefined, index })
+        }
         butler={butler}
       />
       <MilestonesSheet
@@ -288,6 +333,10 @@ function EmptyBoard({ onHang }: { onHang: () => void }) {
 }
 
 /* ---------------------------------------------------------------- desktop */
+
+/** the wall is never smaller than this, so its frame is always in evidence */
+const MIN_BOARD_W = 1180
+const MIN_BOARD_H = 520
 
 interface Placed {
   card: BoardCard
@@ -351,6 +400,10 @@ function layout(
 function freeLayout(
   groups: BoardGroup[],
   heights: Record<string, number>,
+  /** the card being dragged RIGHT NOW, so the wall grows under the hand
+   *  rather than after the drop — an edge that moves only once the card is
+   *  released is exactly what made the bounds feel like a wall to hit */
+  inFlight?: { x: number; y: number; h: number },
 ): { placed: Placed[]; w: number; h: number } {
   const { cols, w, h } = layout(groups, heights)
   const placed: Placed[] = []
@@ -359,12 +412,16 @@ function freeLayout(
       placed.push({ card: p.card, x: p.card.fx ?? p.x, y: p.card.fy ?? p.y, h: p.h })
     }
   }
-  let W = w
-  let H = h
-  for (const p of placed) {
-    W = Math.max(W, p.x + CARD_W + PAD_X)
-    H = Math.max(H, p.y + p.h + PAD_BOTTOM)
+  // never smaller than the window it is seen through, or the frame would
+  // start out cropped and the wall would look like it had no edges at all
+  let W = Math.max(w, MIN_BOARD_W)
+  let H = Math.max(h, MIN_BOARD_H)
+  const grow = (x: number, y: number, ch: number) => {
+    W = Math.max(W, x + CARD_W + PAD_X)
+    H = Math.max(H, y + ch + PAD_BOTTOM)
   }
+  for (const p of placed) grow(p.x, p.y, p.h)
+  if (inFlight) grow(inFlight.x, inFlight.y, inFlight.h)
   return { placed, w: W, h: H }
 }
 
@@ -468,7 +525,17 @@ function DesktopBoard({
   /** the card under the mouse — feeds the glow and the marching twine */
   const [hover, setHover] = useState<string | null>(null)
 
-  const { placed, w: boardW, h: boardH } = freeLayout(groups, heights)
+  const { placed, w: boardW, h: boardH } = freeLayout(
+    groups,
+    heights,
+    drag?.moved
+      ? {
+          x: drag.x - drag.dx,
+          y: drag.y - drag.dy,
+          h: heights[drag.id] ?? FALLBACK_H,
+        }
+      : undefined,
+  )
   const byId = new Map(placed.map((p) => [p.card.id, p]))
   // the "01" numerals on the rails follow the phone's page order, not x —
   // a heading dragged about keeps its number until its RANK actually changes
@@ -680,7 +747,10 @@ function DesktopBoard({
           setTwine(null)
         }}
         className="relative overflow-hidden"
-        style={{ height: VIEW_H, cursor: pan?.moved ? 'grabbing' : 'grab', ...PEGBOARD_BG }}
+        // the perforation belongs to the BOARD, not to the window it is seen
+        // through: pegboard everywhere meant the wall had no visible edge and
+        // a card dragged past one simply went missing
+        style={{ height: VIEW_H, cursor: pan?.moved ? 'grabbing' : 'grab' }}
       >
         <div
           className="absolute left-0 top-0 origin-top-left"
@@ -689,8 +759,44 @@ function DesktopBoard({
             height: boardH,
             transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})`,
             transition: pan || drag ? 'none' : 'transform 120ms ease-out',
+            ...PEGBOARD_BG,
+            // the wall itself, edges and all. It grows under the hand, so the
+            // frame reads as the board making room rather than a limit hit.
+            // backgroundColor, never the `background` shorthand — that would
+            // reset the perforation's size and position spread just above.
+            backgroundColor: 'color-mix(in srgb, var(--color-panel) 40%, var(--color-trough))',
+            border: '1.5px solid color-mix(in srgb, var(--color-w-workshop) 30%, transparent)',
+            borderRadius: 4,
+            boxShadow: 'inset 0 0 40px rgb(0 0 0 / 0.28)',
           }}
         >
+          {/* corner brackets — a frame alone reads as a panel; brackets read
+              as the extent of a working surface, which is what this is */}
+          {[
+            { top: -1, left: -1, bt: true, bl: true },
+            { top: -1, right: -1, bt: true, br: true },
+            { bottom: -1, left: -1, bb: true, bl: true },
+            { bottom: -1, right: -1, bb: true, br: true },
+          ].map((c, i) => (
+            <span
+              key={i}
+              aria-hidden
+              className="pointer-events-none absolute"
+              style={{
+                top: c.top,
+                left: c.left,
+                right: c.right,
+                bottom: c.bottom,
+                width: 18,
+                height: 18,
+                borderTop: c.bt ? `2px solid ${COPPER}` : undefined,
+                borderBottom: c.bb ? `2px solid ${COPPER}` : undefined,
+                borderLeft: c.bl ? `2px solid ${COPPER}` : undefined,
+                borderRight: c.br ? `2px solid ${COPPER}` : undefined,
+                opacity: 0.75,
+              }}
+            />
+          ))}
           <Threads
             placed={placed}
             threads={threads}
@@ -802,6 +908,8 @@ function DesktopBoard({
           {voice.workshop.board.pressHint}
           <br />
           {voice.workshop.board.threadHint}
+          <br />
+          {voice.workshop.board.headingHint}
         </div>
       </div>
     </div>
@@ -1237,6 +1345,18 @@ function MobileBoard({
   }
 
   /**
+   * A rail opens its column — EXCEPT while twine is armed, when it does
+   * nothing at all. A heading is not a legal end for a thread (the desktop
+   * hit-test excludes them for the same reason), so a tap there mid-pick is a
+   * misfire against the scroll, and swallowing the armed state or sending the
+   * user off into a sheet would both cost them the pick they were making.
+   */
+  const openHeading = (card: BoardCard) => {
+    if (armed) return
+    onEdit(card)
+  }
+
+  /**
    * Only two cards ever light up while armed: the one twine is coming FROM,
    * and any card a tap would CUT rather than join. Ringing every other card as
    * a target would be true and useless — while armed, every card is a target.
@@ -1303,7 +1423,21 @@ function MobileBoard({
             style={{ zoom: z }}
           >
             {g.title ? (
-              <div className="mb-4">
+              /* the rail opens its column here too — the phone's page already
+                 IS that column, but the list is where it can be reordered,
+                 struck through and weeded without opening a card each time */
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => openHeading(g.title!)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openHeading(g.title!)
+                  }
+                }}
+                className="mb-4 cursor-pointer text-left"
+              >
                 <CardFace card={g.title} groupIndex={i} />
               </div>
             ) : (
@@ -1443,6 +1577,187 @@ const nextEvening = (now: number): Date => {
   d.setHours(18, 0, 0, 0)
   if (d.getTime() <= now) d.setDate(d.getDate() + 1)
   return d
+}
+
+/**
+ * THE COLUMN — what a heading opens. A heading has no content of its own
+ * worth a sheet; what it has is the work filed under it, and on a freeform
+ * wall that work can be scattered anywhere. So pressing the rail lists it:
+ * every card under this heading, in the order the phone pages them, each one
+ * strikeable, reorderable, removable and openable from here.
+ *
+ * The order this list edits is `row`, which is the same order the phone's
+ * column uses — so tidying a column here tidies it on the other surface too.
+ */
+function ColumnSheet({
+  open,
+  onClose,
+  heading,
+  rows,
+  now,
+  onOpenCard,
+  onHangHere,
+  butler,
+}: {
+  open: boolean
+  onClose: () => void
+  heading: BoardCard | null
+  rows: BoardCard[]
+  now: number
+  onOpenCard: (card: BoardCard) => void
+  onHangHere: (index: number) => void
+  butler: (msg: string) => void
+}) {
+  if (!heading) return null
+  const store = () => useWorkshopStore.getState()
+
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <h2 className="card-title">{voice.workshop.board.columnTitle(heading.title.toUpperCase())}</h2>
+      <div className="mt-1 text-[12px] text-ink-dim">
+        {voice.workshop.board.columnCount(rows.length)}
+      </div>
+
+      <div className="mt-3 flex flex-col">
+        {rows.length === 0 && (
+          <div className="py-2.5 text-[13px] italic text-ink-dim">
+            {voice.workshop.board.columnEmpty}
+          </div>
+        )}
+        {rows.map((c, i) => {
+          const due = dueRead(c, now)
+          const done = c.type === 'task' && c.done
+          return (
+            <div
+              key={c.id}
+              className="flex items-center gap-2 border-b border-line py-2 last:border-b-0"
+            >
+              {/* a job's tick lives on the row, so a column can be worked
+                  through without opening a single card */}
+              {c.type === 'task' ? (
+                <button
+                  type="button"
+                  aria-label={voice.workshop.board.done}
+                  aria-pressed={!!c.done}
+                  onClick={() => {
+                    navigator.vibrate?.(6)
+                    store().toggleCardDone(c.id)
+                  }}
+                  className="flex h-5 w-5 flex-none items-center justify-center rounded-[4px] text-[11px] font-bold leading-none"
+                  style={{
+                    border: `1.5px solid ${COPPER}`,
+                    background: c.done ? COPPER : 'transparent',
+                    color: 'var(--color-bg)',
+                  }}
+                >
+                  {c.done ? '✓' : ''}
+                </button>
+              ) : (
+                <span
+                  aria-hidden
+                  className="h-[8px] w-[8px] flex-none"
+                  style={{ border: `1.5px solid ${COPPER}` }}
+                />
+              )}
+
+              {/* the row itself is the door into the card */}
+              <button
+                type="button"
+                onClick={() => onOpenCard(c)}
+                className="flex min-w-0 flex-1 flex-col items-start text-left"
+              >
+                <span className="flex w-full items-baseline gap-2">
+                  <span className="flex-none text-[8px] tracking-[0.2em] text-ink-faint">
+                    {voice.workshop.sheet.cardType[c.type]}
+                  </span>
+                  <span
+                    className="min-w-0 flex-1 truncate text-[13px] font-semibold"
+                    style={{
+                      color: done ? 'var(--color-ink-faint)' : 'var(--color-ink)',
+                      textDecoration: done ? 'line-through' : 'none',
+                    }}
+                  >
+                    {c.title}
+                  </span>
+                </span>
+                {!done && due && (
+                  <span
+                    className="mt-0.5 text-[10px] font-semibold tracking-[0.1em] [font-variant-numeric:tabular-nums]"
+                    style={{ color: due.overdue ? 'var(--color-danger)' : 'var(--color-ink-dim)' }}
+                  >
+                    {voice.workshop.due.chip({
+                      date: fdate(due.at),
+                      time: hhmm(due.at),
+                      days: due.days,
+                      overdue: due.overdue,
+                    })}
+                  </span>
+                )}
+              </button>
+
+              {/* order is `row`, the same order the phone pages — the arrows
+                  are the only way to set it now that the wall is freeform */}
+              <button
+                type="button"
+                aria-label={voice.workshop.board.moveUp}
+                disabled={i === 0}
+                onClick={() => store().placeCard(c.id, heading.id, i - 1)}
+                className="flex-none px-1.5 text-[13px] text-ink-faint transition-colors hover:text-ink disabled:opacity-25"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                aria-label={voice.workshop.board.moveDown}
+                disabled={i === rows.length - 1}
+                onClick={() => store().placeCard(c.id, heading.id, i + 1)}
+                className="flex-none px-1.5 text-[13px] text-ink-faint transition-colors hover:text-ink disabled:opacity-25"
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                aria-label={voice.workshop.board.takeDown}
+                onClick={() => {
+                  store().deleteCard(c.id)
+                  butler(voice.workshop.toast.cardGone)
+                }}
+                className="relative flex-none text-[13px] text-ink-faint transition-colors after:absolute after:-inset-2 after:content-[''] hover:text-danger"
+              >
+                ×
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onHangHere(rows.length)}
+        className="mt-3 w-full rounded-[2px] border-[1.5px] border-dashed border-line py-2.5 text-center font-display text-[9.5px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
+      >
+        {voice.workshop.board.hangHere}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onOpenCard(heading)}
+        className="mt-4 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-faint transition-colors hover:text-ink"
+      >
+        {voice.workshop.board.editHeading}
+      </button>
+
+      <div className="mt-5 flex justify-end">
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn-soft px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.14em]"
+        >
+          {voice.workshop.sheet.cancel}
+        </button>
+      </div>
+    </Sheet>
+  )
 }
 
 function HangCardSheet({

@@ -219,9 +219,16 @@ src/
                   follows, orthogonal copper threads route off live positions,
                   child→heading ties draw as faint stitched lines, hover glows
                   the card and marches its lines (thread: away from hand;
-                  tie: toward heading), eyelet-drag threads/cuts; the phone
+                  tie: toward heading), eyelet-drag threads/cuts, the wall
+                  draws its own EDGES (perforation + frame + corner brackets
+                  on the board element, never the viewport; MIN_BOARD_* floor,
+                  and the extent grows live under a drag). Pressing a HEADING
+                  on either surface opens THE COLUMN sheet — its cards listed
+                  in `row` order, each strikeable/reorderable/removable and a
+                  door into that card (closing returns to the list); the phone
                   keeps the grouped column pager (col/row still maintained)
-                  with two-tap threading. Design: 'Workshop Wing -
+                  with two-tap threading, and a rail tap mid-pick is a no-op.
+                  Design: 'Workshop Wing -
                   Pegboard.dc.html' in the Claude Design project (pre-freeform;
                   directional). The 6th tab folds the mobile bar's overflow
                   behind a WINGS tab (TabBar INLINE_WINGS).

@@ -867,9 +867,20 @@ export const majordomoPack: VoicePack = {
       zoomIn: 'Closer',
       zoomOut: 'Further back',
       zoomReset: 'Back to full size',
+      headingHint: 'Press a heading to see everything filed under it.',
       threadFrom: 'Thread from this card',
       threadPick: 'Now tap the other card.',
       threadStop: 'STOP',
+      columnTitle: (name) => `UNDER ${name}`,
+      columnCount: (n) =>
+        n === 0
+          ? 'Nothing filed here yet.'
+          : `${sentence(word(n))} ${plural(n, 'card', 'cards')}, in the order the phone pages them.`,
+      columnEmpty: 'Nothing hangs under this heading.',
+      moveUp: 'Move up',
+      moveDown: 'Move down',
+      takeDown: 'Take it down',
+      editHeading: 'EDIT THE HEADING',
     },
     due: {
       label: 'DELIVERY',

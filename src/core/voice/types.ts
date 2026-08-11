@@ -893,11 +893,21 @@ export interface VoicePack {
       zoomIn: string
       zoomOut: string
       zoomReset: string
+      /** the third line of the hint: what pressing a heading does */
+      headingHint: string
       /** the eyelet on a card — where a thread is picked up */
       threadFrom: string
       /** armed on the phone, waiting for the other end to be tapped */
       threadPick: string
       threadStop: string
+      /** THE COLUMN — the list a heading opens */
+      columnTitle: (name: string) => string
+      columnCount: (n: number) => string
+      columnEmpty: string
+      moveUp: string
+      moveDown: string
+      takeDown: string
+      editHeading: string
     }
     /** a task's delivery deadline — date AND hour, unlike a milestone's day */
     due: {
