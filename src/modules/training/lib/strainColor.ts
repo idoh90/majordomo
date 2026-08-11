@@ -48,23 +48,38 @@ function hexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-const RGB_RAMPS = Object.fromEntries(
-  (Object.keys(HEAT_STOPS) as HeatRamp[]).map((ramp) => [
-    ramp,
-    HEAT_STOPS[ramp].map(([v, hex]) => [v, hexToRgb(hex)] as [number, [number, number, number]]),
-  ]),
-) as Record<HeatRamp, [number, [number, number, number]][]>
+export type Stops = [number, string][]
 
-export function strainToColor(strain: number, ramp: HeatRamp = 'standard'): string {
-  const stops = RGB_RAMPS[ramp]
-  if (strain < VISUAL_FLOOR) return HEAT_STOPS[ramp][0][1]
-  const s = Math.min(10, Math.max(0, strain))
-  let lo = stops[0]
-  let hi = stops[stops.length - 1]
-  for (let i = 0; i < stops.length - 1; i++) {
-    if (s >= stops[i][0] && s <= stops[i + 1][0]) {
-      lo = stops[i]
-      hi = stops[i + 1]
+/** hex→rgb is done once per stops ARRAY, keyed by the array itself: the module
+ *  constants are stable references, so this is a cache with no invalidation
+ *  problem and no way to leak (an array nobody holds is collectable). */
+const RGB_CACHE = new WeakMap<Stops, [number, [number, number, number]][]>()
+
+function rgbStops(stops: Stops): [number, [number, number, number]][] {
+  const cached = RGB_CACHE.get(stops)
+  if (cached) return cached
+  const made = stops.map(([v, hex]) => [v, hexToRgb(hex)] as [number, [number, number, number]])
+  RGB_CACHE.set(stops, made)
+  return made
+}
+
+/**
+ * Sample any stop ramp at `v`, interpolating in RGB between the bracketing
+ * stops and clamping to the ramp's own domain at both ends. Strain samples it
+ * by strain 0–10; volume samples it by band position 0–3.5 — the axis is
+ * whatever the caller's stops declare.
+ */
+export function rampColor(stops: Stops, v: number): string {
+  const rgb = rgbStops(stops)
+  const first = rgb[0]
+  const last = rgb[rgb.length - 1]
+  const s = Math.min(last[0], Math.max(first[0], v))
+  let lo = first
+  let hi = last
+  for (let i = 0; i < rgb.length - 1; i++) {
+    if (s >= rgb[i][0] && s <= rgb[i + 1][0]) {
+      lo = rgb[i]
+      hi = rgb[i + 1]
       break
     }
   }
@@ -72,6 +87,11 @@ export function strainToColor(strain: number, ramp: HeatRamp = 'standard'): stri
   const t = span === 0 ? 0 : (s - lo[0]) / span
   const mix = (a: number, b: number) => Math.round(a + (b - a) * t)
   return `rgb(${mix(lo[1][0], hi[1][0])}, ${mix(lo[1][1], hi[1][1])}, ${mix(lo[1][2], hi[1][2])})`
+}
+
+export function strainToColor(strain: number, ramp: HeatRamp = 'standard'): string {
+  if (strain < VISUAL_FLOOR) return HEAT_STOPS[ramp][0][1]
+  return rampColor(HEAT_STOPS[ramp], strain)
 }
 
 /** Only hot muscles glow: 0 below strain 5, ramping to 0.85 at 10. */

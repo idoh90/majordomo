@@ -8,11 +8,13 @@ import { SKINS } from '../../../../core/ui/skins'
 import { Hinted } from '../../../../core/ui/Hint'
 import { useShellStore } from '../../../../core/store/shell'
 import {
-  VOLUME_COLORS,
-  VOLUME_STATUS_LABEL,
+  muscleBaselines,
   overreachingMuscles,
+  trailingVolume,
+  volumeColor,
+  volumeGlow,
   volumeStatus,
-  weeklyVolume,
+  volumeTrend,
 } from '../../lib/volume'
 import { relativeDayLabel } from '../../../../core/dates'
 import { voice } from '../../../../core/voice'
@@ -43,18 +45,27 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
     [],
   )
 
-  const vol = useMemo(() => weeklyVolume(workouts, new Date(now), weekStart), [workouts, now, weekStart])
+  // volume moves only when a workout is logged or the trailing window rolls
+  // over a local midnight, so key these to the hour rather than to the
+  // minute-ticking clock — the house idiom for anything that walks the whole
+  // workout history
+  const nowH = Math.floor(now / 3_600_000) * 3_600_000
+  const vol = useMemo(() => trailingVolume(workouts, new Date(nowH)), [workouts, nowH])
+  const baselines = useMemo(
+    () => muscleBaselines(workouts, new Date(nowH), weekStart),
+    [workouts, nowH, weekStart],
+  )
   const over = useMemo(() => overreachingMuscles(vol), [vol])
 
   const colorFor =
     mode === 'strain'
       ? (m: MuscleId) => strainToColor(strains[m], skin.heatRamp)
-      : (m: MuscleId) => VOLUME_COLORS[volumeStatus(m, vol[m])]
+      : (m: MuscleId) => volumeColor(m, vol[m], skin.heatRamp)
   const glowScale = skin.glowScale ?? 1
   const glowFor =
     mode === 'strain'
       ? (m: MuscleId) => glowOpacity(strains[m]) * glowScale
-      : (m: MuscleId) => (volumeStatus(m, vol[m]) === 'over' ? 0.6 : 0) * glowScale
+      : (m: MuscleId) => volumeGlow(m, vol[m]) * glowScale
 
   const info = buildInfo()
   function buildInfo(): { text: string; dim: boolean } {
@@ -80,8 +91,17 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
     }
     const sets = vol[selected]
     const status = volumeStatus(selected, sets)
+    // a muscle you rarely train has no "usual" worth quoting, so the trend
+    // drops out of the line entirely rather than printing a comparison with
+    // almost nothing
+    const trend = volumeTrend(sets, baselines[selected])
     return {
-      text: `${MUSCLES[selected].label} — ~${sets.toFixed(0)} set${sets < 1.5 ? '' : 's'} this week · ${VOLUME_STATUS_LABEL[status]}`,
+      text: voice.grounds.mapVolume({
+        muscle: MUSCLES[selected].label,
+        sets: Math.round(sets),
+        band: voice.grounds.volumeLabel[status],
+        trend: trend ? voice.grounds.volumeTrend[trend] : null,
+      }),
       dim: false,
     }
   }
@@ -226,7 +246,7 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
       </p>
 
       <div className="mt-3 flex justify-center">
-        {mode === 'strain' ? <Legend ramp={skin.heatRamp} /> : <VolumeLegend />}
+        {mode === 'strain' ? <Legend ramp={skin.heatRamp} /> : <VolumeLegend ramp={skin.heatRamp} />}
       </div>
 
       {over.length >= 2 && (

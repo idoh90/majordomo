@@ -491,8 +491,16 @@ export const majordomoPack: VoicePack = {
     // and unlike the history empty state there is no second element to swap
     mapIdleStrain: 'Select a muscle for details',
     mapIdleVolume: 'Last 7 days of volume against each muscle’s range',
+    // an untrained muscle needs the window stated once, not twice: "~0 sets in
+    // 7 days · nothing logged" is the same fact wearing two hats
     mapVolume: ({ muscle, sets, band, trend }) =>
-      [`${muscle} — ~${sets} ${plural(sets, 'set', 'sets')} in 7 days`, band, trend]
+      [
+        sets === 0
+          ? `${muscle} — nothing in 7 days`
+          : `${muscle} — ~${sets} ${plural(sets, 'set', 'sets')} in 7 days`,
+        sets === 0 ? null : band,
+        trend,
+      ]
         .filter(Boolean)
         .join(' · '),
     volumeLabel: {

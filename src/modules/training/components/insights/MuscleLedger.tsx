@@ -10,12 +10,7 @@ import type { MuscleId, Workout } from '../../types'
 import { HOT_THRESHOLD } from '../../lib/recovery'
 import { MAX_STRAIN, type StrainMap } from '../../lib/strain'
 import { strainToColor } from '../../lib/strainColor'
-import {
-  VOLUME_COLORS,
-  VOLUME_STATUS_LABEL,
-  volumeStatus,
-  weeklyVolume,
-} from '../../lib/volume'
+import { trailingVolume, volumeColor, volumeStatus } from '../../lib/volume'
 
 /**
  * THE MUSCLE LEDGER — the body map's data twin.
@@ -49,17 +44,13 @@ export function MuscleLedger({
   now: number
 }) {
   const skin = SKINS[useShellStore((s) => s.skin)]
-  const weekStart = useShellStore((s) => s.weekStart)
   const [expanded, setExpanded] = useState(false)
 
-  // weekly volume only changes at a week boundary, so key the memo to the hour
-  // rather than to the minute-ticking clock — the house idiom for anything
-  // that walks the whole workout history
+  // volume only changes when the trailing window rolls over a local midnight,
+  // so key the memo to the hour rather than to the minute-ticking clock — the
+  // house idiom for anything that walks the whole workout history
   const nowH = Math.floor(now / 3_600_000) * 3_600_000
-  const vol = useMemo(
-    () => weeklyVolume(workouts, new Date(nowH), weekStart),
-    [workouts, nowH, weekStart],
-  )
+  const vol = useMemo(() => trailingVolume(workouts, new Date(nowH)), [workouts, nowH])
   const hot = ALL_MUSCLE_IDS.filter((m) => strains[m] >= HOT_THRESHOLD).length
 
   // the folded list: the four hottest, ranked. Sorting the ids rather than the
@@ -98,9 +89,9 @@ export function MuscleLedger({
       </div>
       </Hinted>
 
-      {/* Strain decays from every session ever logged; sets count only this
-          calendar week's lifting. Without the window spelled out, a muscle
-          worked last Saturday reads "10.0" beside "—" and looks like the
+      {/* Strain decays from every session ever logged; sets count only the
+          last seven days' lifting. Without the window spelled out, a muscle
+          worked two weeks ago reads "10.0" beside "—" and looks like the
           panel arguing with itself.
 
           Folded over a rested body there are no columns to head, so on mobile
@@ -216,9 +207,9 @@ function Row({
             <span
               aria-hidden
               className="h-2 w-2 flex-none rounded-full"
-              style={{ background: VOLUME_COLORS[status] }}
+              style={{ background: volumeColor(id, sets, ramp) }}
             />
-            <span className="sr-only">{VOLUME_STATUS_LABEL[status]}</span>
+            <span className="sr-only">{voice.grounds.volumeLabel[status]}</span>
           </>
         )}
       </span>
