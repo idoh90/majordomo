@@ -7,13 +7,14 @@
  *
  * What it does, in order, and nothing more:
  *   1. refuses unless explicitly armed (BELL_ENABLED)
- *   2. verifies the caller's Supabase session
- *   3. CLAIMS a slot out of the household's daily allowance, and refuses if it
+ *   2. refuses a browser calling from an origin this house does not know
+ *   3. verifies the caller's Supabase session
+ *   4. CLAIMS a slot out of the household's daily allowance, and refuses if it
  *      cannot — including when the meter itself is unreachable or half-migrated
- *   4. streams the model's reply back as Server-Sent Events
- *   5. records what it cost, or hands the slot back if nothing was generated
+ *   5. streams the model's reply back as Server-Sent Events
+ *   6. records what it cost, or hands the slot back if nothing was generated
  *
- * Step 3 is the order that matters. Deciding before spending and recording after
+ * Step 4 is the order that matters. Deciding before spending and recording after
  * it left a state in which a broken meter served for free forever; the reasoning
  * is at the rope line below and in `supabase/migrations/0005_bell_reserve.sql`.
  *
@@ -111,6 +112,30 @@ const [SUPABASE_URL, SUPABASE_ANON_KEY] =
     : [env('VITE_SUPABASE_URL'), env('VITE_SUPABASE_ANON_KEY')]
 
 const SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY')
+
+/**
+ * The origins this door answers to.
+ *
+ * Not the thing standing between the Bell and a forged request — that is the
+ * session token, and a browser never attaches one of those by itself. This is
+ * the cheapest wall in front of the expensive ones: a page served from anywhere
+ * else is turned away on a header read, before the auth server is asked anything
+ * and long before a model is called.
+ *
+ * An ABSENT `Origin` is admitted on purpose. `scripts/bell-probe.mjs`, curl and
+ * anything server-side send none, and refusing them would break the one tool
+ * that measures what this endpoint costs. Browsers send the header on every POST
+ * — same-origin included — so nothing a browser can produce escapes the check.
+ *
+ * THIS LIST HAS TO GROW WHENEVER A DOMAIN DOES. Every Vercel preview deploy gets
+ * its own hostname and is therefore refused: correct for a door that spends
+ * money, and the first thing to look at when a preview will not ring.
+ */
+const ALLOWED_ORIGINS = new Set([
+  'https://majordomocal.com',
+  'https://majordomo-cyan.vercel.app',
+  'http://localhost:5173',
+])
 
 /**
  * Nothing here may wait forever.
@@ -313,6 +338,14 @@ export default async function handler(req: Request): Promise<Response> {
   // must not by itself open a door that spends money; arming is a separate,
   // deliberate act (spec §4.4).
   if (env('BELL_ENABLED') !== '1') return fail(503, 'the Bell is not in service')
+
+  // A browser that is not one of ours is turned away here, before anything is
+  // asked of the registry and before anything is spent. No `Origin` at all means
+  // the caller is not a browser (the probe, curl, server-side) — see the list.
+  const origin = req.headers.get('origin')
+  if (origin !== null && !ALLOWED_ORIGINS.has(origin)) {
+    return fail(403, 'that origin is not admitted')
+  }
 
   if (!env('ANTHROPIC_API_KEY') || !SERVICE_ROLE_KEY || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return fail(500, 'the Bell is misconfigured')

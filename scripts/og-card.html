@@ -1,0 +1,125 @@
+<!doctype html>
+<!--
+  The source of `public/og.png` — the 1200×630 card every link preview shows.
+
+  It lives as HTML rather than as a binary nobody can edit because a PNG in a
+  repo is a dead end: the day the wordmark, the palette or the line changes,
+  whoever is holding it needs the thing that made it. Re-render with:
+
+      node scripts/og-render.mjs
+
+  Design brief is `majordomo-landing-spec.md` §3.9 — near-black ground, the
+  wordmark in brass, one brass rule, no screenshot cram. It has to read at
+  thumbnail size in a dark Discord embed, which is why the wordmark is enormous
+  and nothing else competes with it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      /* Self-hosted, same as the app — the renderer runs offline and a fallback
+         font here would silently ship a different wordmark. Absolute file URLs
+         are substituted by the render script. */
+      @font-face {
+        font-family: 'Big Shoulders';
+        font-weight: 700;
+        src: url('__BIG_SHOULDERS__') format('woff2');
+      }
+      @font-face {
+        font-family: 'Source Sans 3';
+        font-weight: 400;
+        src: url('__SOURCE_SANS__') format('woff2');
+      }
+
+      :root {
+        --bg: #0c1017;
+        --brass: #d4ae6a;
+        --ink-dim: #8b97a8;
+        --line: #1e2739;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+      }
+
+      body {
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* A card is a surface, not a page: the light falls from above and the
+           corners sink, so the wordmark sits in the one lit place. */
+        background-image: radial-gradient(
+          120% 90% at 50% 8%,
+          rgb(125 167 208 / 0.07) 0%,
+          transparent 62%
+        );
+      }
+
+      /* The estate's hairline, inset — it reads as a plate rather than as a
+         screenshot with an accidental border. */
+      .frame {
+        position: absolute;
+        inset: 28px;
+        border: 1px solid var(--line);
+      }
+
+      .stack {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 34px;
+      }
+
+      /* The one brass rule the brief allows. Short and centred: a full-width
+         line would divide the card, and this is meant to point at the name. */
+      .rule {
+        width: 96px;
+        height: 2px;
+        background: var(--brass);
+      }
+
+      .wordmark {
+        font-family: 'Big Shoulders', 'Arial Narrow', sans-serif;
+        font-weight: 700;
+        /* sized so the word clears the frame by ~150px a side: several
+           platforms crop the edges of a 1.91:1 card, and a clipped M is the
+           one failure nobody sees until it is public */
+        font-size: 148px;
+        line-height: 0.86;
+        letter-spacing: 0.14em;
+        /* the tracking is applied on the right of every glyph, including the
+           last — pull it back so the word sits optically centred */
+        margin-right: -0.14em;
+        color: var(--brass);
+        white-space: nowrap;
+      }
+
+      .tagline {
+        font-family: 'Source Sans 3', system-ui, sans-serif;
+        font-weight: 400;
+        font-size: 30px;
+        letter-spacing: 0.02em;
+        color: var(--ink-dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame"></div>
+    <div class="stack">
+      <div class="rule"></div>
+      <div class="wordmark">MAJORDOMO</div>
+      <div class="tagline">The calendar that survives your schedule</div>
+    </div>
+  </body>
+</html>

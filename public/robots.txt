@@ -1,0 +1,9 @@
+# This is a personal estate, not a public product. Nothing here should be in a
+# search index, and the same instruction is served as an `X-Robots-Tag` header
+# from `vercel.json` — this file exists so the intent is legible from the
+# filesystem and not only from a response nobody thinks to inspect.
+#
+# When the landing page arrives, THIS FILE MOVES WITH THE APP. A waitlist page
+# that Google cannot index is worse than no waitlist page.
+User-agent: *
+Disallow: /

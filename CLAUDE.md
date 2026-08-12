@@ -79,10 +79,32 @@ technical version.
 
 ## Ship: it is live
 
-**https://majordomo-cyan.vercel.app** — private repo `idoh90/majordomo` → Vercel
+**https://majordomocal.com** — private repo `idoh90/majordomo` → Vercel
 project `ido-s-projects8/majordomo` (**note: two different accounts** — GitHub is
 idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushing
 `main` auto-deploys to production; `vercel deploy --prod` still ships from disk.
+
+- **The topology, since three hostnames reach the same deployment** (12 Aug 2026):
+  `majordomocal.com` is the **apex and the canonical origin**, registered through
+  Vercel; `www.majordomocal.com` is a **308 to the apex** at the edge, so the app
+  never runs on the www origin and www must not appear anywhere in code, config, or
+  the Supabase allowlist; **`majordomo-cyan.vercel.app` is still attached to
+  Production on purpose** — old links and invite codes handed out on that origin
+  keep resolving, so do not remove it. Supabase Auth's Site URL is the apex and its
+  redirect list is `localhost:5173` + both live origins.
+- **A new domain is TWO edits, not a search.** Absolute URLs live in exactly two
+  places: the Open Graph block in `index.html` (canonical + `og:*`, absolute
+  because crawlers cannot resolve a relative path) and `ALLOWED_ORIGINS` in
+  `api/bell.ts`. Everything else is origin-relative — `base: './'`, the manifest's
+  `start_url`/`scope`, the OAuth `redirectTo`, the Workshop's invite links — and
+  must stay that way; an absolute `base` breaks `npx vercel dev` and
+  `npm run preview`. The manifest carries an explicit `id: '/'` so an install from
+  the vercel.app alias and one from the domain are the SAME installed app rather
+  than two icons on one phone.
+- **The link-preview card is `public/og.png`**, built from `scripts/og-card.html`
+  by `node scripts/og-render.mjs` — deliberately not part of `npm run build`, which
+  has no business needing a browser binary. Never point `og:image` at the app icon:
+  a square mark letterboxes into a 1.91:1 card and reads as a broken share.
 
 - **Offline is the point.** The estate lives in localStorage and the app boots
   from it **synchronously** — no async gate, no spinner, no session check between
@@ -109,7 +131,14 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
 - **`vercel.json` rationale** (the schema rejects `comment` keys, so it lives here):
   hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
   cached** or the app can't learn it's stale; `noindex` + frame/sniff headers
-  because this is a personal estate, not a public product.
+  because this is a personal estate, not a public product. `public/robots.txt`
+  says the same thing from the filesystem, where it is legible without inspecting
+  a response. **That `X-Robots-Tag` is APP-scoped, and it is written on `/(.*)`.**
+  The app owns the apex today, so the two coincide; the day a landing page wants
+  `majordomocal.com`, a blanket noindex on that origin becomes a waitlist page
+  Google cannot index. Whichever way that split goes — landing on the apex with the
+  app moved to `app.majordomocal.com`, or the landing at `join.`— the header and
+  `robots.txt` move WITH THE APP, and so do the two absolute-URL sites above.
 - **The CSP is there for the supply chain, not for injection.** There is no
   HTML-injection route in this codebase — no `dangerouslySetInnerHTML`, no
   `innerHTML`, no `eval` — so the policy is not defending against user content.
@@ -127,8 +156,15 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   silently, which is the correct direction.
 - **`.vercelignore` only governs CLI uploads** — a Git build clones the whole repo.
   Harmless (only `dist/` is served), but never rely on it to hide anything.
-- **Origins don't share storage.** `localhost:5173` and the deployed app are
-  different estates. Moving between them is gear → **Export/Import an estate**
+- **Origins don't share storage — and this is now a real migration, not a note.**
+  `localhost:5173`, `majordomo-cyan.vercel.app` and `majordomocal.com` are three
+  separate estates, because localStorage is scoped per origin and **the deployed
+  app changed origin on 12 Aug 2026**. Opening the new domain gives a first-run
+  screen with the vercel.app estate still sitting untouched on the old one; that is
+  correct behaviour. Bridge it by signing in on the new origin and letting
+  `src/core/sync/` pull, then Export/Import for anything sync does not carry. The
+  Twelve Data key is carried by neither and must be re-entered once, in Ledger
+  settings. Moving between them is gear → **Export/Import an estate**
   (`core/backup.ts`) — the M0 backup ritual. The export **no longer carries the
   Twelve Data API key** (`SECRETS` in `core/backup.ts` blanks it, matching the
   exclusion cloud sync already makes): a file that gets mailed to yourself and
@@ -160,6 +196,15 @@ describe it as existing.
 - **`BELL_ENABLED` defaults to OFF.** Deploying this file must not by itself open a
   door that spends money; arming is a separate deliberate act, and it is also the
   kill switch when something goes wrong.
+- **`ALLOWED_ORIGINS` has to grow whenever a domain does.** The Bell turns away any
+  request carrying an `Origin` header that is not `majordomocal.com`, the
+  vercel.app alias, or `localhost:5173`. A caller with **no** `Origin` is admitted
+  on purpose — `npm run bell:probe`, curl and anything server-side send none, and
+  browsers send one on every POST, so nothing a browser can produce escapes it.
+  Consequence worth knowing before it wastes an hour: **every Vercel preview deploy
+  has its own hostname and is therefore refused.** That is the right default for a
+  door that spends money, and it is the first thing to check when a preview will
+  not ring.
 - **Tools will execute on the CLIENT, not here.** The estate's source of truth is the
   device, and posting a watch pencils sleep, saving a workout resolves PPL and
   matches its block, a delete records tombstone intent — all of that lives in the

@@ -21,6 +21,16 @@ export default defineConfig({
         name: 'Majordomo',
         short_name: 'Majordomo',
         description: 'The calendar that survives your schedule',
+        // WHO the installed app is, stated rather than inferred. Without an `id`
+        // the browser derives identity from `start_url` — which is relative, so
+        // it resolves against whatever hostname the user happened to open. An
+        // install from majordomo-cyan.vercel.app and one from majordomocal.com
+        // would then be two different apps on the same phone, each with its own
+        // icon. `/` is resolved against the origin and is deliberately the one
+        // constant across all of them.
+        id: '/',
+        // `start_url` and `scope` stay RELATIVE. Absolute values here break
+        // `npx vercel dev` and `npm run preview`, which serve from other ports.
         start_url: './',
         scope: './',
         display: 'standalone',
@@ -38,6 +48,10 @@ export default defineConfig({
       workbox: {
         // fonts are self-hosted @fontsource, so they precache with everything else
         globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2}'],
+        // The link-preview card is 135 KB the app itself never renders — only
+        // crawlers fetch it, and never offline. Precaching it would put it in
+        // every user's install for nobody's benefit.
+        globIgnores: ['og.png'],
         // any unknown path falls back to the shell — there is no router, but a
         // stray deep link must never dead-end offline
         navigateFallback: 'index.html',

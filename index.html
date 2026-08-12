@@ -26,6 +26,54 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Majordomo" />
     <title>Majordomo</title>
+
+    <!-- ====================================================================
+         THE ONE PLACE THE PRODUCTION ORIGIN IS WRITTEN DOWN.
+
+         Everything else in this repo is origin-relative on purpose — `base`,
+         the manifest, the OAuth redirect, the invite links — so the app runs
+         unchanged on localhost, on the vercel.app alias, and on the domain.
+         Open Graph is the exception the standard forces: canonical and
+         `og:*` URLs MUST be absolute, because the consumer is a crawler on
+         another machine with no page to resolve a relative path against.
+
+         So it is all in one block. The next domain move is this block and the
+         allowlist in `api/bell.ts`, and nothing else.
+
+         The copy is duplicated from `src/core/voice/` rather than read from
+         it, which is the one place this project's no-inline-strings rule has
+         to bend: static HTML is served before any JavaScript runs, and a
+         crawler never runs it at all. Keep the duplication to this block —
+         it repeats the `description` meta above and the manifest's own
+         `description` in `vite.config.ts`, and those three should agree.
+
+         `og:image` is `public/og.png`, built from `scripts/og-card.html` by
+         `node scripts/og-render.mjs`. Deliberately NOT the app icon: a square
+         icon letterboxes into a 1.91:1 card and reads as a broken share.
+         ==================================================================== -->
+    <link rel="canonical" href="https://majordomocal.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Majordomo" />
+    <meta property="og:title" content="Majordomo" />
+    <meta
+      property="og:description"
+      content="The calendar that survives your schedule."
+    />
+    <meta property="og:url" content="https://majordomocal.com/" />
+    <meta property="og:image" content="https://majordomocal.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The Majordomo wordmark in brass on near-black, above the line: the calendar that survives your schedule."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Majordomo" />
+    <meta
+      name="twitter:description"
+      content="The calendar that survives your schedule."
+    />
+    <meta name="twitter:image" content="https://majordomocal.com/og.png" />
   </head>
   <body>
     <div id="root"></div>
