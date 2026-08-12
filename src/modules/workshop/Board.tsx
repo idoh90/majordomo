@@ -239,12 +239,15 @@ export function Board({
           <button
             type="button"
             onClick={() => setSheet('crew')}
-            className="rounded-pill border px-3 py-1.5 font-display text-[9.5px] font-semibold tracking-[0.13em] transition-colors hover:text-ink [font-variant-numeric:tabular-nums]"
+            className="rounded-pill border-[1.5px] px-4 py-2.5 font-display text-[12px] font-bold tracking-[0.14em] transition-colors [font-variant-numeric:tabular-nums]"
             style={{
               borderColor: venture.shareId
-                ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)'
-                : 'var(--color-line)',
-              color: venture.shareId ? 'var(--color-accent)' : 'var(--color-ink-faint)',
+                ? 'color-mix(in srgb, var(--color-accent) 55%, transparent)'
+                : 'color-mix(in srgb, var(--color-ink-faint) 45%, transparent)',
+              color: venture.shareId ? 'var(--color-accent)' : 'var(--color-ink-dim)',
+              background: venture.shareId
+                ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
+                : undefined,
             }}
           >
             {venture.shareId
@@ -526,6 +529,8 @@ const TAP_SLOP = 6
 const ZOOM_MIN = 0.4
 const ZOOM_MAX = 1.6
 const VIEW_H = 560
+/** how far past its own edge the wall may be pulled before it stops */
+const PAN_SLACK = 80
 
 /**
  * Two fingers on the board mean the BOARD, not the page.
@@ -623,7 +628,23 @@ function DesktopBoard({
   const [drag, setDrag] = useState<Drag | null>(null)
   const [twine, setTwine] = useState<TwineDrag | null>(null)
   const [pan, setPan] = useState<Pan | null>(null)
-  const [view, setView] = useState({ x: 0, y: 0, z: 1 })
+  /**
+   * The view — where the wall sits and how far in we are.
+   *
+   * A REF, not state, and written straight to the wall's transform inside a
+   * rAF. It used to be state, which meant every wheel notch and every pan
+   * frame re-ran the layout, re-rendered every card, rebuilt the twine and
+   * re-measured every height. The wall is one composited element; moving it
+   * should cost one style write, not a render of the whole workshop.
+   */
+  const view = useRef({ x: 0, y: 0, z: 1 })
+  const wallRef = useRef<HTMLDivElement | null>(null)
+  const frame = useRef<number | null>(null)
+  /** whether the next paint should ease — true for a button, never for a hand */
+  const eased = useRef(false)
+  /** the zoom READOUT: settled after the gesture, never once per notch */
+  const [zoomShown, setZoomShown] = useState(1)
+  const zoomSettle = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** the card under the mouse — feeds the glow and the marching twine */
   const [hover, setHover] = useState<string | null>(null)
 
@@ -643,24 +664,50 @@ function DesktopBoard({
   // a heading dragged about keeps its number until its RANK actually changes
   const titleIndex = new Map(groups.map((g, i) => [g.title?.id, i]))
 
-  // the twine is arithmetic off the layout, but a card's HEIGHT is its own —
-  // one measure pass per commit keeps the stack and the twine honest
+  /**
+   * The twine is arithmetic off the layout, but a card's HEIGHT is its own,
+   * so it has to be measured. Keyed to what can actually CHANGE a height —
+   * the cards and their text — and deliberately not run on every commit: an
+   * ungated pass reads offsetHeight for every card, and reading a laid-out
+   * dimension forces the browser to flush layout there and then. Once per
+   * pan frame, per card, that is the whole reason the wall used to drag.
+   * Width is fixed and the zoom is a transform, so neither moves a height.
+   */
+  const measureKey = placed
+    .map((p) => `${p.card.id}:${p.card.type}:${p.card.title}:${p.card.body ?? ''}:${p.card.url ?? ''}:${p.card.dueAt ?? ''}`)
+    .join('|')
+
   useLayoutEffect(() => {
-    const next: Record<string, number> = {}
-    let changed = false
-    for (const [id, el] of cardRefs.current) {
-      next[id] = el.offsetHeight
-      if (heights[id] !== next[id]) changed = true
+    const measure = () => {
+      const next: Record<string, number> = {}
+      for (const [id, el] of cardRefs.current) next[id] = el.offsetHeight
+      setHeights((prev) => {
+        const keys = Object.keys(next)
+        if (keys.length === Object.keys(prev).length && keys.every((k) => prev[k] === next[k])) {
+          return prev
+        }
+        return next
+      })
     }
-    if (changed || Object.keys(next).length !== Object.keys(heights).length) setHeights(next)
-  })
+    measure()
+    // a face that lands before its typeface does measures short — one more
+    // pass when the fonts settle, and never again
+    let cancelled = false
+    void document.fonts?.ready.then(() => {
+      if (!cancelled) measure()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [measureKey])
 
   /** screen point → board units, undoing the pan and the zoom */
   const boardPoint = (e: { clientX: number; clientY: number }) => {
     const r = viewRef.current!.getBoundingClientRect()
+    const v = view.current
     return {
-      x: (e.clientX - r.left - view.x) / view.z,
-      y: (e.clientY - r.top - view.y) / view.z,
+      x: (e.clientX - r.left - v.x) / v.z,
+      y: (e.clientY - r.top - v.y) / v.z,
     }
   }
 
@@ -772,7 +819,7 @@ function DesktopBoard({
     } catch {
       /* see above */
     }
-    setPan({ sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false })
+    setPan({ sx: e.clientX, sy: e.clientY, ox: view.current.x, oy: view.current.y, moved: false })
   }
 
   const surfaceMove = (e: React.PointerEvent) => {
@@ -782,7 +829,8 @@ function DesktopBoard({
     // the wall only follows the hand once the press has committed to being a
     // drag — otherwise a tap that wobbles by a pixel would nudge the board
     if (moved) {
-      setView((v) => ({ ...v, x: pan.ox + (e.clientX - pan.sx), y: pan.oy + (e.clientY - pan.sy) }))
+      eased.current = false
+      moveTo(pan.ox + (e.clientX - pan.sx), pan.oy + (e.clientY - pan.sy), view.current.z)
     }
     if (moved !== pan.moved) setPan({ ...pan, moved })
   }
@@ -806,36 +854,130 @@ function DesktopBoard({
     onCreateAt({ at: { x: Math.max(8, pt.x - CARD_W / 2), y: Math.max(8, pt.y) } })
   }
 
-  /** zoom about a screen point, so the thing under the cursor stays under it */
-  const zoomAt = (factor: number, clientX?: number, clientY?: number) => {
-    const r = viewRef.current?.getBoundingClientRect()
-    setView((v) => {
-      const z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v.z * factor))
-      if (!r) return { ...v, z }
-      const px = (clientX ?? r.left + r.width / 2) - r.left
-      const py = (clientY ?? r.top + r.height / 2) - r.top
-      const k = z / v.z
-      return { x: px - (px - v.x) * k, y: py - (py - v.y) * k, z }
-    })
+  /**
+   * Keep the wall reachable. Panning was unbounded, so a firm flick could
+   * post the whole board off into space with no way back but the reset
+   * button. Bounded, "the wall has run out" also becomes a fact the wheel
+   * can act on — see below.
+   */
+  const clampView = (v: { x: number; y: number; z: number }) => {
+    const el = viewRef.current
+    if (!el) return v
+    const vw = el.clientWidth
+    const vh = el.clientHeight
+    const ww = boardW * v.z
+    const wh = boardH * v.z
+    const span = (viewport: number, wall: number, at: number) =>
+      Math.min(Math.max(0, viewport - wall) + PAN_SLACK, Math.max(Math.min(0, viewport - wall) - PAN_SLACK, at))
+    return { x: span(vw, ww, v.x), y: span(vh, wh, v.y), z: v.z }
   }
 
-  // wheel-to-zoom is bound natively rather than through React: the passive
-  // default on wheel listeners makes preventDefault a no-op, and without it
-  // the page scrolls away underneath the board
+  /** one style write, on the next frame, however many times we were asked */
+  const paint = () => {
+    frame.current = null
+    const el = wallRef.current
+    if (!el) return
+    const v = view.current
+    el.style.transition = eased.current ? 'transform 140ms ease-out' : 'none'
+    el.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.z})`
+  }
+
+  const schedule = () => {
+    if (frame.current === null) frame.current = requestAnimationFrame(paint)
+  }
+
+  /** move the wall; returns how far it ACTUALLY went, which may be nothing */
+  const moveTo = (x: number, y: number, z: number) => {
+    const before = view.current
+    const next = clampView({ x, y, z })
+    view.current = next
+    schedule()
+    return { dx: next.x - before.x, dy: next.y - before.y }
+  }
+
+  /** zoom about a screen point, so the thing under the cursor stays under it */
+  const zoomAt = (factor: number, clientX?: number, clientY?: number) => {
+    const v = view.current
+    const z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v.z * factor))
+    if (z === v.z) return
+    const r = viewRef.current?.getBoundingClientRect()
+    const px = r ? (clientX ?? r.left + r.width / 2) - r.left : 0
+    const py = r ? (clientY ?? r.top + r.height / 2) - r.top : 0
+    const k = z / v.z
+    moveTo(px - (px - v.x) * k, py - (py - v.y) * k, z)
+    if (zoomSettle.current) clearTimeout(zoomSettle.current)
+    zoomSettle.current = setTimeout(() => setZoomShown(view.current.z), 140)
+  }
+
+  /**
+   * The wheel SCROLLS the wall. It used to zoom it — every notch a scale step
+   * and a preventDefault — which made an ordinary two-finger scroll shudder
+   * in and out instead of moving, and left the page unable to scroll at all
+   * while the pointer was over the board.
+   *
+   * Zoom keeps the gesture that actually means zoom: ctrl/⌘ + wheel, which is
+   * what a trackpad pinch sends. And when the wall has nothing left to give
+   * in that direction, the event is left alone so the PAGE scrolls — a
+   * fixed-height board that swallows every wheel is a trap.
+   *
+   * Bound natively rather than through React: React's listeners are passive,
+   * so preventDefault through onWheel is a no-op.
+   */
   useEffect(() => {
     const el = viewRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
-      zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY)
+      eased.current = false
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY)
+        return
+      }
+      // lines and pages are wheel units too, and a mouse that reports them
+      // would otherwise crawl a pixel at a time
+      const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? VIEW_H : 1
+      const shift = e.shiftKey
+      const dx = -(shift ? e.deltaY || e.deltaX : e.deltaX) * k
+      const dy = shift ? 0 : -e.deltaY * k
+      const v = view.current
+      const { dx: mx, dy: my } = moveTo(v.x + dx, v.y + dy, v.z)
+      if (mx !== 0 || my !== 0) e.preventDefault()
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [])
+    // the bounds move with the wall's extent, and the handler closes over them
+  }, [boardW, boardH])
+
+  // the wall grew, shrank, or this is the first paint — put it in bounds
+  useLayoutEffect(() => {
+    const v = view.current
+    moveTo(v.x, v.y, v.z)
+  }, [boardW, boardH])
+
+  useEffect(
+    () => () => {
+      // Clearing the HANDLE matters as much as cancelling the frame: schedule()
+      // treats a non-null handle as "a paint is already coming", so a stale one
+      // left behind here wedges the wall forever. StrictMode's mount-unmount-
+      // remount in development finds this instantly — which is how it was found.
+      if (frame.current !== null) cancelAnimationFrame(frame.current)
+      frame.current = null
+      if (zoomSettle.current) clearTimeout(zoomSettle.current)
+      zoomSettle.current = null
+    },
+    [],
+  )
 
   // a pinch abandons the pan the first finger started, so the wall doesn't
   // slide while it scales (and the press never lands as "hang a card here")
-  usePinch(viewRef, (f, cx, cy) => zoomAt(f, cx, cy), () => setPan(null))
+  usePinch(
+    viewRef,
+    (f, cx, cy) => {
+      eased.current = false
+      zoomAt(f, cx, cy)
+    },
+    () => setPan(null),
+  )
 
   return (
     <div className="trough relative hidden select-none md:block">
@@ -859,12 +1001,16 @@ function DesktopBoard({
         style={{ height: VIEW_H, cursor: pan?.moved ? 'grabbing' : 'grab' }}
       >
         <div
+          ref={wallRef}
           className="absolute left-0 top-0 origin-top-left"
+          // NO transform or transition here on purpose: both are written
+          // imperatively (see paint), and a value React knows about is a
+          // value React resets on the next unrelated render — which during a
+          // card drag would snap the wall back mid-gesture.
           style={{
             width: boardW,
             height: boardH,
-            transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})`,
-            transition: pan || drag ? 'none' : 'transform 120ms ease-out',
+            willChange: 'transform',
             ...PEGBOARD_BG,
             // the wall itself, edges and all. It grows under the hand, so the
             // frame reads as the board making room rather than a limit hit.
@@ -1001,10 +1147,20 @@ function DesktopBoard({
 
         <div className="absolute right-3 top-3">
           <ZoomControls
-            zoom={view.z}
-            onIn={() => zoomAt(1.15)}
-            onOut={() => zoomAt(1 / 1.15)}
-            onReset={() => setView({ x: 0, y: 0, z: 1 })}
+            zoom={zoomShown}
+            onIn={() => {
+              eased.current = true
+              zoomAt(1.15)
+            }}
+            onOut={() => {
+              eased.current = true
+              zoomAt(1 / 1.15)
+            }}
+            onReset={() => {
+              eased.current = true
+              moveTo(0, 0, 1)
+              setZoomShown(1)
+            }}
           />
         </div>
 
