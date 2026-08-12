@@ -1,5 +1,5 @@
 import { useAuthStore } from '../../core/auth/store'
-import { allRecords, applyQuietly } from '../../core/sync/engine'
+import { allRecords } from '../../core/sync/engine'
 import { armed } from '../../core/sync/gate'
 import { useSyncStore } from '../../core/sync/store'
 import {
@@ -13,6 +13,7 @@ import {
 import { parseKey, recordKey, type IncomingRecord } from '../../core/sync/types'
 import { voice } from '../../core/voice'
 import { SYNC_SOURCES } from './registry'
+import { applyQuietlyAll } from './shareService'
 
 /**
  * The loop: carry what changed up, bring what changed down.
@@ -104,7 +105,9 @@ function foldIn(rows: IncomingRecord[]): void {
   if (rows.length === 0) return
   // ONE synchronous block across every wing. An await between wings lets a
   // component mount and run a heal pass against a half-applied estate.
-  applyQuietly(() => {
+  // BOTH engines are muted: a personal pull that touches a crew venture's
+  // record must not be heard as a local edit by the share engine.
+  applyQuietlyAll(() => {
     for (const source of SYNC_SOURCES) {
       const mine = rows.filter((r) => r.wing === source.wing)
       if (mine.length > 0) source.apply(mine)

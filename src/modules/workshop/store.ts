@@ -2,10 +2,13 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { makeId } from '../../core/ids'
 import { localDayKey } from '../../core/dates'
+import { hoursOf } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
+import { useAuthStore } from '../../core/auth/store'
 import { voice } from '../../core/voice'
 import { noteDeleted } from '../../core/sync/intent'
 import { normalizeUrl } from './url'
+import { noteShareDeleted } from '../../core/sync/shareIntent'
 import {
   dueMarkerTitle,
   dueOf,
@@ -17,6 +20,7 @@ import {
   nextRow,
   projRef,
   syncMarker,
+  ventureOfEvent,
 } from './lib'
 import type {
   Bench,
@@ -25,9 +29,11 @@ import type {
   Fulfillment,
   Milestone,
   SessionMeta,
+  ShareMember,
   Thread,
   Venture,
   VentureStatus,
+  WorkEntry,
 } from './types'
 
 /**
@@ -54,6 +60,13 @@ interface WorkshopState {
   sessions: Record<string, SessionMeta>
   /** persisted: a phone locked mid-session must not lose the running clock */
   bench: Bench | null
+  /** the crew ledgers — every member's fulfilled hours, keyed by the author's
+   *  event id. Mine are written by the fulfillment actions; the rest arrive
+   *  through the share. Persisted: stats must read offline. */
+  workEntries: Record<string, WorkEntry>
+  /** crew rosters by shareId — cached so labels render offline, and so a
+   *  departed member's name survives on their old work */
+  members: Record<string, ShareMember[]>
 
   addVenture: (name: string, goalH: number) => Venture
   updateVenture: (id: string, patch: Partial<Omit<Venture, 'id'>>) => void
@@ -101,6 +114,14 @@ interface WorkshopState {
   startBench: (ventureId: string) => void
   /** stop the timer and log the elapsed span as a born-done session */
   stopBench: () => BenchStop
+
+  /* --- the crew --- */
+  setMembers: (shareId: string, members: ShareMember[]) => void
+  /** fold ledger entries in (mine at fulfillment time, the crew's from sync) */
+  upsertWorkEntries: (entries: Record<string, WorkEntry>) => void
+  /** the share is over for this device — the venture becomes private again,
+   *  records intact ("when in doubt, resurrect") */
+  adoptPrivateCopy: (shareId: string) => void
 }
 
 const byOrder = (a: { order: number }, b: { order: number }) => a.order - b.order
@@ -124,13 +145,59 @@ function syncDue(card: BoardCard | undefined): void {
 
 export const useWorkshopStore = create<WorkshopState>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      /**
+       * Mirror one session's fulfillment into the crew ledger. Called after
+       * every fulfillment write; a no-op unless the event belongs to a crew
+       * venture. Reads COMMITTED events only — a what-if draft's session must
+       * not put hours on the crew's books, and the heal pass catches up after
+       * the rehearsal is applied. Skipped when signed out (an entry needs an
+       * author); the same heal pass writes it after sign-in.
+       */
+      const syncLedger = (eventId: string): void => {
+        const s = get()
+        const meta = s.sessions[eventId]
+        if (!meta) return
+        const ev = useEventsStore.getState().events.find((e) => e.id === eventId)
+        if (!ev) return
+        const ventureId = ventureOfEvent(ev)
+        if (!ventureId) return
+        const venture = s.ventures.find((v) => v.id === ventureId)
+        if (!venture?.shareId) return
+        const by = useAuthStore.getState().userId
+        if (!by) return
+        const h =
+          meta.fulfillment === 'done'
+            ? hoursOf(ev)
+            : meta.fulfillment === 'partial'
+              ? (meta.doneH ?? 0)
+              : 0
+        const existing = s.workEntries[eventId]
+        // never written and nothing to say — do not mint a zero
+        if (!existing && h === 0) return
+        if (
+          existing &&
+          existing.h === h &&
+          existing.at === ev.start &&
+          existing.by === by &&
+          existing.ventureId === ventureId
+        ) {
+          return
+        }
+        set((st) => ({
+          workEntries: { ...st.workEntries, [eventId]: { ventureId, at: ev.start, h, by } },
+        }))
+      }
+
+      return {
       ventures: [],
       cards: [],
       threads: [],
       milestones: [],
       sessions: {},
       bench: null,
+      workEntries: {},
+      members: {},
 
       addVenture: (name, goalH) => {
         const venture: Venture = {
@@ -174,28 +241,45 @@ export const useWorkshopStore = create<WorkshopState>()(
         // the cascade has to be declared in full: a venture's cards, threads
         // and milestones go with it, and each is its own record
         const before = get()
-        noteDeleted('workshop', 'venture', [id])
-        noteDeleted(
-          'workshop',
-          'card',
-          before.cards.filter((c) => c.ventureId === id).map((c) => c.id),
-        )
-        noteDeleted(
-          'workshop',
-          'thread',
-          before.threads.filter((t) => t.ventureId === id).map((t) => t.id),
-        )
-        noteDeleted(
-          'workshop',
-          'milestone',
-          before.milestones.filter((m) => m.ventureId === id).map((m) => m.id),
-        )
+        const shareId = before.ventures.find((v) => v.id === id)?.shareId
+        const cardIds = before.cards.filter((c) => c.ventureId === id).map((c) => c.id)
+        const threadIds = before.threads.filter((t) => t.ventureId === id).map((t) => t.id)
+        const msIds = before.milestones.filter((m) => m.ventureId === id).map((m) => m.id)
+        if (shareId) {
+          // a crew venture's records live in the share — deleting it is
+          // deleting it FOR EVERYONE, and the tombstones say so there. The
+          // venture record itself is dual-homed, so its personal copy is
+          // buried too; the ledger goes with the venture.
+          noteShareDeleted(shareId, 'venture', [id])
+          noteShareDeleted(shareId, 'card', cardIds)
+          noteShareDeleted(shareId, 'thread', threadIds)
+          noteShareDeleted(shareId, 'milestone', msIds)
+          noteShareDeleted(
+            shareId,
+            'work',
+            Object.entries(before.workEntries)
+              .filter(([, en]) => en.ventureId === id)
+              .map(([key]) => key),
+          )
+          noteDeleted('workshop', 'venture', [id])
+        } else {
+          noteDeleted('workshop', 'venture', [id])
+          noteDeleted('workshop', 'card', cardIds)
+          noteDeleted('workshop', 'thread', threadIds)
+          noteDeleted('workshop', 'milestone', msIds)
+        }
         set((s) => ({
           ventures: s.ventures.filter((v) => v.id !== id),
           cards: s.cards.filter((c) => c.ventureId !== id),
           threads: s.threads.filter((t) => t.ventureId !== id),
           milestones: s.milestones.filter((m) => m.ventureId !== id),
           bench: s.bench?.ventureId === id ? null : s.bench,
+          workEntries: Object.fromEntries(
+            Object.entries(s.workEntries).filter(([, en]) => en.ventureId !== id),
+          ),
+          members: shareId
+            ? Object.fromEntries(Object.entries(s.members).filter(([k]) => k !== shareId))
+            : s.members,
         }))
       },
 
@@ -243,8 +327,17 @@ export const useWorkshopStore = create<WorkshopState>()(
         syncDue(get().cards.find((c) => c.id === id))
       },
       toggleCardDone: (id) => {
+        // on a crew board a strike is signed, so the contribution panel can
+        // say whose it was; unstriking takes the signature back with it
+        const card = get().cards.find((c) => c.id === id)
+        const venture = card && get().ventures.find((v) => v.id === card.ventureId)
+        const me = useAuthStore.getState().userId
         set((s) => ({
-          cards: s.cards.map((c) => (c.id === id ? { ...c, done: !c.done } : c)),
+          cards: s.cards.map((c) =>
+            c.id === id
+              ? { ...c, done: !c.done, doneBy: !c.done && venture?.shareId && me ? me : undefined }
+              : c,
+          ),
         }))
         syncDue(get().cards.find((c) => c.id === id))
       },
@@ -296,8 +389,16 @@ export const useWorkshopStore = create<WorkshopState>()(
         }),
       deleteCard: (id) => {
         const cut = get().threads.filter((t) => t.from === id || t.to === id)
-        noteDeleted('workshop', 'thread', cut.map((t) => t.id))
-        noteDeleted('workshop', 'card', [id])
+        const card = get().cards.find((c) => c.id === id)
+        const shareId =
+          card && get().ventures.find((v) => v.id === card.ventureId)?.shareId
+        if (shareId) {
+          noteShareDeleted(shareId, 'thread', cut.map((t) => t.id))
+          noteShareDeleted(shareId, 'card', [id])
+        } else {
+          noteDeleted('workshop', 'thread', cut.map((t) => t.id))
+          noteDeleted('workshop', 'card', [id])
+        }
         syncMarker(dueRef(id), null, '')
         set((s) => ({
           // taking down a heading does NOT take down the work under it: the
@@ -320,8 +421,12 @@ export const useWorkshopStore = create<WorkshopState>()(
         set((s) => ({ threads: [...s.threads, { id: makeId(), ventureId, from, to }] }))
       },
       deleteThread: (id) => {
+        const thread = get().threads.find((t) => t.id === id)
+        const shareId =
+          thread && get().ventures.find((v) => v.id === thread.ventureId)?.shareId
         set((s) => ({ threads: s.threads.filter((t) => t.id !== id) }))
-        noteDeleted('workshop', 'thread', [id])
+        if (shareId) noteShareDeleted(shareId, 'thread', [id])
+        else noteDeleted('workshop', 'thread', [id])
       },
 
       addMilestone: (ventureId, title, on) => {
@@ -346,20 +451,27 @@ export const useWorkshopStore = create<WorkshopState>()(
         if (ms) syncMarker(msRef(id), effectiveMsDay(ms, Date.now()), voice.workshop.markerMs(ms.title))
       },
       deleteMilestone: (id) => {
+        const ms = get().milestones.find((m) => m.id === id)
+        const shareId = ms && get().ventures.find((v) => v.id === ms.ventureId)?.shareId
         syncMarker(msRef(id), null, '')
         set((s) => ({ milestones: s.milestones.filter((m) => m.id !== id) }))
-        noteDeleted('workshop', 'milestone', [id])
+        if (shareId) noteShareDeleted(shareId, 'milestone', [id])
+        else noteDeleted('workshop', 'milestone', [id])
       },
 
-      setSessionMeta: (eventId, meta) =>
-        set((s) => ({ sessions: { ...s.sessions, [eventId]: meta } })),
-      fulfill: (eventId, fulfillment, doneH) =>
+      setSessionMeta: (eventId, meta) => {
+        set((s) => ({ sessions: { ...s.sessions, [eventId]: meta } }))
+        syncLedger(eventId)
+      },
+      fulfill: (eventId, fulfillment, doneH) => {
         set((s) => ({
           sessions: {
             ...s.sessions,
             [eventId]: { ...(s.sessions[eventId] ?? {}), fulfillment, doneH },
           },
-        })),
+        }))
+        syncLedger(eventId)
+      },
       /**
        * MUST NEVER record a deletion — local garbage collection, not intent.
        * A session's metadata can arrive from another device before the event
@@ -410,10 +522,27 @@ export const useWorkshopStore = create<WorkshopState>()(
         const mins = Math.round(elapsedMs / 60_000)
         return { kind: 'logged', h: Math.floor(mins / 60), m: mins % 60 }
       },
-    }),
+
+      setMembers: (shareId, members) =>
+        set((s) => ({ members: { ...s.members, [shareId]: members } })),
+      upsertWorkEntries: (entries) =>
+        set((s) => ({ workEntries: { ...s.workEntries, ...entries } })),
+      adoptPrivateCopy: (shareId) =>
+        set((s) => ({
+          ventures: s.ventures.map((v) =>
+            v.shareId === shareId ? { ...v, shareId: undefined } : v,
+          ),
+          members: Object.fromEntries(
+            Object.entries(s.members).filter(([k]) => k !== shareId),
+          ),
+          // the ledger stays: departed hours are history, and stats for a
+          // now-private venture read events again anyway
+        })),
+      }
+    },
     {
       name: 'majordomo-workshop',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         ventures: s.ventures,
@@ -422,10 +551,22 @@ export const useWorkshopStore = create<WorkshopState>()(
         milestones: s.milestones,
         sessions: s.sessions,
         bench: s.bench,
+        workEntries: s.workEntries,
+        members: s.members,
       }),
       migrate: (persisted) => {
         const p = (persisted ?? {}) as Partial<
-          Pick<WorkshopState, 'ventures' | 'cards' | 'threads' | 'milestones' | 'sessions' | 'bench'>
+          Pick<
+            WorkshopState,
+            | 'ventures'
+            | 'cards'
+            | 'threads'
+            | 'milestones'
+            | 'sessions'
+            | 'bench'
+            | 'workEntries'
+            | 'members'
+          >
         >
         return {
           ventures: p.ventures ?? [],
@@ -434,6 +575,8 @@ export const useWorkshopStore = create<WorkshopState>()(
           milestones: p.milestones ?? [],
           sessions: p.sessions ?? {},
           bench: p.bench ?? null,
+          workEntries: p.workEntries ?? {},
+          members: p.members ?? {},
         }
       },
     },

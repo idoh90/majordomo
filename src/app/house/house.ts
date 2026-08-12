@@ -28,6 +28,7 @@ import {
 import type {
   Milestone,
   SessionMeta as WorkshopSessionMeta,
+  WorkEntry,
   Venture,
 } from '../../modules/workshop/types'
 import { nearWatch, warnableBlock } from '../manor/nearWatch'
@@ -111,6 +112,8 @@ export interface HouseInputs {
   exams: Exam[]
   ventures: Venture[]
   wsSessions: Record<string, WorkshopSessionMeta>
+  /** the crew ledgers — how a crew venture's hours are read */
+  wsEntries: Record<string, WorkEntry>
   milestones: Milestone[]
   accounts: Account[]
   snapshots: Snapshot[]
@@ -175,7 +178,8 @@ export function computeHouse(i: HouseInputs): HouseModel {
   /* -------------------------------------------------------------- workshop */
   const workshopSeries = Array.from({ length: WEEKS }, (_, k) => {
     const s = addDays(w0, -7 * (WEEKS - 1 - k))
-    return wsFulfilledBetween(i.events, i.wsSessions, s, addDays(s, 7))
+    // crew ventures read the shared ledger; the rail must agree with the wing
+    return wsFulfilledBetween(i.events, i.wsSessions, s, addDays(s, 7), undefined, i.ventures, i.wsEntries)
   })
   const workshopNow = workshopSeries[workshopSeries.length - 1] ?? 0
   const workshopPrev = workshopSeries[workshopSeries.length - 2] ?? null

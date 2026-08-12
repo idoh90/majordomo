@@ -3,7 +3,7 @@ import { hoursOf } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
 import { voice } from '../../core/voice'
-import type { BoardCard, Milestone, SessionMeta, Venture } from './types'
+import type { BoardCard, Milestone, SessionMeta, ShareMember, Venture, WorkEntry } from './types'
 
 /* ------------------------------------------------------------- sourceRef
  * The wing's grammar on the shared calendar: bench-session events carry
@@ -51,6 +51,73 @@ export function fulfilledHours(e: CalendarEvent, meta: SessionMeta): number {
   return 0
 }
 
+/* ------------------------------------------------------------- the ledger
+ * A crew venture's hours are read from the shared WORK LEDGER, never from
+ * events — a partner's sessions are not on this device, and my own are, so an
+ * events read would count exactly one member and call it the total. My own
+ * entries are written into the ledger by the same actions that fulfill the
+ * session, so for a solo crew the two readings agree to the minute. A private
+ * venture never consults the ledger at all: the legacy events path is
+ * byte-identical when `shareId` is unset.
+ */
+
+/** sum of ledger hours for one venture inside [s, e) — omit either bound */
+export function entryHoursBetween(
+  entries: Record<string, WorkEntry>,
+  ventureId: string,
+  s?: number,
+  e?: number,
+): number {
+  let t = 0
+  for (const en of Object.values(entries)) {
+    if (en.ventureId !== ventureId) continue
+    const at = new Date(en.at).getTime()
+    if (s !== undefined && at < s) continue
+    if (e !== undefined && at >= e) continue
+    t += en.h
+  }
+  return t
+}
+
+/**
+ * The ledger heal — UPSERT-ONLY, and that is doctrine, not laziness. My
+ * fulfilled sessions and my ledger entries are written by the same actions,
+ * but drift has doors: a session resized on the Manor after fulfillment, a
+ * fulfillment made while signed out, a rehearsal applied. This recomputes my
+ * own entries from my own events and returns what differs; it NEVER deletes
+ * and never zeroes an entry whose event is missing — a store that failed to
+ * hydrate is indistinguishable from one the user emptied, and hours erased
+ * for the whole crew are the extinction intent.ts exists to prevent. Removal
+ * comes only from declared intent. When in doubt, the hours stand.
+ */
+export function workLedgerPatch(
+  events: CalendarEvent[],
+  sessions: Record<string, SessionMeta>,
+  ventures: Venture[],
+  entries: Record<string, WorkEntry>,
+  userId: string | null,
+): Record<string, WorkEntry> {
+  if (!userId) return {}
+  const shared = new Set(ventures.filter((v) => v.shareId).map((v) => v.id))
+  if (shared.size === 0) return {}
+  const patch: Record<string, WorkEntry> = {}
+  for (const e of sessionsOf(events)) {
+    const vid = ventureOfEvent(e)
+    if (!vid || !shared.has(vid)) continue
+    const h = fulfilledHours(e, metaOf(sessions, e))
+    const existing = entries[e.id]
+    // a partner's entry lives under THEIR event id — my events cannot collide
+    // with it, and my hand must never rewrite it anyway
+    if (existing && existing.by !== userId) continue
+    if (!existing && h <= 0) continue
+    if (existing && existing.h === h && existing.at === e.start && existing.ventureId === vid) {
+      continue
+    }
+    patch[e.id] = { ventureId: vid, at: e.start, h, by: userId }
+  }
+  return patch
+}
+
 /* ------------------------------------------------------------- weekly stats */
 
 export interface VentureWeek {
@@ -80,6 +147,7 @@ export function workshopStats(
   ventures: Venture[],
   now: number,
   weekStart?: WeekStart,
+  entries?: Record<string, WorkEntry>,
 ): WorkshopStats {
   const w0 = startOfWeek(new Date(now), weekStart)
   const w1 = addDays(w0, 7)
@@ -95,6 +163,16 @@ export function workshopStats(
     const meta = metaOf(sessions, e)
     bucket.fulfilledH += fulfilledHours(e, meta)
     if (meta.fulfillment !== 'skipped') bucket.bookedH += hoursOf(e)
+  }
+  // a crew venture's fulfilled hours are the whole crew's, from the ledger —
+  // which also carries my own, so this REPLACES the events reading rather than
+  // adding to it. `bookedH` stays mine-only: a partner's plans are their own.
+  if (entries) {
+    for (const v of ventures) {
+      if (v.shareId) {
+        perVenture[v.id].fulfilledH = entryHoursBetween(entries, v.id, w0.getTime(), w1.getTime())
+      }
+    }
   }
   let totalFulfilled = 0
   let totalBooked = 0
@@ -117,26 +195,44 @@ export function fulfilledHoursBetween(
   start: Date,
   end: Date,
   ventureId?: string,
+  ventures?: Venture[],
+  entries?: Record<string, WorkEntry>,
 ): number {
   const s = start.getTime()
   const e = end.getTime()
-  return sessionsOf(events)
+  // crew ventures read the ledger; their events would count one member twice
+  const shared = new Set(
+    entries ? (ventures ?? []).filter((v) => v.shareId).map((v) => v.id) : [],
+  )
+  const fromEvents = sessionsOf(events)
     .filter((ev) => {
       if (ventureId && ventureOfEvent(ev) !== ventureId) return false
+      const ref = ventureOfEvent(ev)
+      if (ref && shared.has(ref)) return false
       const t = new Date(ev.start).getTime()
       return t >= s && t < e
     })
     .reduce((t, ev) => t + fulfilledHours(ev, metaOf(sessions, ev)), 0)
+  if (!entries || shared.size === 0) return fromEvents
+  let fromLedger = 0
+  for (const id of shared) {
+    if (ventureId && id !== ventureId) continue
+    fromLedger += entryHoursBetween(entries, id, s, e)
+  }
+  return fromEvents + fromLedger
 }
 
-/** the odometer — every fulfilled hour the venture has ever received */
+/** the odometer — every fulfilled hour the venture has ever received, from
+ *  the whole crew when it has one */
 export function lifetimeHours(
   events: CalendarEvent[],
   sessions: Record<string, SessionMeta>,
-  ventureId: string,
+  venture: Venture,
+  entries?: Record<string, WorkEntry>,
 ): number {
+  if (venture.shareId && entries) return entryHoursBetween(entries, venture.id)
   return sessionsOf(events)
-    .filter((e) => ventureOfEvent(e) === ventureId)
+    .filter((e) => ventureOfEvent(e) === venture.id)
     .reduce((t, e) => t + fulfilledHours(e, metaOf(sessions, e)), 0)
 }
 
@@ -158,14 +254,24 @@ export function awaitingReport(
 export function daysSinceTouched(
   events: CalendarEvent[],
   sessions: Record<string, SessionMeta>,
-  ventureId: string,
+  venture: Venture,
   now: number,
+  entries?: Record<string, WorkEntry>,
 ): number | null {
   let last: string | null = null
-  for (const e of sessionsOf(events)) {
-    if (ventureOfEvent(e) !== ventureId) continue
-    if (fulfilledHours(e, metaOf(sessions, e)) <= 0) continue
-    if (!last || e.end > last) last = e.end
+  if (venture.shareId && entries) {
+    // the ledger records starts; a session's end is its start plus its hours
+    for (const en of Object.values(entries)) {
+      if (en.ventureId !== venture.id || en.h <= 0) continue
+      const end = new Date(new Date(en.at).getTime() + en.h * 3_600_000).toISOString()
+      if (!last || end > last) last = end
+    }
+  } else {
+    for (const e of sessionsOf(events)) {
+      if (ventureOfEvent(e) !== venture.id) continue
+      if (fulfilledHours(e, metaOf(sessions, e)) <= 0) continue
+      if (!last || e.end > last) last = e.end
+    }
   }
   if (!last) return null
   const ms = startOfLocalDay(new Date(now)).getTime() - startOfLocalDay(new Date(last)).getTime()
@@ -257,10 +363,71 @@ export function milestoneProgress(
   ms: Milestone,
   events: CalendarEvent[],
   sessions: Record<string, SessionMeta>,
+  ventures?: Venture[],
+  entries?: Record<string, WorkEntry>,
 ): number {
+  const venture = ventures?.find((v) => v.id === ms.ventureId)
+  if (venture?.shareId && entries) {
+    return entryHoursBetween(entries, ms.ventureId, new Date(ms.countFrom).getTime())
+  }
   return sessionsOf(events)
     .filter((e) => ventureOfEvent(e) === ms.ventureId && e.start >= ms.countFrom)
     .reduce((t, e) => t + fulfilledHours(e, metaOf(sessions, e)), 0)
+}
+
+/* ------------------------------------------------------------- the crew */
+
+export interface MemberContribution {
+  userId: string
+  label: string
+  /** ledger hours this calendar week */
+  weekH: number
+  /** ledger hours ever */
+  totalH: number
+  /** struck tasks carrying this member's stamp */
+  tasksDone: number
+}
+
+/**
+ * Who has done what on a crew venture — hours from the ledger, tasks from the
+ * `doneBy` stamps. Every roster member appears, zeros and all; hours or strikes
+ * from someone no longer on the roster are shown under the cached label they
+ * left behind (departed work is still work).
+ */
+export function memberContribution(
+  ventureId: string,
+  members: ShareMember[],
+  entries: Record<string, WorkEntry>,
+  cards: BoardCard[],
+  now: number,
+  weekStart?: WeekStart,
+): MemberContribution[] {
+  const w0 = startOfWeek(new Date(now), weekStart).getTime()
+  const w1 = w0 + 7 * 86_400_000
+  const byUser = new Map<string, MemberContribution>()
+  const rowFor = (userId: string): MemberContribution => {
+    let row = byUser.get(userId)
+    if (!row) {
+      row = { userId, label: userId.slice(0, 8), weekH: 0, totalH: 0, tasksDone: 0 }
+      byUser.set(userId, row)
+    }
+    return row
+  }
+  for (const m of members) rowFor(m.userId).label = m.label
+  for (const en of Object.values(entries)) {
+    if (en.ventureId !== ventureId || en.h <= 0) continue
+    const row = rowFor(en.by)
+    row.totalH += en.h
+    const at = new Date(en.at).getTime()
+    if (at >= w0 && at < w1) row.weekH += en.h
+  }
+  for (const c of cards) {
+    if (c.ventureId !== ventureId || c.type !== 'task' || !c.done || !c.doneBy) continue
+    rowFor(c.doneBy).tasksDone += 1
+  }
+  return [...byUser.values()].sort(
+    (a, b) => b.totalH - a.totalH || b.tasksDone - a.tasksDone || a.label.localeCompare(b.label),
+  )
 }
 
 /** undone milestones, soonest day first — overdue ones lead the queue */

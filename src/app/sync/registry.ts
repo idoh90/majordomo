@@ -2,8 +2,9 @@ import { setWeekStartDefault, type WeekStart } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
 import { useShellStore } from '../../core/store/shell'
-import { applyQuietly } from '../../core/sync/engine'
 import { isProjection } from '../../core/sync/projection'
+import { mergeList, mergeMap } from '../../core/sync/merge'
+import { applyQuietlyAll } from './shareService'
 import type { IncomingRecord, SyncRecord, SyncSource } from '../../core/sync/types'
 import { normalizeSkin } from '../../core/ui/skins'
 import { useCapitalStore } from '../../modules/capital/store'
@@ -59,33 +60,6 @@ const rec = (wing: string, kind: string, id: string, payload: unknown): SyncReco
 })
 
 const of = (records: IncomingRecord[], kind: string) => records.filter((r) => r.kind === kind)
-
-/** upsert-or-remove by id, then re-sort — `setState` does not sort for us */
-function mergeList<T extends { id: string }>(
-  current: T[],
-  incoming: IncomingRecord[],
-  sort?: (a: T, b: T) => number,
-): T[] {
-  if (incoming.length === 0) return current
-  const byId = new Map(current.map((x) => [x.id, x]))
-  for (const r of incoming) {
-    if (r.deleted) byId.delete(r.id)
-    else byId.set(r.id, r.payload as T)
-  }
-  const next = [...byId.values()]
-  return sort ? next.sort(sort) : next
-}
-
-/** the same, for the two collections keyed by something other than an `id` field */
-function mergeMap<V>(current: Record<string, V>, incoming: IncomingRecord[]): Record<string, V> {
-  if (incoming.length === 0) return current
-  const next = { ...current }
-  for (const r of incoming) {
-    if (r.deleted) delete next[r.id]
-    else next[r.id] = r.payload as V
-  }
-  return next
-}
 
 /* --------------------------------------------------------------- the shell */
 
@@ -152,12 +126,13 @@ const manorSource: SyncSource = {
   },
 }
 
-// the rehearsal is over — let the held records in
+// the rehearsal is over — let the held records in. Both engines are muted:
+// a fold into the events store must not read as a local edit to either space.
 useEventsStore.subscribe((state, prev) => {
   if (prev.sandbox && !state.sandbox && heldForSandbox.length > 0) {
     const held = heldForSandbox
     heldForSandbox = []
-    applyQuietly(() => {
+    applyQuietlyAll(() => {
       useEventsStore.setState((s) => ({ events: mergeList(s.events, held, byStartAsc) }))
     })
   }
@@ -240,13 +215,21 @@ const workshopSource: SyncSource = {
   wing: 'workshop',
   toRecords: () => {
     const s = useWorkshopStore.getState()
+    // a crew venture's cards/threads/milestones travel through the SHARE
+    // (modules/workshop/shareSource), not here — one namespace per record, or
+    // two members' personal copies would fight the crew's. The VENTURE record
+    // itself is deliberately dual-homed: personal sync keeps carrying it
+    // (with `shareId` aboard) so this account's other devices learn of the
+    // crew from their own pull instead of watching the venture flicker out.
+    const shared = new Set(s.ventures.filter((v) => v.shareId).map((v) => v.id))
     return [
       ...s.ventures.map((x) => rec('workshop', 'venture', x.id, x)),
-      ...s.cards.map((x) => rec('workshop', 'card', x.id, x)),
-      ...s.threads.map((x) => rec('workshop', 'thread', x.id, x)),
-      ...s.milestones.map((x) => rec('workshop', 'milestone', x.id, x)),
+      ...s.cards.filter((c) => !shared.has(c.ventureId)).map((x) => rec('workshop', 'card', x.id, x)),
+      ...s.threads.filter((t) => !shared.has(t.ventureId)).map((x) => rec('workshop', 'thread', x.id, x)),
+      ...s.milestones.filter((m) => !shared.has(m.ventureId)).map((x) => rec('workshop', 'milestone', x.id, x)),
       // keyed by event id, stable and unique; orphans are inert and never
-      // buried — see pruneSessions.
+      // buried — see pruneSessions. Sessions stay personal even on a crew
+      // venture: the calendar event they annotate is personal.
       ...Object.entries(s.sessions).map(([eventId, meta]) =>
         rec('workshop', 'session', eventId, meta),
       ),
@@ -254,6 +237,8 @@ const workshopSource: SyncSource = {
       // device's present, not a record. Carried, two devices would fight over
       // whose stopwatch is real and a stale phone could resurrect a timer
       // stopped hours ago.
+      // ALSO ABSENT: `workEntries` and `members` — crew data, carried by the
+      // share sources; a member with no crews carries neither.
     ]
   },
   subscribe: (onChange) => useWorkshopStore.subscribe(onChange),

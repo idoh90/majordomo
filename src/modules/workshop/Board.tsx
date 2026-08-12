@@ -28,6 +28,7 @@ import {
   taskProgress,
   workshopStats,
 } from './lib'
+import { ShareSheet, crewsAvailable } from './ShareSheet'
 import { useWorkshopStore } from './store'
 import { safeHref } from './url'
 import type { BoardGroup } from './lib'
@@ -95,7 +96,7 @@ export function Board({
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
 
-  const [sheet, setSheet] = useState<'hang' | 'milestones' | 'column' | null>(null)
+  const [sheet, setSheet] = useState<'hang' | 'milestones' | 'column' | 'crew' | null>(null)
   const [editCard, setEditCard] = useState<BoardCard | null>(null)
   /** where a press on bare board asked for the new card to go */
   const [placeAt, setPlaceAt] = useState<PlaceSpot | null>(null)
@@ -105,12 +106,15 @@ export function Board({
    *  list is a place you work from rather than a door that shuts behind you */
   const [backToColumn, setBackToColumn] = useState(false)
 
+  const workEntries = useWorkshopStore((s) => s.workEntries)
+  const members = useWorkshopStore((s) => s.members)
+  const crewSize = venture.shareId ? (members[venture.shareId]?.length ?? 1) : 0
   const mine = cards.filter((c) => c.ventureId === venture.id)
   const groups = boardGroups(mine)
   const myThreads = threads.filter((t) => t.ventureId === venture.id)
-  const stats = workshopStats(activeEvents, sessions, ventures, now, weekStart)
+  const stats = workshopStats(activeEvents, sessions, ventures, now, weekStart, workEntries)
   const week = stats.perVenture[venture.id] ?? { fulfilledH: 0, bookedH: 0 }
-  const lifetime = lifetimeHours(activeEvents, sessions, venture.id)
+  const lifetime = lifetimeHours(activeEvents, sessions, venture, workEntries)
   const nextMs = nextMilestone(milestones, venture.id)
   const tasks = taskProgress(cards, venture.id)
 
@@ -231,6 +235,23 @@ export function Board({
             ? `${nextMs.title.toUpperCase()} · ${voice.workshop.countdown(daysUntil(nextMs.on, now)).toUpperCase()}`
             : voice.workshop.mattersPending}
         </button>
+        {crewsAvailable() && (
+          <button
+            type="button"
+            onClick={() => setSheet('crew')}
+            className="rounded-pill border px-3 py-1.5 font-display text-[9.5px] font-semibold tracking-[0.13em] transition-colors hover:text-ink [font-variant-numeric:tabular-nums]"
+            style={{
+              borderColor: venture.shareId
+                ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)'
+                : 'var(--color-line)',
+              color: venture.shareId ? 'var(--color-accent)' : 'var(--color-ink-faint)',
+            }}
+          >
+            {venture.shareId
+              ? voice.workshop.crew.crewButton(crewSize)
+              : voice.workshop.crew.shareButton}
+          </button>
+        )}
         <span className="ml-auto flex items-center gap-2.5">
           <BenchControl
             compact
@@ -311,6 +332,12 @@ export function Board({
         venture={venture}
         milestones={milestones.filter((m) => m.ventureId === venture.id)}
         now={now}
+        butler={butler}
+      />
+      <ShareSheet
+        open={sheet === 'crew'}
+        onClose={() => setSheet(null)}
+        venture={venture}
         butler={butler}
       />
     </div>
@@ -499,6 +526,78 @@ const TAP_SLOP = 6
 const ZOOM_MIN = 0.4
 const ZOOM_MAX = 1.6
 const VIEW_H = 560
+
+/**
+ * Two fingers on the board mean the BOARD, not the page.
+ *
+ * `core/ui/zoomLock` refuses the browser's pinch app-wide, this surface
+ * included — the app is an instrument, and a scaled viewport is a state a
+ * home-screen install cannot get out of. Cancelling a default never stops the
+ * event being delivered, though, so the same two fingers still arrive here and
+ * scale the WALL instead. This is the one place in the app that pinches.
+ *
+ * Bound natively rather than through React, for the same reason the wheel
+ * handler below is: React's root touch listeners are passive, so a
+ * `preventDefault` through `onTouchMove` is a no-op and the page pans away
+ * underneath the gesture.
+ *
+ * Reports the ratio since the last MOVE, not since the pinch began, so the
+ * caller stays a plain multiply against whatever zoom it already had — plus
+ * the midpoint, so the card between the fingers stays between them.
+ */
+function usePinch(
+  ref: React.RefObject<HTMLElement | null>,
+  onPinch: (factor: number, cx: number, cy: number) => void,
+  onStart?: () => void,
+) {
+  const pinch = useRef(onPinch)
+  pinch.current = onPinch
+  const start = useRef(onStart)
+  start.current = onStart
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const spread = (t: TouchList) =>
+      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    let last = 0
+
+    const down = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return
+      last = spread(e.touches)
+      start.current?.()
+    }
+    const move = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !last) return
+      if (e.cancelable) e.preventDefault()
+      const d = spread(e.touches)
+      // a fingertip wanders a pixel while the hand is still: under that, the
+      // gesture is a two-finger hold, not a pinch
+      if (Math.abs(d - last) < 1) return
+      const t = e.touches
+      pinch.current(
+        d / last,
+        (t[0].clientX + t[1].clientX) / 2,
+        (t[0].clientY + t[1].clientY) / 2,
+      )
+      last = d
+    }
+    const up = (e: TouchEvent) => {
+      if (e.touches.length < 2) last = 0
+    }
+
+    el.addEventListener('touchstart', down, { passive: true })
+    el.addEventListener('touchmove', move, { passive: false })
+    el.addEventListener('touchend', up)
+    el.addEventListener('touchcancel', up)
+    return () => {
+      el.removeEventListener('touchstart', down)
+      el.removeEventListener('touchmove', move)
+      el.removeEventListener('touchend', up)
+      el.removeEventListener('touchcancel', up)
+    }
+  }, [ref])
+}
 
 function DesktopBoard({
   ventureId,
@@ -733,6 +832,10 @@ function DesktopBoard({
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
+
+  // a pinch abandons the pan the first finger started, so the wall doesn't
+  // slide while it scales (and the press never lands as "hang a card here")
+  usePinch(viewRef, (f, cx, cy) => zoomAt(f, cx, cy), () => setPan(null))
 
   return (
     <div className="trough relative hidden select-none md:block">
@@ -1301,9 +1404,10 @@ function CardFace({
 /**
  * The phone pages the wall one GROUP at a time: a heading and everything hung
  * under it is a single snap page, so the organisation the headings give the
- * board is exactly what a thumb swipes through. No pan and no zoom here —
- * paging is the phone's navigation, and a pinch-scaled wall on a 390 px screen
- * is a worse way to read the same cards.
+ * board is exactly what a thumb swipes through. No pan here — paging is the
+ * phone's navigation, and dragging a 390 px wall around would only fight it.
+ * Zoom stays, because a dense column on a phone is the one thing worth
+ * scaling: the trio, or a pinch, both feeding the same `z`.
  */
 function MobileBoard({
   ventureId,
@@ -1335,6 +1439,10 @@ function MobileBoard({
   const linked = (a: BoardCard, b: BoardCard) => threadedPair(threads, a.id, b.id)
 
   const zoomBy = (f: number) => setZ((v) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v * f)))
+
+  // the phone's pinch scales the column, never the page — the only two-finger
+  // gesture the app still answers (core/ui/zoomLock refuses the rest)
+  usePinch(scroller, (f) => zoomBy(f))
 
   /** a tap on a card: the far end of an armed thread, or the editor as usual */
   const tapCard = (card: BoardCard) => {

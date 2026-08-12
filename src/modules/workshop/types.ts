@@ -22,6 +22,13 @@ export interface Venture {
   shippedAt?: string
   /** ISO instant */
   createdAt: string
+  /**
+   * Set when the venture belongs to a crew. The venture record itself stays in
+   * PERSONAL sync (each member keeps their own `order`/`archived`); its cards,
+   * threads, milestones and the work ledger travel through the share instead.
+   * The share-space copy is authoritative for name/status/goalH/shippedAt only.
+   */
+  shareId?: string
 }
 
 /** `title` is the organising card: it heads a column and owns the cards
@@ -53,6 +60,9 @@ export interface BoardCard {
   url?: string
   /** task state */
   done?: boolean
+  /** who struck it — a user id, stamped only on a crew venture's board, so the
+   *  contribution panel can say whose hands did the work. Cleared on unstrike. */
+  doneBy?: string
   /**
    * A TASK's delivery deadline — an ISO instant, so the hour is part of it
    * ("Friday, 18:00", not "Friday"). It projects a Manor marker on its local
@@ -116,4 +126,30 @@ export interface Bench {
   ventureId: string
   /** epoch ms */
   startedAt: number
+}
+
+/**
+ * One member's fulfilled hours from one session, in the crew's work ledger —
+ * the ONLY thing about a session that travels through a share. The session
+ * itself is a private calendar event on its author's Manor; this is the
+ * receipt. Keyed by the author's event id (a map entry, like `sessions`),
+ * which is what makes re-writing it idempotent.
+ */
+export interface WorkEntry {
+  ventureId: string
+  /** ISO instant the session started — day/week bucketing happens at read
+   *  time in the viewer's local time, like everything else in the app */
+  at: string
+  /** fulfilled hours; 0 when the session was walked back to planned/skipped */
+  h: number
+  /** the author's user id */
+  by: string
+}
+
+/** one name on a crew's roster — cached locally so labels render offline */
+export interface ShareMember {
+  userId: string
+  label: string
+  /** ISO instant */
+  joinedAt: string
 }

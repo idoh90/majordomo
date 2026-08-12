@@ -1009,6 +1009,71 @@ export interface VoicePack {
     archiveTitle: string
     archiveBody: (name: string) => string
     archiveYes: string
+    /** the crew — a venture opened to another pair of hands via a code */
+    crew: {
+      /** board-header door: private venture vs crewed (member count) */
+      shareButton: string
+      crewButton: (n: number) => string
+      /** badge on a crewed shelf card */
+      badge: string
+      sheetTitle: string
+      /** what opening the venture to a crew does — shown before the code exists */
+      blurb: string
+      /** the sheet once crewed — code on display */
+      blurbCrewed: string
+      cta: string
+      creating: string
+      codeLabel: string
+      copyCode: string
+      copyLink: string
+      copied: string
+      rosterTitle: string
+      you: string
+      owner: string
+      kick: string
+      kickTitle: string
+      kickBody: (label: string) => string
+      kickYes: string
+      leave: string
+      leaveTitle: string
+      leaveBody: string
+      leaveYes: string
+      unshare: string
+      unshareTitle: string
+      unshareBody: string
+      unshareYes: string
+      /** deleting a crewed venture deletes it for the whole crew — said plainly */
+      deleteTitle: string
+      deleteBody: (name: string) => string
+      deleteYes: string
+      contributionTitle: string
+      /** contribution figures — hours are shown to one decimal upstream */
+      weekH: (h: number) => string
+      totalH: (h: number) => string
+      tasksDone: (n: number) => string
+      /** the join door on the shelf */
+      joinButton: string
+      joinTitle: string
+      joinBlurb: string
+      codePlaceholder: string
+      joinCta: string
+      joining: string
+      toast: {
+        shared: string
+        joined: string
+        joinUnknown: string
+        left: string
+        unshared: string
+        kicked: string
+        needsSignIn: string
+        offline: string
+        /** a ?join link arrived while signed out — the code waits */
+        linkHeld: string
+        demoOff: string
+      }
+      /** transport trouble, in the user's words */
+      errorLine: (msg: string) => string
+    }
     /** menu-tile labels */
     tileNextMs: string
     tileWeek: string

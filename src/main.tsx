@@ -17,6 +17,7 @@ import { lockZoom } from './core/ui/zoomLock'
 import { voice } from './core/voice'
 import { initAuth } from './core/auth/store'
 import { initSync } from './app/sync/init'
+import { initJoinGate } from './app/share/joinGate'
 import { initOnboarding } from './app/onboarding/store'
 import { useShellStore } from './core/store/shell'
 
@@ -56,6 +57,9 @@ try {
   // takes the estate as its baseline and watches for edits. Records nothing as
   // deleted, ever — only the actions that delete may say that (core/sync/intent).
   initSync()
+  // a ?join=CODE invite: stash the code (it must survive an OAuth round-trip),
+  // strip the param, and open the sign-in door if one is needed.
+  initJoinGate()
   // …and only then decide whether this boot is somebody's first: the setup reads
   // the estate to know whether there is anything here already.
   initOnboarding()

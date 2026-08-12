@@ -4,7 +4,8 @@ import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
 import { voice } from '../../core/voice'
-import { daysUntil, nextMilestone, reconcileMarkers, workshopStats } from './lib'
+import { useAuthStore } from '../../core/auth/store'
+import { daysUntil, nextMilestone, reconcileMarkers, workLedgerPatch, workshopStats } from './lib'
 import { useWorkshopStore } from './store'
 import { WorkshopBriefing } from './Briefing'
 import { WorkshopScreen } from './WorkshopScreen'
@@ -15,6 +16,7 @@ function Tile() {
   const ventures = useWorkshopStore((s) => s.ventures)
   const sessions = useWorkshopStore((s) => s.sessions)
   const milestones = useWorkshopStore((s) => s.milestones)
+  const workEntries = useWorkshopStore((s) => s.workEntries)
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
 
@@ -32,7 +34,7 @@ function Tile() {
       </>
     )
   }
-  const stats = workshopStats(events, sessions, ventures, now, weekStart)
+  const stats = workshopStats(events, sessions, ventures, now, weekStart, workEntries)
   return (
     <>
       <span className="stat-num text-2xl leading-tight text-ink">
@@ -55,7 +57,17 @@ function Briefing() {
     const store = useEventsStore.getState()
     const ws = useWorkshopStore.getState()
     reconcileMarkers(ws.milestones, ws.cards, Date.now())
-    if (!store.sandbox) ws.pruneSessions(store.events.map((e) => e.id))
+    if (!store.sandbox) {
+      ws.pruneSessions(store.events.map((e) => e.id))
+      const patch = workLedgerPatch(
+        store.events,
+        ws.sessions,
+        ws.ventures,
+        ws.workEntries,
+        useAuthStore.getState().userId,
+      )
+      if (Object.keys(patch).length > 0) ws.upsertWorkEntries(patch)
+    }
   }, [])
 
   if (ventures.filter((v) => !v.archived).length === 0) return null

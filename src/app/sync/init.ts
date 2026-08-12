@@ -3,6 +3,7 @@ import { armed, offReason } from '../../core/sync/gate'
 import { useSyncStore } from '../../core/sync/store'
 import { SYNC_SOURCES } from './registry'
 import { startService, syncNow } from './service'
+import { shareDebug, shareSyncNow, startShareService } from './shareService'
 
 /**
  * Wire the engine to the wings. Called at module scope from main.tsx, beside
@@ -20,6 +21,9 @@ export function initSync(): void {
   // noticed, and it must not start noticing halfway through its own baseline
   start(SYNC_SOURCES)
   startService()
+  // the crew loop rides beside the personal one, its own engine over its own
+  // queue; it baselines whatever crews the blob already holds inside
+  startShareService()
 }
 
 if (import.meta.env.DEV) {
@@ -40,5 +44,9 @@ if (import.meta.env.DEV) {
     off: offReason,
     /** force a cycle; `repair` re-pulls the whole registry from scratch */
     now: syncNow,
+  }
+  ;(window as unknown as Record<string, unknown>).__share = {
+    state: shareDebug,
+    now: shareSyncNow,
   }
 }

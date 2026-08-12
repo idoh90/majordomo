@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { addDays, atHour, startOfWeek } from '../../core/dates'
+import { useAuthStore } from '../../core/auth/store'
 import { hoursOf, rangeFree } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
@@ -12,6 +13,7 @@ import { voice } from '../../core/voice'
 import { WorkshopBriefing } from './Briefing'
 import { Board } from './Board'
 import { BenchControl } from './bench'
+import { JoinSheet, crewsAvailable } from './ShareSheet'
 import {
   COPPER,
   DayStrip,
@@ -29,6 +31,7 @@ import {
 import {
   awaitingReport,
   daysSinceTouched,
+  workLedgerPatch,
   daysUntil,
   lifetimeHours,
   metaOf,
@@ -59,6 +62,7 @@ export function WorkshopScreen() {
   const activeEvents = useEventsStore((s) => (s.sandbox ? s.sandbox.events : s.events))
   const ventures = useWorkshopStore((s) => s.ventures)
   const sessions = useWorkshopStore((s) => s.sessions)
+  const workEntries = useWorkshopStore((s) => s.workEntries)
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
 
@@ -100,17 +104,28 @@ export function WorkshopScreen() {
     useWorkshopUi.getState().clearBoardRequest()
   }, [boardRequested])
 
-  // upkeep on entry: heal markers, drop meta for events deleted Manor-side.
-  // Both are sandbox-guarded (reconcileMarkers internally; prune here).
+  // upkeep on entry: heal markers, drop meta for events deleted Manor-side,
+  // and true up my crew-ledger entries against my own sessions. All
+  // sandbox-guarded (reconcileMarkers internally; the rest here).
   useEffect(() => {
     const events = useEventsStore.getState()
     const ws = useWorkshopStore.getState()
     reconcileMarkers(ws.milestones, ws.cards, Date.now())
-    if (!events.sandbox) ws.pruneSessions(events.events.map((e) => e.id))
+    if (!events.sandbox) {
+      ws.pruneSessions(events.events.map((e) => e.id))
+      const patch = workLedgerPatch(
+        events.events,
+        ws.sessions,
+        ws.ventures,
+        ws.workEntries,
+        useAuthStore.getState().userId,
+      )
+      if (Object.keys(patch).length > 0) ws.upsertWorkEntries(patch)
+    }
   }, [])
 
   const active = ventures.filter((v) => !v.archived)
-  const stats = workshopStats(activeEvents, sessions, ventures, now, weekStart)
+  const stats = workshopStats(activeEvents, sessions, ventures, now, weekStart, workEntries)
 
   const board = boardFor ? (active.find((v) => v.id === boardFor) ?? null) : null
 
@@ -425,6 +440,7 @@ function MattersPending({
   onOpen: (ventureId: string) => void
 }) {
   const milestones = useWorkshopStore((s) => s.milestones)
+  const workEntries = useWorkshopStore((s) => s.workEntries)
   const live = new Set(ventures.filter((v) => !v.archived).map((v) => v.id))
   const pending = pendingMilestones(milestones).filter((m) => live.has(m.ventureId))
   const nameOf = (m: Milestone) => ventures.find((v) => v.id === m.ventureId)?.name ?? '—'
@@ -473,7 +489,9 @@ function MattersPending({
                 <div className="mt-1.5 text-xs text-ink-dim [font-variant-numeric:tabular-nums]">
                   {overdue
                     ? voice.workshop.overdueNote
-                    : voice.workshop.hoursToward(milestoneProgress(m, events, sessions))}
+                    : voice.workshop.hoursToward(
+                        milestoneProgress(m, events, sessions, ventures, workEntries),
+                      )}
                 </div>
               </button>
             )
@@ -766,6 +784,7 @@ function Shelf({
   const milestones = useWorkshopStore((s) => s.milestones)
   const cards = useWorkshopStore((s) => s.cards)
   const [confirmArchive, setConfirmArchive] = useState<Venture | null>(null)
+  const [joinOpen, setJoinOpen] = useState(false)
   const shipped = ventures.filter((v) => v.status === 'shipped').length
 
   return (
@@ -802,6 +821,16 @@ function Shelf({
       >
         {voice.workshop.openVenture}
       </button>
+      {crewsAvailable() && (
+        <button
+          type="button"
+          onClick={() => setJoinOpen(true)}
+          className="mt-2 w-full py-1.5 text-center font-display text-[9.5px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:text-ink-dim"
+        >
+          {voice.workshop.crew.joinButton}
+        </button>
+      )}
+      <JoinSheet open={joinOpen} onClose={() => setJoinOpen(false)} butler={butler} />
 
       <ConfirmDialog
         open={confirmArchive !== null}
@@ -844,8 +873,9 @@ function ShelfCard({
   onArchive: () => void
   butler: (msg: string) => void
 }) {
-  const lifetime = lifetimeHours(events, sessions, venture.id)
-  const quiet = daysSinceTouched(events, sessions, venture.id, now)
+  const workEntries = useWorkshopStore((s) => s.workEntries)
+  const lifetime = lifetimeHours(events, sessions, venture, workEntries)
+  const quiet = daysSinceTouched(events, sessions, venture, now, workEntries)
   const shippedMonth = venture.shippedAt
     ? MO_LONG[new Date(venture.shippedAt).getMonth()]
     : null
@@ -906,6 +936,17 @@ function ShelfCard({
           {venture.name.toUpperCase()}
         </span>
         <StatusPill status={venture.status} />
+        {venture.shareId && (
+          <span
+            className="rounded-pill border px-2 py-0.5 font-display text-[8.5px] font-semibold tracking-[0.14em]"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--color-accent) 45%, transparent)',
+              color: 'var(--color-accent)',
+            }}
+          >
+            {voice.workshop.crew.badge}
+          </span>
+        )}
       </div>
       {/* jobs first, hours second — see VentureRing for why round this way */}
       <div className="mt-2.5 flex items-baseline gap-2">

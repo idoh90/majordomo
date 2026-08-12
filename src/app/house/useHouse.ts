@@ -30,6 +30,7 @@ export function useHouse(): HouseModel {
   const exams = useStudyStore((s) => s.exams)
   const ventures = useWorkshopStore((s) => s.ventures)
   const wsSessions = useWorkshopStore((s) => s.sessions)
+  const wsEntries = useWorkshopStore((s) => s.workEntries)
   const milestones = useWorkshopStore((s) => s.milestones)
   const accounts = useCapitalStore((s) => s.accounts)
   const snapshots = useCapitalStore((s) => s.snapshots)
@@ -55,6 +56,7 @@ export function useHouse(): HouseModel {
         exams,
         ventures,
         wsSessions,
+        wsEntries,
         milestones,
         accounts,
         snapshots,
@@ -82,6 +84,7 @@ export function useHouse(): HouseModel {
       exams,
       ventures,
       wsSessions,
+      wsEntries,
       milestones,
       accounts,
       snapshots,

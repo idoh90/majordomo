@@ -33,11 +33,12 @@ export function WorkshopBriefing({
   const milestones = useWorkshopStore((s) => s.milestones)
   const cards = useWorkshopStore((s) => s.cards)
   const bench = useWorkshopStore((s) => s.bench)
+  const workEntries = useWorkshopStore((s) => s.workEntries)
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
 
   const active = ventures.filter((v) => !v.archived)
-  const stats = workshopStats(events, sessions, ventures, now, weekStart)
+  const stats = workshopStats(events, sessions, ventures, now, weekStart, workEntries)
 
   const liveIds = new Set(active.map((v) => v.id))
   const next = nextMilestone(milestones.filter((m) => liveIds.has(m.ventureId)))
@@ -47,7 +48,7 @@ export function WorkshopBriefing({
   let quiet: WorkshopBriefingFacts['quiet'] = null
   for (const v of active) {
     if (v.status !== 'building') continue
-    const d = daysSinceTouched(events, sessions, v.id, now)
+    const d = daysSinceTouched(events, sessions, v, now, workEntries)
     if (d !== null && d >= 7 && (!quiet || d > quiet.days)) quiet = { venture: v.name, days: d }
   }
 
@@ -64,7 +65,7 @@ export function WorkshopBriefing({
           venture: nameOf(next.ventureId),
           title: next.title,
           days: daysUntil(next.on, now),
-          towardH: milestoneProgress(next, events, sessions),
+          towardH: milestoneProgress(next, events, sessions, ventures, workEntries),
         }
       : null,
     awaiting: awaitingReport(events, sessions, now).length,
