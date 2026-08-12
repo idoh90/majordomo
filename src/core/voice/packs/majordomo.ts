@@ -48,6 +48,12 @@ function sentence(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+/** "Today"/"Tomorrow" are proper nouns at the head of a sentence and plain
+ *  words inside one; weekday names stay capitalised either way. */
+function midSentence(label: string): string {
+  return label === 'Today' || label === 'Tomorrow' ? label.toLowerCase() : label
+}
+
 /** "9 h 20 m" — the countdown format the Watch already prints */
 function untilLabel(h: number, m: number): string {
   return h > 0 ? `${h} h ${String(m).padStart(2, '0')} m` : `${m} m`
@@ -130,11 +136,405 @@ export const majordomoPack: VoicePack = {
   },
   briefing: {
     label: 'THE BRIEFING',
-    subtitle: 'each wing, in its own numbers',
     expand: 'Show the full briefing',
     collapse: 'Show less',
-    rowExpand: (scope) => `Read the briefing for ${scope}`,
-    rowCollapse: (scope) => `Close the briefing for ${scope}`,
+    brief: {
+      stamp: ({ time, day }) => `WRITTEN ${time} · ${day}`,
+      skip: 'SKIP',
+      penButton: 'THE PEN',
+      pen: {
+        title: 'THE PEN',
+        sub: 'what the brief covers',
+        close: 'Close',
+        note: 'The brief is rewritten when you close this.',
+        counselLabel: 'ADVICE',
+        counselNote: 'his suggestions and warnings',
+      },
+      areaLabel: {
+        shifts: 'SHIFTS',
+        sleep: 'SLEEP',
+        workouts: 'WORKOUTS',
+        muscles: 'MUSCLES',
+        food: 'FOOD',
+        bench: 'BENCH',
+        study: 'STUDY',
+        reports: 'REPORTS',
+        worth: 'NET WORTH',
+        spending: 'SPENDING',
+      },
+      greeting: (hour) =>
+        hour < 5
+          ? 'Good evening.'
+          : hour < 12
+            ? 'Good morning.'
+            : hour < 18
+              ? 'Good afternoon.'
+              : 'Good evening.',
+      closing: {
+        quiet: 'Nothing else needs you today, sir.',
+        silent: 'The wings have been asked to keep quiet. Nothing needs you, sir.',
+      },
+      line: {
+        shifts: ({ watch: w }) => {
+          if (!w) return null
+          if (w.expectedH === 0 && w.doneH === 0 && !w.next) return null
+          const parts: string[] = []
+          if (w.expectedH > 0) {
+            parts.push(`You have worked ${w.doneH.toFixed(1)} of ${w.expectedH.toFixed(1)} hours this week.`)
+          } else if (w.doneH > 0) {
+            parts.push(`You have worked ${w.doneH.toFixed(1)} hours this week.`)
+          } else {
+            parts.push('No shifts on the books this week.')
+          }
+          if (w.next) {
+            parts.push(
+              `The next ${w.next.night ? 'night shift' : 'shift'} starts ${midSentence(w.next.dayLabel)} at ${w.next.at}.`,
+            )
+          }
+          return parts.join(' ')
+        },
+        sleep: ({ watch: w }) =>
+          !w || w.sleepH <= 0
+            ? null
+            : `${w.sleepH.toFixed(1)} hours of recovery sleep are pencilled in after this week's nights.`,
+        workouts: ({ grounds: g }) => {
+          if (!g) return null
+          // "No of four workouts are done" is what naming the goal first costs
+          // on a quiet week; a zero is a sentence, not a score
+          const week =
+            g.done === 0
+              ? 'Nothing has been logged this week.'
+              : g.goal > 0
+                ? `${word(g.done)} of ${lower(g.goal)} workouts ${plural(g.done, 'is', 'are')} done this week.`
+                : `${word(g.done)} ${plural(g.done, 'workout is', 'workouts are')} done this week.`
+          const parts = [week]
+          // readiness off an empty history is 100 by construction, which reads
+          // as a claim about a body nobody has measured
+          if (g.sinceLastH !== null) parts.push(`Readiness is ${g.readiness.score} of 100.`)
+          if (g.nextBlock) {
+            parts.push(`${g.nextBlock.title} is next, ${midSentence(g.nextBlock.dayLabel)}.`)
+          }
+          return parts.join(' ')
+        },
+        muscles: ({ grounds: g }) => {
+          if (!g || !g.top) return null
+          if (g.hot === 0) {
+            return `Nothing is sore. ${g.top.name} is the last group still warm, at ${g.top.strain.toFixed(1)}.`
+          }
+          const cold = g.coldest ? ` ${g.coldest} is the freshest.` : ''
+          return `${sentence(word(g.hot))} ${plural(g.hot, 'muscle group is', 'muscle groups are')} still sore — ${g.top.name} leads at ${g.top.strain.toFixed(1)}.${cold}`
+        },
+        food: ({ grounds: g }) =>
+          !g || g.kcal <= 0
+            ? null
+            : `Today wants ${g.kcal.toLocaleString('en-US')} kcal and ${g.protein} g of protein across ${lower(g.meals)} ${plural(g.meals, 'meal', 'meals')} — ${g.isTrainingDay ? 'training-day' : 'rest-day'} rates.`,
+        bench: ({ workshop: k }) => {
+          if (!k) return null
+          if (k.benchLive) return `The bench clock is running on ${k.benchLive.venture} right now.`
+          const parts: string[] = []
+          if (k.goalH > 0) {
+            parts.push(`The bench has ${k.fulfilledH.toFixed(1)} of ${k.goalH.toFixed(1)} hours this week.`)
+          } else if (k.fulfilledH > 0) {
+            parts.push(`The bench has ${k.fulfilledH.toFixed(1)} hours this week.`)
+          }
+          if (k.milestone) {
+            const m = k.milestone
+            parts.push(
+              m.days < 0
+                ? `${m.title} for ${m.venture} is ${lower(-m.days)} ${plural(-m.days, 'day', 'days')} late.`
+                : m.days === 0
+                  ? `${m.title} for ${m.venture} is due today.`
+                  : `${m.title} for ${m.venture} is ${lower(m.days)} ${plural(m.days, 'day', 'days')} out.`,
+            )
+          }
+          return parts.length > 0 ? parts.join(' ') : null
+        },
+        study: ({ study: s }) => {
+          if (!s) return null
+          const parts: string[] = []
+          if (s.goalH > 0) {
+            parts.push(`The Study has ${s.fulfilledH.toFixed(1)} of ${s.goalH.toFixed(1)} hours this week.`)
+          } else if (s.fulfilledH > 0) {
+            parts.push(`The Study has ${s.fulfilledH.toFixed(1)} hours this week.`)
+          }
+          if (s.exam) {
+            const e = s.exam
+            const when =
+              e.days <= 0 ? 'is today' : e.days === 1 ? 'is tomorrow' : `is ${lower(e.days)} days away`
+            parts.push(
+              e.aheadH > 0
+                ? `The ${e.subject} exam ${when}, with ${e.aheadH.toFixed(1)} hours booked before it.`
+                : `The ${e.subject} exam ${when}, and nothing is booked before it.`,
+            )
+          }
+          return parts.length > 0 ? parts.join(' ') : null
+        },
+        reports: ({ study: s }) => {
+          if (!s) return null
+          const parts: string[] = []
+          if (s.awaiting > 0) {
+            parts.push(
+              `${sentence(word(s.awaiting))} ${plural(s.awaiting, 'session is', 'sessions are')} still waiting on a report.`,
+            )
+          }
+          if (s.dueCount > 0) {
+            parts.push(
+              `${sentence(word(s.dueCount))} ${plural(s.dueCount, 'piece', 'pieces')} of homework ${plural(s.dueCount, 'is', 'are')} due this week.`,
+            )
+          }
+          return parts.length > 0 ? parts.join(' ') : null
+        },
+        worth: ({ ledger: l }) => {
+          if (!l) return null
+          return l.delta
+            ? `The Ledger holds ${l.netWorth}, ${l.delta.up ? 'up' : 'down'} ${l.delta.amount} since ${l.delta.basis}.`
+            : `The Ledger holds ${l.netWorth}.`
+        },
+        spending: ({ ledger: l }) => {
+          if (!l) return null
+          const parts: string[] = []
+          if (l.hasBudget) {
+            parts.push(`You have spent ${l.spent} of ${l.budget} this month.`)
+          } else if (l.perDay) {
+            parts.push(`You have spent ${l.spent} this month.`)
+          } else {
+            return null
+          }
+          if (l.perDay) parts.push(`That runs ${l.perDay} a day.`)
+          if (l.allowancePerDay) parts.push(`${l.allowancePerDay} a day is left to the end of it.`)
+          return parts.join(' ')
+        },
+      },
+      counsel: {
+        shifts: ({ watch: w }) =>
+          w && w.turnaroundH !== null && w.turnaroundH < 10
+            ? `Two of those shifts sit ${w.turnaroundH.toFixed(0)} hours apart. That is tight.`
+            : null,
+        sleep: ({ watch: w }) =>
+          w && w.nights > 0 && w.sleepH < w.nights * 6
+            ? 'I would leave that sleep where it is.'
+            : null,
+        workouts: ({ grounds: g }) =>
+          g && g.nextBlock && (g.readiness.band === 'worn' || g.readiness.band === 'spent')
+            ? 'You are worn down. I would take that one easy.'
+            : null,
+        muscles: ({ grounds: g }) =>
+          g && g.hot >= 4 ? 'That is a lot to be carrying. A rest day would settle it.' : null,
+        food: () => null,
+        bench: ({ workshop: k }) =>
+          k && k.milestone && k.milestone.days >= 0 && k.milestone.days <= 7 && k.fulfilledH < k.goalH
+            ? 'The bench is behind, with that date close.'
+            : null,
+        study: ({ study: s }) =>
+          s && s.exam && s.exam.days >= 0 && s.exam.days <= 14 && s.exam.aheadH < 2
+            ? 'I would book a session before it.'
+            : null,
+        reports: () => null,
+        worth: () => null,
+        spending: ({ ledger: l }) =>
+          !l || !l.hasBudget
+            ? null
+            : l.over
+              ? 'You are past the budget for this month.'
+              : !l.underPace
+                ? 'Spending is running ahead of pace.'
+                : null,
+      },
+      instruments: {
+        title: 'THE INSTRUMENTS',
+        sub: "four dials, picked for today — what moved, what's owed, what's close",
+      },
+      shelf: {
+        title: 'ALSO ON FILE',
+        note: 'Pick a chip, then choose the dial it replaces. Drag across a chart to read it point by point.',
+        picking: (label) => `Choose the dial ${label} replaces — or press its chip again to leave things as they are.`,
+        place: (label) => `PUT ${label} HERE`,
+        replaces: (cat) => `replaces ${cat}`,
+      },
+      noDials: 'Nothing on file to draw yet.',
+      dialName: {
+        bodyheat: 'BODY HEAT',
+        strain: 'SORENESS',
+        readiness: 'READINESS',
+        volume: 'VOLUME',
+        sessions: 'WORKOUTS',
+        watchhours: 'HOURS WORKED',
+        sleep: 'SLEEP',
+        turnaround: 'TURNAROUND',
+        nights: 'NIGHT SHIFTS',
+        studyhours: 'STUDY HOURS',
+        examclock: 'EXAM COUNTDOWN',
+        homework: 'HOMEWORK',
+        bench: 'BENCH HOURS',
+        networth: 'NET WORTH',
+        spending: 'SPENDING',
+        worthmoves: 'CHANGES',
+        booked: 'BOOKED HOURS',
+      },
+      dialRange: {
+        bodyheat: 'RIGHT NOW',
+        strain: "THIS WEEK + WHAT'S COMING",
+        readiness: 'LAST 14 DAYS',
+        volume: 'LAST 8 WEEKS',
+        sessions: 'LAST 8 WEEKS',
+        watchhours: 'LAST 8 WEEKS',
+        sleep: 'LAST 7 NIGHTS',
+        turnaround: 'LAST 8 GAPS',
+        nights: 'LAST 8 WEEKS',
+        studyhours: 'LAST 8 WEEKS',
+        examclock: 'UP TO THE EXAM',
+        homework: 'LAST 8 WEEKS',
+        bench: 'LAST 8 WEEKS',
+        networth: 'EVERY SNAPSHOT',
+        spending: 'THIS MONTH',
+        worthmoves: 'BETWEEN SNAPSHOTS',
+        booked: 'THIS WEEK',
+      },
+      dial: {
+        bodyheat: ({ hot, muscles, top, topStrain, readiness }) => ({
+          headSub: top ? `${top} ${topStrain.toFixed(1)} · ready ${readiness}` : `ready ${readiness}`,
+          why:
+            hot === 0
+              ? 'Everything has recovered. You can train what you like.'
+              : `${sentence(word(hot))} of ${lower(muscles)} groups still carry soreness.`,
+        }),
+        strain: ({ now, peak, peakLabel, hotLine }) => ({
+          headSub: peak > now && peakLabel ? `peaks ${peak.toFixed(1)} ${peakLabel}` : 'settling',
+          why:
+            peak >= hotLine
+              ? 'Soreness already owed but not yet felt. The line crosses sore before it drops.'
+              : 'Nothing ahead crosses the sore line. The week is clear to train.',
+        }),
+        readiness: ({ now, avg, band }) => ({
+          headSub:
+            { fresh: 'fresh', ready: 'ready', worn: 'worn down', spent: 'wiped out' }[band],
+          why:
+            now >= avg
+              ? 'Better than your usual fortnight.'
+              : 'Below your usual fortnight — the week has cost something.',
+        }),
+        volume: ({ now, avg }) => ({
+          headSub: avg > 0 ? `usually ${avg.toFixed(0)}` : 'week in progress',
+          why:
+            avg <= 0
+              ? 'The first weeks on record. Nothing to compare against yet.'
+              : now >= avg
+                ? 'A heavier week than usual for hard sets.'
+                : 'A lighter week than usual for hard sets.',
+        }),
+        sessions: ({ now, goal, avg }) => ({
+          headSub: goal > 0 ? `of ${goal} this week` : 'this week',
+          why:
+            avg <= 0
+              ? 'The first weeks on record.'
+              : now >= avg
+                ? 'At or above your usual count.'
+                : 'Under your usual count for a week.',
+        }),
+        watchhours: ({ doneH, expectedH, avg, remaining }) => ({
+          headSub: expectedH > 0 ? `of ${expectedH.toFixed(1)} booked` : 'this week',
+          why:
+            remaining > 0
+              ? `${sentence(word(remaining))} more ${plural(remaining, 'shift', 'shifts')} to go. The bar fills as they are worked.`
+              : avg > 0 && doneH > avg
+                ? 'A heavier week than usual on shift.'
+                : 'Every shift on the books is worked.',
+        }),
+        sleep: ({ last, avg, target }) => ({
+          headSub: last >= target ? 'the debt is repaid' : `short of ${target}`,
+          why:
+            avg >= target
+              ? 'The week averages out at target.'
+              : 'Nights cost sleep, and the days after repay it.',
+        }),
+        turnaround: ({ now, tightCount, tightLine }) => ({
+          headSub: now === null ? 'no gap to measure' : 'since the last shift',
+          why:
+            tightCount > 0
+              ? `${sentence(word(tightCount))} ${plural(tightCount, 'gap', 'gaps')} under ${tightLine} hours. Those are the ones that cost you.`
+              : 'Every gap gives you time to recover.',
+        }),
+        nights: ({ now, avg }) => ({
+          headSub: `${plural(now, 'night', 'nights')} this week`,
+          why:
+            avg <= 0
+              ? 'No night shifts on record yet.'
+              : now > avg
+                ? 'More nights than the rotation usually asks.'
+                : 'About what the rotation usually asks.',
+        }),
+        studyhours: ({ now, goalH, avg }) => ({
+          headSub: goalH > 0 ? `of ${goalH.toFixed(1)} this week` : 'this week',
+          why:
+            avg <= 0
+              ? 'The first weeks on record.'
+              : now >= avg
+                ? 'A stronger week than usual at the desk.'
+                : 'Study dips on shift-heavy weeks. This is one.',
+        }),
+        examclock: ({ subject, days, aheadH }) => ({
+          headSub:
+            aheadH > 0
+              ? `done for ${subject} · ${aheadH.toFixed(1)} h booked`
+              : `done for ${subject} · nothing booked`,
+          why:
+            days <= 0
+              ? 'The exam is here. This is everything you put in.'
+              : aheadH > 0
+                ? `${sentence(lower(days))} days out. The dashed line is where the booked sessions take you.`
+                : `${sentence(lower(days))} days out, and nothing is booked before it.`,
+        }),
+        homework: ({ open }) => ({
+          headSub: open > 0 ? `${open} still open` : 'nothing outstanding',
+          why:
+            open > 0
+              ? 'What you have struck, week by week. The open ones are still yours.'
+              : 'The docket is clear.',
+        }),
+        bench: ({ now, goalH, milestone }) => ({
+          headSub: goalH > 0 ? `of ${goalH.toFixed(1)} this week` : 'this week',
+          why: milestone
+            ? milestone.days < 0
+              ? `${milestone.title} is past its day.`
+              : `${milestone.title} is ${lower(milestone.days)} ${plural(milestone.days, 'day', 'days')} out.`
+            : now > 0
+              ? 'Bench hours, week by week.'
+              : 'The bench has been quiet.',
+        }),
+        networth: ({ delta, up, points }) => ({
+          headSub: delta ? `${up ? '▲' : '▼'} ${delta}` : `${points} ${plural(points, 'snapshot', 'snapshots')}`,
+          why:
+            points < 2
+              ? 'One snapshot so far. The line needs a second to say anything.'
+              : 'Every snapshot you have taken, in order.',
+        }),
+        spending: ({ under, hasBudget, perDay, day, days, allowance }) => ({
+          headSub: !hasBudget
+            ? `day ${day} of ${days}`
+            : under
+              ? allowance
+                ? `under pace — ${allowance} a day left`
+                : 'under pace'
+              : 'ahead of pace',
+          why: hasBudget
+            ? perDay
+              ? `Running ${perDay} a day. The dashed line is where even pace would sit.`
+              : 'The dashed line is where even pace would sit.'
+            : 'What has gone out this month, day by day. Set a budget and the pace line appears.',
+        }),
+        worthmoves: ({ total, up, count }) => ({
+          headSub: `${up ? 'up' : 'down'} over ${count} ${plural(count, 'move', 'moves')}`,
+          why: `Each bar is one snapshot against the one before it. ${total} across the lot.`,
+        }),
+        booked: ({ totalH, peakDay, peakH }) => ({
+          headSub: 'of the week’s 168 hours',
+          why:
+            totalH <= 0
+              ? 'Nothing booked this week.'
+              : `${peakDay} is the heaviest day, at ${peakH.toFixed(1)} hours.`,
+        }),
+      },
+    },
   },
   appName: 'Majordomo',
   wordmark: { lead: 'MAJORDOMO', accent: '' },
@@ -1779,7 +2179,7 @@ export const majordomoPack: VoicePack = {
       briefing:
         'How this wing is doing right now. Closed, you get the headline. Open it for the detail behind it.',
       briefingLedger:
-        'Every wing on one row, in its own three figures. Open a wing and the Majordomo says the rest of it.',
+        'The day in one paragraph, in each wing’s own colour, over four dials the house thought worth showing. THE PEN chooses what it covers; the chips below swap a dial.',
     },
     watch: {
       onDuty:

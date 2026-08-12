@@ -6,7 +6,6 @@ import { useShellStore } from '../../core/store/shell'
 import { voice } from '../../core/voice'
 import { daysUntil, nextExam, reconcileMarkers, studyStats } from './lib'
 import { useStudyStore } from './store'
-import { StudyBriefing } from './Briefing'
 import { StudyScreen } from './StudyScreen'
 
 /** Tile stat: countdown to the next examination, else hours read this week. */
@@ -44,12 +43,9 @@ function Tile() {
   )
 }
 
-/** One line on the Manor, pressing matters first. Also hosts the marker
- *  reconcile: it mounts wherever the Manor renders, so due chips heal and
- *  overdue ones trail to today even if the wing itself is never opened. */
-function Briefing() {
-  const subjects = useStudyStore((s) => s.subjects)
-
+/** The marker reconcile: it mounts wherever the Manor renders, so due chips
+ *  heal and overdue ones trail to today even if the wing is never opened. */
+function Upkeep() {
   useEffect(() => {
     const store = useEventsStore.getState()
     const study = useStudyStore.getState()
@@ -57,9 +53,7 @@ function Briefing() {
     if (!store.sandbox) study.pruneSessions(store.events.map((e) => e.id))
   }, [])
 
-  if (subjects.filter((s) => !s.archived).length === 0) return null
-
-  return <StudyBriefing variant="row" />
+  return null
 }
 
 function Icon() {
@@ -85,5 +79,5 @@ export const studyConsole: ConsoleModule = {
   Icon,
   Tile,
   Screen: StudyScreen,
-  Briefing,
+  Upkeep,
 }

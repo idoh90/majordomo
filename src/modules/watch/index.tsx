@@ -4,7 +4,6 @@ import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
 import { voice } from '../../core/voice'
 import { countdownLabel, watchStats } from './lib'
-import { WatchBriefing } from './Briefing'
 import { WatchScreen } from './WatchScreen'
 
 /** Tile stat: countdown to the next watch. */
@@ -45,5 +44,4 @@ export const watchConsole: ConsoleModule = {
   Screen: WatchScreen,
   // on the Manor the briefing is a ROW in the one consolidated panel; the wing
   // screen keeps the full panel, where there is only one of it to consolidate
-  Briefing: () => <WatchBriefing variant="row" />,
 }

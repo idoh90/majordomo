@@ -2,7 +2,6 @@ import { dayNameLabel, localDayKey } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
-import { BriefingRow } from '../../core/ui/BriefingLedger'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { StudyBriefingFacts } from '../../core/voice/types'
@@ -18,19 +17,17 @@ import {
 import { useStudyStore } from './store'
 
 /**
- * The Study's briefing.
+ * The Study's facts.
  *
  * The exam clause deliberately reports two different figures side by side:
  * hours already DONE toward the exam (examProgress) and hours still SCHEDULED
  * before it (bookedHoursBeforeExam). They are answers to different questions,
  * and the estate's worst contradiction to date came from printing one where
  * the other belonged — so both are named in words rather than collapsed into
- * a single "on the books".
+ * a single "on the books". A hook because the Manor's brief writes the same
+ * facts into prose.
  */
-export function StudyBriefing({
-  className = '',
-  variant = 'panel',
-}: { className?: string; variant?: 'panel' | 'row' } = {}) {
+export function useStudyBriefingFacts(): StudyBriefingFacts {
   const events = useEventsStore((s) => s.events)
   const subjects = useStudyStore((s) => s.subjects)
   const sessions = useStudyStore((s) => s.sessions)
@@ -59,7 +56,7 @@ export function StudyBriefing({
     .filter((e) => e.kind === 'study' && !e.allDay && new Date(e.start).getTime() > now)
     .sort((a, b) => a.start.localeCompare(b.start))[0]
 
-  const facts: StudyBriefingFacts = {
+  return {
     fulfilledH: stats.totalFulfilled,
     bookedH: stats.totalBooked,
     goalH: active.reduce((t, s) => t + s.goalH, 0),
@@ -89,19 +86,22 @@ export function StudyBriefing({
     // percentage taken over another would be two answers to one question
     topicsLeft: scoped.length > 0 ? scoped.length - covered : null,
   }
+}
 
+/** The Study's briefing panel, on its own wing. */
+export function StudyBriefing({ className = '' }: { className?: string } = {}) {
+  const facts = useStudyBriefingFacts()
   const p = voice.study.briefingPanel
-  const said = {
-    scope: voice.modules.study.name,
-    chips: p.chips(facts),
-    headline: p.headline(facts),
-    detail: p.detail(facts),
-    aside: p.aside(facts),
-  }
 
-  return variant === 'row' ? (
-    <BriefingRow id="study" accent="var(--color-w-study)" {...said} />
-  ) : (
-    <BriefingPanel className={className} accent="var(--color-w-study)" {...said} />
+  return (
+    <BriefingPanel
+      className={className}
+      accent="var(--color-w-study)"
+      scope={voice.modules.study.name}
+      chips={p.chips(facts)}
+      headline={p.headline(facts)}
+      detail={p.detail(facts)}
+      aside={p.aside(facts)}
+    />
   )
 }

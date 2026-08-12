@@ -3,7 +3,6 @@ import { dayNameLabel } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
-import { BriefingRow } from '../../core/ui/BriefingLedger'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { GroundsBriefingFacts } from '../../core/voice/types'
@@ -17,16 +16,12 @@ import { computeStrains, readiness, type StrainMap } from './lib/strain'
 import { useWorkoutStore } from './store'
 
 /**
- * The Grounds' briefing. Strain is recomputed here rather than passed in, but
- * keyed to the hour like everywhere else that samples the model — a minute
- * tick must not re-run sixteen recovery envelopes, and this strip renders on
- * the Manor as well as on its own wing.
+ * Strain is recomputed here rather than passed in, but keyed to the hour like
+ * everywhere else that samples the model — a minute tick must not re-run
+ * sixteen recovery envelopes. Exported as a hook because the Manor's brief
+ * writes the same facts into prose.
  */
-export function GroundsBriefing({
-  strains: given,
-  className = '',
-  variant = 'panel',
-}: { strains?: StrainMap; className?: string; variant?: 'panel' | 'row' } = {}) {
+export function useGroundsBriefingFacts(given?: StrainMap): GroundsBriefingFacts {
   const workouts = useWorkoutStore((s) => s.workouts)
   const weeklyGoal = useWorkoutStore((s) => s.weeklyGoal)
   const profile = useWorkoutStore((s) => s.profile)
@@ -69,7 +64,7 @@ export function GroundsBriefing({
     return latest === null || t > latest ? t : latest
   }, null)
 
-  const facts: GroundsBriefingFacts = {
+  return {
     done: thisWeekCount(workouts, nowDate, weekStart),
     goal: weeklyGoal,
     hot: hotIds.length,
@@ -94,19 +89,25 @@ export function GroundsBriefing({
       : null,
     blocksAhead: ahead.length,
   }
+}
 
+/** The Grounds' briefing panel, on its own wing. */
+export function GroundsBriefing({
+  strains,
+  className = '',
+}: { strains?: StrainMap; className?: string } = {}) {
+  const facts = useGroundsBriefingFacts(strains)
   const p = voice.grounds.briefingPanel
-  const said = {
-    scope: voice.modules.training.name,
-    chips: p.chips(facts),
-    headline: p.headline(facts),
-    detail: p.detail(facts),
-    aside: p.aside(facts),
-  }
 
-  return variant === 'row' ? (
-    <BriefingRow id="grounds" accent="var(--color-w-grounds)" {...said} />
-  ) : (
-    <BriefingPanel className={className} accent="var(--color-w-grounds)" {...said} />
+  return (
+    <BriefingPanel
+      className={className}
+      accent="var(--color-w-grounds)"
+      scope={voice.modules.training.name}
+      chips={p.chips(facts)}
+      headline={p.headline(facts)}
+      detail={p.detail(facts)}
+      aside={p.aside(facts)}
+    />
   )
 }

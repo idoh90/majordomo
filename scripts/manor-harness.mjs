@@ -605,36 +605,34 @@ async function desktopChecks(browser) {
 async function briefingChecks(browser) {
   const { page } = await fresh(browser, { width: 1440, height: 1200 })
 
-  /* The Manor's briefings are now ROWS in one panel and their prose is folded
-     away until pressed — and a closed fold sets `visibility: hidden`, which
-     takes the text out of innerText entirely. So the Study's row is opened
-     before every read. Without this both checks below go red for a reason that
-     has nothing to do with M-03: the sentence is correct, it is just shut. */
-  const openStudyRow = () =>
+  /* The Manor's briefing is now ONE written brief rather than a row per wing,
+     and it TYPES ITSELF OUT on a first visit — a fresh context has never seen
+     this text, so innerText is a prefix of the real sentence until the caret
+     stops. SKIP is pressed before every read; without it both checks below go
+     red for a reason that has nothing to do with M-03. */
+  const settleBrief = () =>
     page.evaluate(async () => {
-      const rows = [...document.querySelectorAll('.briefing-row')]
-      const btn = rows
-        .map((r) => r.querySelector('button'))
-        .find((b) => b && /THE STUDY|THE ACADEMY/i.test(b.innerText))
-      if (btn && btn.getAttribute('aria-expanded') === 'false') btn.click()
-      await new Promise((r) => setTimeout(r, 400))
+      const skip = [...document.querySelectorAll('button')].find(
+        (b) => b.innerText.trim() === 'SKIP',
+      )
+      if (skip) skip.click()
+      await new Promise((r) => setTimeout(r, 250))
     })
 
   /** what each surface currently claims about the run-up to the exam */
   const readClaims = async () => {
-    await openStudyRow()
+    await settleBrief()
     return page.evaluate(() => {
       const text = document.body.innerText
       return {
         // the Manor's heads-up appears ONLY when nothing is booked ahead
         headsUpNothing: /exam is .*(?:with nothing on the books|and you have no study booked)/i.test(text),
-        // …and the Study briefing's own trailing clause must say the same
-        briefingNothing: /and (?:nothing further on the books|nothing more booked)/i.test(text),
-        // the greedy prefix forces the LAST "and": the sentence can contain an
-        // earlier one inside a spelled-out figure ("one and a half hours
-        // behind you and three more on the books"), and anchoring on the first
-        // captured half the clause
-        briefingAhead: text.match(/.*\band ([^.]+?) more (?:on the books|booked)/i)?.[1] ?? null,
+        // …and the brief's own exam clause must say the same
+        briefingNothing: /exam is [^.]*, and nothing is booked before it/i.test(text),
+        // the hours the brief claims are still SCHEDULED before the exam —
+        // never the hours already done, which is the whole of M-03
+        briefingAhead:
+          text.match(/exam is [^.]*, with ([\d.]+) hours booked before it/i)?.[1] ?? null,
       }
     })
   }
@@ -696,8 +694,8 @@ async function briefingChecks(browser) {
   })
   await page.waitForTimeout(600)
   const ahead = await readClaims()
-  !ahead.headsUpNothing && !ahead.briefingNothing && ahead.briefingAhead === 'three'
-    ? ok('B2 sessions booked ahead: both lines agree', 'briefing "three more", heads-up gone')
+  !ahead.headsUpNothing && !ahead.briefingNothing && ahead.briefingAhead === '3.0'
+    ? ok('B2 sessions booked ahead: both lines agree', 'brief says 3.0 h booked, heads-up gone')
     : bad(
         'B2 sessions booked ahead: both lines agree',
         `heads-up nothing=${ahead.headsUpNothing}, briefing nothing=${ahead.briefingNothing}, briefing ahead="${ahead.briefingAhead}"`,

@@ -31,8 +31,10 @@ export interface WatchBriefingFacts {
   days: number
   /** recovery sleep pencilled after this week's nights */
   sleepH: number
-  /** the next watch anywhere ahead, with time until it begins */
-  next: { dayLabel: string; night: boolean; h: number; m: number } | null
+  /** the next watch anywhere ahead, with time until it begins. `at` is its
+   *  clock time — the Manor's brief prints that instead of the countdown, so
+   *  the paragraph does not rewrite itself every minute. */
+  next: { dayLabel: string; night: boolean; h: number; m: number; at: string } | null
   /** duty hours in each of the last several weeks, oldest first, this week last */
   weeklyH: number[]
   /** watches booked beyond this week */
@@ -144,6 +146,90 @@ export interface HouseRowFacts {
   delta: number | null
 }
 
+/* ---------------------------------------------------------------------------
+   THE BRIEFING — the Manor's written brief and its instruments.
+
+   The brief is ONE paragraph, composed of per-wing clauses. Each clause is an
+   AREA the reader can switch off in the Pen, so every clause has to be a whole
+   sentence that survives its neighbours being deleted — no clause may open
+   with "and", none may refer to the one before it.
+--------------------------------------------------------------------------- */
+
+/** every wing's facts in one bag. A wing with nothing on file is null, and
+ *  each of its areas then writes nothing rather than a sentence about zero. */
+export interface BriefFacts {
+  watch: WatchBriefingFacts | null
+  grounds: GroundsBriefingFacts | null
+  study: StudyBriefingFacts | null
+  workshop: WorkshopBriefingFacts | null
+  ledger: CapitalBriefingFacts | null
+  /** local hour, 0–23 — the greeting's only input */
+  hour: number
+}
+
+/** one switchable clause of the brief, in the order it is written */
+export type BriefAreaId =
+  | 'shifts'
+  | 'sleep'
+  | 'workouts'
+  | 'muscles'
+  | 'food'
+  | 'bench'
+  | 'study'
+  | 'reports'
+  | 'worth'
+  | 'spending'
+
+/**
+ * What each instrument knows about itself when it writes its two lines. One
+ * entry per dial, deliberately narrow — a dial that wants a new number adds a
+ * field here and the pack sees it typed.
+ */
+export interface DialFactMap {
+  bodyheat: {
+    hot: number
+    muscles: number
+    top: string | null
+    topStrain: number
+    readiness: number
+  }
+  strain: { now: number; peak: number; peakLabel: string | null; hotLine: number }
+  readiness: { now: number; avg: number; band: 'fresh' | 'ready' | 'worn' | 'spent' }
+  volume: { now: number; avg: number }
+  sessions: { now: number; goal: number; avg: number }
+  watchhours: { doneH: number; expectedH: number; avg: number; remaining: number }
+  sleep: { last: number; avg: number; target: number }
+  turnaround: { now: number | null; tightCount: number; tightLine: number }
+  nights: { now: number; avg: number }
+  studyhours: { now: number; goalH: number; avg: number }
+  examclock: { subject: string; days: number; doneH: number; aheadH: number }
+  homework: { now: number; open: number }
+  bench: { now: number; goalH: number; milestone: { title: string; days: number } | null }
+  networth: { value: string; delta: string | null; up: boolean; points: number }
+  spending: {
+    spent: string
+    budget: string
+    perDay: string | null
+    under: boolean
+    hasBudget: boolean
+    day: number
+    days: number
+    allowance: string | null
+  }
+  worthmoves: { total: string; up: boolean; count: number }
+  booked: { totalH: number; peakDay: string; peakH: number }
+}
+
+/** the instruments, by id */
+export type DialId = keyof DialFactMap
+
+/** an instrument's own two lines: the caption under its figure, and the
+ *  italic note saying why the house put it on the board */
+export interface DialCopy {
+  headSub: string
+  why: string
+}
+
 export interface VoicePack {
   /** THE HOUSE — the cross-wing rail every wing carries */
   house: {
@@ -189,15 +275,58 @@ export interface VoicePack {
   briefing: {
     /** scope label prefix: "THE BRIEFING · THE WATCH" */
     label: string
-    /** the Manor's consolidated panel: one note beside the title, saying what
-     *  the four rows below it are */
-    subtitle: string
     expand: string
     collapse: string
-    /** accessible name on a wing's row inside that panel — it says what the
-     *  press will do, not which way the chevron happens to point */
-    rowExpand: (scope: string) => string
-    rowCollapse: (scope: string) => string
+    /** THE BRIEFING on the Manor — the written brief, its Pen, its dials */
+    brief: {
+      /** when the brief was written, and off what */
+      stamp: (v: { time: string; day: string }) => string
+      /** cut the typing short */
+      skip: string
+      /** the button that opens the Pen */
+      penButton: string
+      pen: {
+        title: string
+        sub: string
+        close: string
+        /** the footnote under the switches */
+        note: string
+        /** the one switch that is not a wing */
+        counselLabel: string
+        counselNote: string
+      }
+      /** what each switchable clause is called in the Pen */
+      areaLabel: Record<BriefAreaId, string>
+      /** the opening — morning, afternoon, evening, small hours */
+      greeting: (hour: number) => string
+      /** the sign-off: `quiet` when every clause wrote something, `silent`
+       *  when the wings were all switched off or had nothing to say */
+      closing: { quiet: string; silent: string }
+      /** one clause of the brief; null when that wing has nothing to report */
+      line: Record<BriefAreaId, (f: BriefFacts) => string | null>
+      /** the advice that follows a clause, shown only with counsel on */
+      counsel: Record<BriefAreaId, (f: BriefFacts) => string | null>
+      /** the instruments strip */
+      instruments: { title: string; sub: string }
+      /** the dial shelf under the cards */
+      shelf: {
+        title: string
+        /** resting note: how the shelf works */
+        note: string
+        /** …while a chip is picked up and waiting for a card */
+        picking: (label: string) => string
+        /** the overlay on each card while a chip is picked up */
+        place: (label: string) => string
+        replaces: (cat: string) => string
+      }
+      /** nothing on file anywhere — no dials to draw */
+      noDials: string
+      /** what each instrument is called, and the two lines it writes */
+      dialName: Record<DialId, string>
+      dial: { [K in DialId]: (f: DialFactMap[K]) => DialCopy }
+      /** the caption under each instrument, between its first and last point */
+      dialRange: Record<DialId, string>
+    }
   }
   /** product name — document.title, exports, about */
   appName: string
@@ -1526,7 +1655,7 @@ export interface VoicePack {
       pattern: string
       /** one wing's own briefing panel, as the wing screens render it */
       briefing: string
-      /** the Manor's consolidated panel, where a wing is a row that folds */
+      /** the Manor's written brief and its instruments */
       briefingLedger: string
     }
     watch: {

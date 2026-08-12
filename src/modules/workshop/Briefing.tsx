@@ -2,7 +2,6 @@ import { dayNameLabel } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
-import { BriefingRow } from '../../core/ui/BriefingLedger'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { WorkshopBriefingFacts } from '../../core/voice/types'
@@ -19,14 +18,12 @@ import {
 import { useWorkshopStore } from './store'
 
 /**
- * The Workshop's briefing. The headline leads with the live bench when the
- * clock is running (nothing on the estate outranks a clock that is currently
- * counting), then the nearest milestone, then the weekly standing.
+ * The Workshop's facts. The headline leads with the live bench when the clock
+ * is running (nothing on the estate outranks a clock that is currently
+ * counting), then the nearest milestone, then the weekly standing. A hook
+ * because the Manor's brief writes the same facts into prose.
  */
-export function WorkshopBriefing({
-  className = '',
-  variant = 'panel',
-}: { className?: string; variant?: 'panel' | 'row' } = {}) {
+export function useWorkshopBriefingFacts(): WorkshopBriefingFacts {
   const events = useEventsStore((s) => s.events)
   const ventures = useWorkshopStore((s) => s.ventures)
   const sessions = useWorkshopStore((s) => s.sessions)
@@ -56,7 +53,7 @@ export function WorkshopBriefing({
     .filter((e) => e.kind === 'workshop' && !e.allDay && new Date(e.start).getTime() > now)
     .sort((a, b) => a.start.localeCompare(b.start))[0]
 
-  const facts: WorkshopBriefingFacts = {
+  return {
     fulfilledH: stats.totalFulfilled,
     bookedH: stats.totalBooked,
     goalH: active.filter((v) => v.status !== 'shipped').reduce((t, v) => t + v.goalH, 0),
@@ -91,19 +88,22 @@ export function WorkshopBriefing({
         }
       : null,
   }
+}
 
+/** The Workshop's briefing panel, on its own wing. */
+export function WorkshopBriefing({ className = '' }: { className?: string } = {}) {
+  const facts = useWorkshopBriefingFacts()
   const p = voice.workshop.briefingPanel
-  const said = {
-    scope: voice.modules.workshop.name,
-    chips: p.chips(facts),
-    headline: p.headline(facts),
-    detail: p.detail(facts),
-    aside: p.aside(facts),
-  }
 
-  return variant === 'row' ? (
-    <BriefingRow id="workshop" accent="var(--color-w-workshop)" {...said} />
-  ) : (
-    <BriefingPanel className={className} accent="var(--color-w-workshop)" {...said} />
+  return (
+    <BriefingPanel
+      className={className}
+      accent="var(--color-w-workshop)"
+      scope={voice.modules.workshop.name}
+      chips={p.chips(facts)}
+      headline={p.headline(facts)}
+      detail={p.detail(facts)}
+      aside={p.aside(facts)}
+    />
   )
 }

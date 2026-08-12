@@ -1,9 +1,8 @@
-import { addDays, dayNameLabel, startOfWeek } from '../../core/dates'
+import { addDays, dayNameLabel, startOfWeek, timeLabel } from '../../core/dates'
 import { eventsInRange, weeklyHoursSeries } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
-import { BriefingRow } from '../../core/ui/BriefingLedger'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { WatchBriefingFacts } from '../../core/voice/types'
@@ -18,14 +17,12 @@ function isNight(startIso: string, endIso: string): boolean {
 }
 
 /**
- * The Watch's briefing. Every figure comes from watchStats — the same call the
- * duty ring reads — so the strip and the ring can never disagree about how
- * many hours have been stood.
+ * Every figure comes from watchStats — the same call the duty ring reads — so
+ * the strip and the ring can never disagree about how many hours have been
+ * stood. Exported as a hook because the Manor's brief writes the same facts
+ * into prose: two derivations of one week is how two screens start lying.
  */
-export function WatchBriefing({
-  className = '',
-  variant = 'panel',
-}: { className?: string; variant?: 'panel' | 'row' } = {}) {
+export function useWatchBriefingFacts(): WatchBriefingFacts {
   const events = useEventsStore((s) => s.events)
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
@@ -49,10 +46,11 @@ export function WatchBriefing({
       night: isNight(stats.next.start, stats.next.end),
       h: Math.floor(ms / 3_600_000),
       m: Math.floor((ms % 3_600_000) / 60_000),
+      at: timeLabel(stats.next.start),
     }
   }
 
-  const facts: WatchBriefingFacts = {
+  return {
     doneH: stats.doneH,
     expectedH: stats.expectedH,
     logged,
@@ -68,19 +66,22 @@ export function WatchBriefing({
     // twice from two derivations is a gap stated wrongly once
     turnaroundH: cycleStats(events, now, weekStart).turnaroundH,
   }
+}
 
+/** The Watch's briefing panel, on its own wing. */
+export function WatchBriefing({ className = '' }: { className?: string } = {}) {
+  const facts = useWatchBriefingFacts()
   const p = voice.watch.briefingPanel
-  const said = {
-    scope: voice.modules.watch.name,
-    chips: p.chips(facts),
-    headline: p.headline(facts),
-    detail: p.detail(facts),
-    aside: p.aside(facts),
-  }
 
-  return variant === 'row' ? (
-    <BriefingRow id="watch" accent="var(--color-w-watch)" {...said} />
-  ) : (
-    <BriefingPanel className={className} accent="var(--color-w-watch)" {...said} />
+  return (
+    <BriefingPanel
+      className={className}
+      accent="var(--color-w-watch)"
+      scope={voice.modules.watch.name}
+      chips={p.chips(facts)}
+      headline={p.headline(facts)}
+      detail={p.detail(facts)}
+      aside={p.aside(facts)}
+    />
   )
 }

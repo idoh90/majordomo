@@ -157,6 +157,19 @@ body {
   }
 }
 
+/* the briefing's caret, while the Majordomo is still writing. `steps(1)` so it
+   snaps rather than fades — a fading block reads as a rendering artifact. */
+@keyframes brief-caret {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0;
+  }
+}
+
 input[type='datetime-local'] {
   color-scheme: dark;
 }
@@ -254,16 +267,6 @@ input[type='datetime-local'] {
         color-mix(in srgb, var(--lit-accent, var(--color-accent)) 10%, transparent),
         transparent 70%
       );
-  }
-
-  /* THE BRIEFING panel on the Manor: a frame around whatever rows the wings
-     chose to render. When every wing declines — an estate with no accounts, no
-     subjects, nothing logged — the frame must go too, and it decides that
-     here rather than by having each row report its existence up into React's
-     render pass. `:has()` is the whole mechanism; where it is unsupported the
-     worst case is a header with nothing under it. */
-  .briefing-ledger:not(:has(.briefing-row)) {
-    display: none;
   }
 
   /* sub-surface: tiles, rows, option buttons, inputs */

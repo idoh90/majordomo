@@ -74,8 +74,11 @@ technical version.
 - No test runner **for the app at large**; verification is done in the browser. The
   Manor is the one exception — its contract is numeric, and "looks plausible" is
   exactly how a cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness
-  after touching `WeekGrid.tsx` / `ManorScreen.tsx`. It does NOT cover the mobile
-  350 ms long-press drag (not drivable by synthetic events) or DST.
+  after touching `WeekGrid.tsx` / `ManorScreen.tsx`. Its B1/B2 checks read the
+  **brief's own exam clause**, and the brief types itself out on a first visit —
+  they press SKIP before every read, so a fresh context does not measure a
+  half-written sentence. It does NOT cover the mobile 350 ms long-press drag
+  (not drivable by synthetic events) or DST.
 
 ## Ship: it is live
 
@@ -249,6 +252,10 @@ HTML/CSS — no chart library. No router — the shell is a `useState<'menu' | c
 src/
   app/            the shell: App.tsx (header, briefing row, menu grid, view state),
                   consoles.ts (the console registry), SettingsMenu.tsx (gear menu)
+    manor/briefing/  THE BRIEFING (see below): facts.ts gathers every wing's
+                  facts through the wings' own hooks, dials.ts builds the
+                  instrument catalogue, geometry.ts plots it, prefs.ts is
+                  THE PEN's persisted state
   core/           shared kernel — knows NOTHING about consoles or the app shell
     module.ts     the ConsoleModule contract
     dates.ts      local-time day/week/streak helpers
@@ -321,24 +328,57 @@ export type ConsoleModule = {
   status: 'online' | 'offline'
   Tile: React.FC        // live stat on the menu tile
   Screen: React.FC      // the console itself
-  Briefing?: React.FC   // its lines in the daily briefing
+  Upkeep?: React.FC     // effect-only housekeeping, mounted by the Manor
 }
 ```
 
 Components are prop-less: a console reads its own stores inside its wrappers
-(see `modules/training/index.tsx`). `ConsoleModule.Briefing` renders on the
-**Manor only** (`ManorScreen.tsx`, below the grid), as one **row** in the single
-`BriefingLedger` panel — dot, wing name, three figures, and an accordion fold
-holding headline + detail + aside. The wing screens render the same wing's
-briefing as a full `BriefingPanel` (`variant="panel"`, the default); the row
-variant exists only because four stacked panels was ~650 px of repeated frame.
-Both variants read the same voice-pack copy, so they can never disagree.
+(see `modules/training/index.tsx`). **`Upkeep` renders nothing** — it is where a
+wing's marker reconcile, session prune and crew work-ledger patch live, and the
+Manor mounts every wing's so those run whether or not the wing is ever opened.
+They used to ride inside each wing's briefing ROW; the rows are gone (see THE
+BRIEFING below) and a heal pass must not live inside a component that might be
+deleted. The wing screens still render their own `BriefingPanel` directly.
 Navigation is the tab header (desktop) / `TabBar` (mobile) over `CONSOLES` in
 `app/consoles.ts`. The header's Log Workout button renders **only while the
 Grounds is open** and reaches the add sheet via a one-shot mailbox
 (`modules/training/uiStore.ts` `requestAddSheet`) — never lift console state
 into the shell for this. (`ConsoleModule.Tile/Icon/status/tagline` currently
 have no consumers — kept as scaffolding for wing-management later.)
+
+### THE BRIEFING (`src/app/manor/briefing/`)
+
+Below the week grid: **one written brief**, **four instruments**, and a shelf of
+the rest. It replaced the accordion of one row per wing. Design source is
+"Manor - New Briefing.dc.html" in the Claude Design project.
+
+- **The brief is one paragraph**, greeting → a clause per wing in that wing's
+  own colour → sign-off. Each clause is an **area** the reader can switch off in
+  **THE PEN**, so every clause must be a whole sentence that survives its
+  neighbours being deleted — none may open with "and" or refer to the one
+  before it. Copy lives in `voice.briefing.brief.line` / `.counsel`; the areas
+  and their wing order live in `Pen.tsx` `AREA_GROUPS`.
+- **Facts come from the wings, never re-derived.** `facts.ts` calls each wing's
+  `use…BriefingFacts()` — the very hook that wing's own panel calls — so a
+  sentence on the Manor and a panel on a wing cannot quote different numbers. A
+  wing with nothing on file reads `null` and writes nothing.
+- **It types once.** The first render of a session where the text differs from
+  the hash in `majordomo-brief-hash` animates; every later change (an hour
+  turning over, a strain figure rounding) swaps in silently. Retyping a
+  paragraph under someone mid-read is not charm. Anything printed in the brief
+  must therefore be **stable within an hour** — this is why the next shift is
+  named by its clock time and not by a countdown.
+- **The instruments are a memoised ELEMENT, not just memoised data.** The
+  typewriter sets state once per character; without that memo every keystroke
+  re-rendered four charts and a sixteen-plate body map, which was slow enough to
+  make the Manor harness miss clicks.
+- **Every dial draws real records.** A dial whose wing has nothing on file is
+  never built, so it cannot reach the shelf or the board — an empty chart is a
+  worse answer than no chart. `urgency` in `dials.ts` decides the house's own
+  four and stops mattering the moment the reader places a chip.
+- Charts are drawn with `preserveAspectRatio="none"`, so **anything circular
+  must be an HTML element positioned in percent**, never an SVG `<circle>` —
+  the Ledger's trend chart learned this first.
 
 ### Import boundaries (enforced by `eslint.config.js`, `npm run lint`)
 
@@ -391,8 +431,15 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   they carry **fixed ids and a constant `createdAt`** so two devices seeding
   independently produce identical records instead of eight shapes.
 
+- **`majordomo-briefing` v1** (`app/manor/briefing/prefs.ts`) — THE PEN: which
+  clauses the brief covers, whether advice is written, and which four dials are
+  on the board. Deliberately **never synced** — which dials one screen shows is
+  a fact about that device, like the bench timer. `picks: null` means the house
+  is still choosing, and it keeps choosing until a chip is placed.
+
 **Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
-`majordomo-events` / `majordomo-study` / `majordomo-workshop` / `majordomo-watch`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+`majordomo-events` / `majordomo-study` / `majordomo-workshop` / `majordomo-watch` /
+`majordomo-briefing`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
 boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
 still applies; the old keys are left in place as insurance and never read again.
 

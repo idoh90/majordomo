@@ -11,5 +11,15 @@ export type ConsoleModule = {
   Icon?: React.FC
   Tile: React.FC // live stat on the menu tile
   Screen: React.FC // the console itself
-  Briefing?: React.FC // its lines in the daily briefing
+  /**
+   * Housekeeping the wing needs done wherever the Manor renders, whether or
+   * not the wing itself is ever opened — marker reconciliation, session
+   * pruning, the crew work-ledger patch. Renders nothing.
+   *
+   * This used to ride along inside the wing's briefing row; the row is gone
+   * (the brief writes every wing's lines itself now), and the heal passes
+   * were load-bearing, so they get their own mount rather than a home of
+   * convenience inside a component that might be deleted next.
+   */
+  Upkeep?: React.FC
 }

@@ -5,9 +5,7 @@ import { useNow } from '../../core/useNow'
 import { useCapitalStore } from './store'
 import { reconcilePaydayMarkers } from './lib/payday'
 import { monthKey, monthlySpent } from './lib/budget'
-import { latestSnapshot } from './lib/networth'
 import { Amount } from './components/Amount'
-import { LedgerBriefing } from './Briefing'
 import { CapitalScreen } from './CapitalScreen'
 
 /** Menu-tile stat: month-to-date spend vs. budget. */
@@ -35,32 +33,16 @@ function Tile() {
   )
 }
 
-/** Briefing line — the ledger's contribution to the daily readout. */
-function Briefing() {
-  const snapshots = useCapitalStore((s) => s.snapshots)
-  const holdings = useCapitalStore((s) => s.holdings)
-  const spends = useCapitalStore((s) => s.spends)
-  const spendItems = useCapitalStore((s) => s.spendItems)
-  const recurring = useCapitalStore((s) => s.recurring)
-  const monthlyBudget = useCapitalStore((s) => s.monthlyBudget)
+/** Marker heal pass — this mounts on the Manor, so payday chips stay true even
+ *  if the Ledger is never opened (the Study's dual-mount precedent). */
+function Upkeep() {
   const paydayDay = useCapitalStore((s) => s.paydayDay)
-  const now = useNow()
 
-  // marker heal pass — the Briefing mounts on the Manor, so payday chips stay
-  // true even if the Ledger is never opened (the Study's dual-mount precedent);
-  // must sit ABOVE the early return so an empty Ledger still reconciles
   useEffect(() => {
     reconcilePaydayMarkers(paydayDay, Date.now())
   }, [paydayDay])
 
-  const spent = monthlySpent(monthKey(new Date(now)), spends, recurring, spendItems)
-  const latest = latestSnapshot(snapshots)
-  const hasSpend = monthlyBudget > 0 || spent > 0
-  const hasWorth = latest != null || holdings.length > 0
-
-  if (!hasSpend && !hasWorth) return null
-
-  return <LedgerBriefing variant="row" />
+  return null
 }
 
 function Icon() {
@@ -81,5 +63,5 @@ export const capitalConsole: ConsoleModule = {
   Icon,
   Tile,
   Screen: CapitalScreen,
-  Briefing,
+  Upkeep,
 }

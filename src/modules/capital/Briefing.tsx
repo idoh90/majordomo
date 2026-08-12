@@ -1,5 +1,4 @@
 import { useNow } from '../../core/useNow'
-import { BriefingRow } from '../../core/ui/BriefingLedger'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
 import { voice } from '../../core/voice'
 import type { CapitalBriefingFacts } from '../../core/voice/types'
@@ -16,18 +15,16 @@ import {
 import { useCapitalStore } from './store'
 
 /**
- * The Ledger's briefing. Money is formatted here and handed to the voice pack
- * as text — the ₪ formatter is the wing's business and core has no idea what
+ * The Ledger's facts. Money is formatted here and handed to the voice pack as
+ * text — the ₪ formatter is the wing's business and core has no idea what
  * currency the estate keeps.
  *
  * The delta clause is dropped entirely when displayDelta returns null, which
  * is the Vault's rule too: a lone snapshot has nothing to be compared with,
- * and "▲ ₪0 vs last" is a claim rather than a figure.
+ * and "▲ ₪0 vs last" is a claim rather than a figure. A hook because the
+ * Manor's brief writes the same facts into prose.
  */
-export function LedgerBriefing({
-  className = '',
-  variant = 'panel',
-}: { className?: string; variant?: 'panel' | 'row' } = {}) {
+export function useLedgerBriefingFacts(): CapitalBriefingFacts {
   const accounts = useCapitalStore((s) => s.accounts)
   const snapshots = useCapitalStore((s) => s.snapshots)
   const holdings = useCapitalStore((s) => s.holdings)
@@ -37,7 +34,6 @@ export function LedgerBriefing({
   const spendItems = useCapitalStore((s) => s.spendItems)
   const recurring = useCapitalStore((s) => s.recurring)
   const monthlyBudget = useCapitalStore((s) => s.monthlyBudget)
-  const blurAmounts = useCapitalStore((s) => s.blurAmounts)
   const now = useNow()
 
   const nowDate = new Date(now)
@@ -72,7 +68,7 @@ export function LedgerBriefing({
   const hasBudget = monthlyBudget > 0
   const over = hasBudget && spent > monthlyBudget
 
-  const facts: CapitalBriefingFacts = {
+  return {
     netWorth: formatILS(live.netWorth),
     // the magnitude only — the voice pack supplies the direction in words, and
     // formatDelta's own +/− on top of it produced "down +₪20.3K"
@@ -139,20 +135,24 @@ export function LedgerBriefing({
           }
         : null,
   }
+}
 
+/** The Ledger's briefing panel, on its own wing. */
+export function LedgerBriefing({ className = '' }: { className?: string } = {}) {
+  const facts = useLedgerBriefingFacts()
+  const blurAmounts = useCapitalStore((s) => s.blurAmounts)
   const p = voice.capital.briefingPanel
-  const said = {
-    scope: voice.modules.capital.name,
-    chips: p.chips(facts),
-    headline: p.headline(facts),
-    detail: p.detail(facts),
-    aside: p.aside(facts),
-    blurFigures: blurAmounts,
-  }
 
-  return variant === 'row' ? (
-    <BriefingRow id="capital" accent="var(--color-w-ledger)" {...said} />
-  ) : (
-    <BriefingPanel className={className} accent="var(--color-w-ledger)" {...said} />
+  return (
+    <BriefingPanel
+      className={className}
+      accent="var(--color-w-ledger)"
+      scope={voice.modules.capital.name}
+      chips={p.chips(facts)}
+      headline={p.headline(facts)}
+      detail={p.detail(facts)}
+      aside={p.aside(facts)}
+      blurFigures={blurAmounts}
+    />
   )
 }

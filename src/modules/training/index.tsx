@@ -3,21 +3,18 @@ import type { ConsoleModule } from '../../core/module'
 import { voice } from '../../core/voice'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
-import { GroundsBriefing } from './Briefing'
 import { reconcileWorkoutBlocks } from './lib/blocks'
 import { thisWeekCount } from './lib/insights'
 import { computeStrains } from './lib/strain'
 import { useWorkoutStore } from './store'
 import { TrainingScreen } from './TrainingScreen'
 
-/** The Grounds' briefing strip, plus the DEV strain handle it has always
- *  owned — this mounts wherever the Manor renders, so __strains stays live
- *  on every view. The strain map is computed once here and handed down so
- *  the strip and the summary can never describe two different bodies.
- *  It also hosts the logged-session heal pass, on the Study's precedent:
- *  mounting wherever the Manor renders is what makes a workout logged on
- *  another device show up on this one's week without opening the wing. */
-function Briefing() {
+/** The DEV strain handle the Grounds has always owned — this mounts wherever
+ *  the Manor renders, so __strains stays live on every view. It also hosts
+ *  the logged-session heal pass, on the Study's precedent: mounting wherever
+ *  the Manor renders is what makes a workout logged on another device show up
+ *  on this one's week without opening the wing. */
+function Upkeep() {
   const workouts = useWorkoutStore((s) => s.workouts)
   const now = useNow()
   const nowH = Math.floor(now / 3_600_000) * 3_600_000
@@ -31,12 +28,7 @@ function Briefing() {
     ;(window as unknown as Record<string, unknown>).__strains = strains
   }
 
-  // The strip now says everything the old prose summary said — workouts, what
-  // is still hot, the day's fuel — so rendering both made the Manor repeat
-  // itself. DailySummary is left in place rather than deleted: its carb/fat
-  // split and per-muscle wording are a feature of the Grounds, and where the
-  // design omits an old feature the old feature wins.
-  return <GroundsBriefing strains={strains} variant="row" />
+  return null
 }
 
 /** Menu-tile stat: sessions this calendar week vs the weekly goal. */
@@ -75,5 +67,5 @@ export const trainingConsole: ConsoleModule = {
   Icon,
   Tile,
   Screen: TrainingScreen,
-  Briefing,
+  Upkeep,
 }

@@ -7,7 +7,6 @@ import { voice } from '../../core/voice'
 import { useAuthStore } from '../../core/auth/store'
 import { daysUntil, nextMilestone, reconcileMarkers, workLedgerPatch, workshopStats } from './lib'
 import { useWorkshopStore } from './store'
-import { WorkshopBriefing } from './Briefing'
 import { WorkshopScreen } from './WorkshopScreen'
 
 /** Tile stat: countdown to the next milestone, else bench hours this week. */
@@ -47,12 +46,10 @@ function Tile() {
   )
 }
 
-/** One line on the Manor, pressing matters first. Also hosts the marker
- *  reconcile: it mounts wherever the Manor renders, so milestone and delivery
- *  chips heal and overdue ones trail to today even if the wing is never opened. */
-function Briefing() {
-  const ventures = useWorkshopStore((s) => s.ventures)
-
+/** The marker reconcile: it mounts wherever the Manor renders, so milestone
+ *  and delivery chips heal and overdue ones trail to today even if the wing
+ *  is never opened. */
+function Upkeep() {
   useEffect(() => {
     const store = useEventsStore.getState()
     const ws = useWorkshopStore.getState()
@@ -70,9 +67,7 @@ function Briefing() {
     }
   }, [])
 
-  if (ventures.filter((v) => !v.archived).length === 0) return null
-
-  return <WorkshopBriefing variant="row" />
+  return null
 }
 
 function Icon() {
@@ -97,5 +92,5 @@ export const workshopConsole: ConsoleModule = {
   Icon,
   Tile,
   Screen: WorkshopScreen,
-  Briefing,
+  Upkeep,
 }
