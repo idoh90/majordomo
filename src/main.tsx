@@ -11,6 +11,7 @@ import '@fontsource/source-sans-3/600.css'
 import '@fontsource/source-sans-3/700.css'
 import './core/ui/index.css'
 import App from './app/App'
+import { BootBoundary, BootFailure } from './app/BootFailure'
 import { applySkin } from './core/ui/skins'
 import { lockZoom } from './core/ui/zoomLock'
 import { voice } from './core/voice'
@@ -26,28 +27,50 @@ if (import.meta.env.VITE_FOUNDER_SKIN === '1') {
   void import('./core/ui/founder')
 }
 
-// stamp the persisted skin on <html> before first paint so non-default skins
-// don't flash Midnight on load
-applySkin(useShellStore.getState().skin)
-document.title = voice.appName
-// the viewport is the app's own, not a document's: no pinch, no double-tap
-// zoom. The Workshop's board keeps a zoom of its own and handles the gesture.
-lockZoom()
+const root = createRoot(document.getElementById('root')!)
 
-// The registry, wired at module scope (an effect would double-invoke under
-// StrictMode). Nothing waits on it: the app renders from localStorage exactly
-// as it always has, and the session — like the estate it will later carry —
-// simply arrives afterwards.
-initAuth()
-// takes the estate as its baseline and watches for edits. Records nothing as
-// deleted, ever — only the actions that delete may say that (core/sync/intent).
-initSync()
-// …and only then decide whether this boot is somebody's first: the setup reads
-// the estate to know whether there is anything here already.
-initOnboarding()
+/**
+ * Everything that has to happen before the first paint — and every line of it
+ * reads the estate, which is why it is inside a guard.
+ *
+ * The app has no loading screen by design: it boots from localStorage
+ * synchronously so a cold open on a plane is indistinguishable from one on wifi.
+ * The price is that a throw in here used to mean a permanently white page, with
+ * no way back from inside the app. Now it means the recovery screen, which can
+ * take a copy of the records before anything is cleared.
+ */
+try {
+  // stamp the persisted skin on <html> before first paint so non-default skins
+  // don't flash Midnight on load
+  applySkin(useShellStore.getState().skin)
+  document.title = voice.appName
+  // the viewport is the app's own, not a document's: no pinch, no double-tap
+  // zoom. The Workshop's board keeps a zoom of its own and handles the gesture.
+  lockZoom()
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+  // The registry, wired at module scope (an effect would double-invoke under
+  // StrictMode). Nothing waits on it: the app renders from localStorage exactly
+  // as it always has, and the session — like the estate it will later carry —
+  // simply arrives afterwards.
+  initAuth()
+  // takes the estate as its baseline and watches for edits. Records nothing as
+  // deleted, ever — only the actions that delete may say that (core/sync/intent).
+  initSync()
+  // …and only then decide whether this boot is somebody's first: the setup reads
+  // the estate to know whether there is anything here already.
+  initOnboarding()
+
+  root.render(
+    <StrictMode>
+      {/* the same screen, reached the other way: a blob that rehydrated without
+          complaint but is the wrong shape throws in the first component that
+          maps over it, not here */}
+      <BootBoundary>
+        <App />
+      </BootBoundary>
+    </StrictMode>,
+  )
+} catch (e) {
+  console.error('[boot] the app failed to start:', e)
+  root.render(<BootFailure detail={e instanceof Error ? e.message : String(e)} />)
+}

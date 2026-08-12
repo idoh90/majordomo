@@ -164,7 +164,18 @@ function CarryState() {
           ? voice.sync.lastCarried(new Date(lastCarriedAt).toLocaleString())
           : voice.sync.neverCarried}
       </p>
-      {syncError && <p className="mt-2 text-xs text-danger">{voice.sync.failed(syncError)}</p>}
+      {/* `lastError` carries two different kinds of thing through one channel.
+          Transport trouble arrives as a lowercase fragment meant to finish
+          `sync.failed`'s sentence ("Could not reach your account: …"); the
+          cross-account notice is a finished sentence of its own, and wrapping it
+          produced "Could not reach your account: This device belonged to another
+          account." — a failure that did not happen, in front of a fact that did.
+          Matching on the constant keeps the two apart without a second field. */}
+      {syncError && (
+        <p className="mt-2 text-xs text-danger">
+          {syncError === voice.sync.otherOwner ? syncError : voice.sync.failed(syncError)}
+        </p>
+      )}
 
       <button
         type="button"

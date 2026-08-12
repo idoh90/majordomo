@@ -86,6 +86,41 @@ export async function pushCold(rows: WireRecord[], userId: string): Promise<void
   }
 }
 
+/**
+ * A row off the wire is DATA, not a promise.
+ *
+ * The pull used to cast the response straight to `WireRecord[]` and hand it to
+ * the wings, which means one row with a null `wing` or a numeric `id` threw
+ * inside the fold — and the fold is a single synchronous block across every
+ * wing, so one bad row took the whole cycle down. Every subsequent cycle pulled
+ * the same row and failed the same way: not a corrupted estate, but a sync loop
+ * that could never advance again, reporting a transport error for a problem that
+ * was nothing of the kind.
+ *
+ * The stakes are lower than they look — row-level security means only this
+ * household's own account can put a row there — but "only I can break it" is a
+ * reason to recover from it cheaply, not a reason to assume it cannot happen. A
+ * half-written client, a hand-edited row in the SQL editor, a future wing
+ * writing a shape this build predates: all of them arrive here.
+ *
+ * Only the ENVELOPE is checked. `payload` is deliberately untouched: its shape
+ * belongs to the wing that wrote it, and this layer knows no wing.
+ */
+function usable(r: unknown): r is WireRecord {
+  if (typeof r !== 'object' || r === null) return false
+  const x = r as Record<string, unknown>
+  return (
+    typeof x.wing === 'string' &&
+    x.wing !== '' &&
+    typeof x.kind === 'string' &&
+    x.kind !== '' &&
+    typeof x.id === 'string' &&
+    x.id !== '' &&
+    typeof x.deleted === 'boolean' &&
+    typeof x.client_updated_at === 'string'
+  )
+}
+
 /** a pull is idempotent, so overlapping the window costs nothing and missing a
  *  row that shared a timestamp with the cursor costs a silent divergence */
 const OVERLAP_MS = 30_000
@@ -119,11 +154,27 @@ export async function pull(since: string | null): Promise<PullResult> {
     const { data, error } = await q
     if (error) throw new Error(error.message)
 
-    const batch = (data ?? []) as WireRecord[]
-    rows.push(...batch)
-    for (const r of batch) {
-      if (r.server_seen_at && (!cursor || r.server_seen_at > cursor)) cursor = r.server_seen_at
+    const batch = (data ?? []) as unknown[]
+    let dropped = 0
+
+    for (const raw of batch) {
+      // The cursor advances past a row we refuse, and that ordering is the whole
+      // point: hold it back and the next pull fetches the same broken row, and
+      // the one after that, forever. Skipping it costs one record; not skipping
+      // it costs every record that comes after.
+      const seen = (raw as { server_seen_at?: unknown } | null)?.server_seen_at
+      if (typeof seen === 'string' && (!cursor || seen > cursor)) cursor = seen
+
+      if (usable(raw)) rows.push(raw)
+      else dropped += 1
     }
+
+    // Said out loud rather than swallowed. A record that silently stops arriving
+    // is indistinguishable from one that was never there.
+    if (dropped > 0) {
+      console.warn(`[sync] skipped ${dropped} record(s) the registry sent in an unusable shape`)
+    }
+
     if (batch.length < PAGE) break
     page += 1
   }

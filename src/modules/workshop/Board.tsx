@@ -29,6 +29,7 @@ import {
   workshopStats,
 } from './lib'
 import { useWorkshopStore } from './store'
+import { safeHref } from './url'
 import type { BoardGroup } from './lib'
 import type { BoardCard, CardType, Milestone, Thread, Venture } from './types'
 
@@ -1276,10 +1277,12 @@ function CardFace({
           {card.body}
         </div>
       )}
-      {!done && card.type === 'link' && card.url && (
+      {/* safeHref, not card.url: cards saved before the scheme was checked are
+          still in the store, and this is the only place one is opened */}
+      {!done && card.type === 'link' && card.url && safeHref(card.url) && (
         <a
           data-nodrag
-          href={card.url}
+          href={safeHref(card.url)}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}

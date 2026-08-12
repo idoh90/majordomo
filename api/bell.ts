@@ -8,9 +8,14 @@
  * What it does, in order, and nothing more:
  *   1. refuses unless explicitly armed (BELL_ENABLED)
  *   2. verifies the caller's Supabase session
- *   3. checks today's ring count against the household's allowance
+ *   3. CLAIMS a slot out of the household's daily allowance, and refuses if it
+ *      cannot — including when the meter itself is unreachable or half-migrated
  *   4. streams the model's reply back as Server-Sent Events
- *   5. records what it cost
+ *   5. records what it cost, or hands the slot back if nothing was generated
+ *
+ * Step 3 is the order that matters. Deciding before spending and recording after
+ * it left a state in which a broken meter served for free forever; the reasoning
+ * is at the rope line below and in `supabase/migrations/0005_bell_reserve.sql`.
  *
  * What it deliberately does NOT do yet: tools, context packs, the sandbox
  * bridge, tiers, trials, burst limits. Those are stages B1–B6 of
@@ -336,53 +341,65 @@ export default async function handler(req: Request): Promise<Response> {
   const user = { id: door.id }
 
   /* ---------------------------------------------------------------------- */
-  /* the rope line — B0's simplest possible version                         */
+  /* the rope line — reserve before spend                                   */
   /* ---------------------------------------------------------------------- */
 
-  // Burst limits, monthly caps and the trial clock are stage B6. This is only
-  // the daily ceiling, because it is three lines against a table that has to
-  // exist anyway, and it is the difference between a deployed endpoint that can
-  // be drained and one that cannot.
+  // Burst limits, monthly caps and the trial clock are still stage B6. This is
+  // only the daily ceiling — but it is now claimed BEFORE the model is called
+  // rather than recorded after it, which is what makes it a ceiling at all.
+  //
+  // B0 read the allowance first and wrote it last, and that arrangement had two
+  // faults with one shape. If the write failed permanently — the function absent
+  // because only part of the migration was pasted, or EXECUTE never granted —
+  // the reply had already been delivered, the failure went to a log nobody reads,
+  // and the endpoint carried on serving with no other source of truth. A broken
+  // meter became an unlimited allowance, and looked perfectly healthy doing it.
+  // Separately, read-then-write let several rings arriving together all see the
+  // same last slot and all take it.
+  //
+  // One RPC now decides and records in a single statement, before anything is
+  // spent (`supabase/migrations/0005_bell_reserve.sql`). Anything other than an
+  // explicit grant is a refusal — a full day, a sleeping database, and a missing
+  // function all stop the request here, and the missing function is the one that
+  // matters: a meter that cannot be written must not read as permission.
   const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: withTimeout(REGISTRY_TIMEOUT_MS) },
   })
 
+  // One clock owns the day boundary for the whole request: the slot is claimed
+  // against this date and the tokens are added to the same row, however long the
+  // generation takes and whatever midnight does in the middle of it.
   const today = new Date().toISOString().slice(0, 10)
 
-  const [grantRow, usageRow] = await Promise.all([
-    db.from('bell_grants').select('tier').eq('user_id', user.id).maybeSingle(),
-    db
-      .from('bell_usage')
-      .select('msgs')
-      .eq('user_id', user.id)
-      .eq('day', today)
-      .maybeSingle(),
-  ])
+  // Which allowance applies is resolved INSIDE the reservation, from the
+  // household's grant — the caller passes the two numbers the operator set, never
+  // the choice between them.
+  const reservation = await db
+    .rpc('bell_reserve', {
+      p_user: user.id,
+      p_day: today,
+      p_free: DAILY_FREE,
+      p_raised: DAILY_STAFF,
+    })
+    // `allowance`, not `ceiling`: an out-parameter named after a Postgres
+    // built-in is a trap left for whoever edits the function next.
+    .maybeSingle<{ granted: boolean; used: number; allowance: number; grant_tier: string }>()
 
-  // A read that FAILED and a read that found nothing are different answers, and
-  // conflating them is how a sleeping database silently becomes an unlimited
-  // allowance. No row means 'free'; a broken query means closed.
-  if (grantRow.error || usageRow.error) return fail(503, 'the meter is unreachable')
+  // A reservation that could not be TAKEN and one that could not be ASKED FOR are
+  // both refusals, and only one of them is the user's fault — but neither may
+  // reach the model. `error` covers the sleeping database and the half-pasted
+  // migration alike; a null row is a function that answered without answering.
+  if (reservation.error || !reservation.data) {
+    if (reservation.error) console.error('[bell] reservation failed:', reservation.error.message)
+    return fail(503, 'the meter is unreachable')
+  }
 
-  // Named the wide way round on purpose. `tier === 'free' ? FREE : STAFF` reads
-  // identically and fails OPEN: any value that is not exactly 'free' — a typo, a
-  // capital F, a tier invented in the SQL editor — buys the larger allowance.
-  // The check constraint in the migration is supposed to make that unreachable,
-  // but a constraint can be absent on a table that already existed, and the one
-  // guard that spends money should not depend on the other one having landed.
-  const tier = grantRow.data?.tier ?? 'free'
-  const raised = tier === 'trial' || tier === 'staff' || tier === 'founder'
-  const ceiling = raised ? DAILY_STAFF : DAILY_FREE
-  const already = usageRow.data?.msgs ?? 0
-  if (already >= ceiling) return fail(429, 'that is all the calls for today')
+  const slot = reservation.data
+  if (!slot.granted) return fail(429, 'that is all the calls for today')
 
-  // Read-then-spend, so two rings arriving together can both see the last slot
-  // and both take it. Known and accepted at this stage: the overshoot is bounded
-  // by however many requests are genuinely in flight at once, the estate has one
-  // user, and closing it properly means reserving a slot before the model is
-  // called and releasing it if the call fails — which is B6's job, alongside the
-  // burst limit that makes the race hard to reach in the first place.
+  // From here on a slot is SPENT. Every exit below either uses it or hands it
+  // back explicitly — see `settle()`.
 
   /* ---------------------------------------------------------------------- */
   /* the reply                                                              */
@@ -425,7 +442,13 @@ export default async function handler(req: Request): Promise<Response> {
   let tokOut = 0
   let cacheRead = 0
   let cacheWrite = 0
-  let metered: boolean | null = null
+  /**
+   * Whether the token COLUMNS were written. The ring itself is counted either
+   * way — the slot was claimed before the model was called and only `settle()`
+   * can give it back — so this says the bill is incomplete, never that the
+   * allowance was skipped.
+   */
+  let costed: boolean | null = null
 
   /**
    * Memoised, not flagged.
@@ -437,23 +460,34 @@ export default async function handler(req: Request): Promise<Response> {
    * finish. Holding the promise means the second caller waits on the first
    * caller's write instead of stepping over it.
    */
-  let noting: Promise<void> | null = null
+  let settling: Promise<void> | null = null
 
-  const note = (): Promise<void> =>
-    (noting ??= (async () => {
+  /**
+   * Close the books on a slot that has already been claimed: either record what
+   * it cost, or give it back.
+   */
+  const settle = (): Promise<void> =>
+    (settling ??= (async () => {
       // A ring that never reached `message_start` generated nothing and was
       // billed for nothing: a mistyped model id, an upstream 529, an expired key.
-      // Counting those would let five outages lock a household out of a service
-      // that has not answered it once.
-      if (tokIn === 0 && tokOut === 0) return
+      // Under reserve-before-spend the slot is already gone, so this is where it
+      // has to be returned — otherwise five outages would lock a household out of
+      // a service that has not answered it once.
+      if (tokIn === 0 && tokOut === 0) {
+        const { error } = await db.rpc('bell_release', { p_user: user.id, p_day: today })
+        // Failing in this direction costs the user one call out of their day and
+        // costs correctness nothing, which is the right way round for a counter
+        // that exists to stop spending.
+        if (error) console.error('[bell] slot release failed:', error.message)
+        return
+      }
 
-      const { error } = await db.rpc('bell_note_usage', {
+      const { error } = await db.rpc('bell_note_tokens', {
         p_user: user.id,
-        // The handler's own day, not one Postgres re-derives at write time. The
-        // allowance was checked against this date at the start of the request;
-        // deriving it again after a generation that may have crossed midnight
-        // would increment a row the check never looked at, and report a count for
-        // a row that does not exist.
+        // The handler's own day, not one Postgres re-derives at write time — the
+        // same date the slot was claimed against. A generation that crossed
+        // midnight must add its cost to the row that granted it, not to a fresh
+        // row nothing checked.
         p_day: today,
         p_in: tokIn,
         p_out: tokOut,
@@ -461,21 +495,12 @@ export default async function handler(req: Request): Promise<Response> {
         p_cache_w: cacheWrite,
       })
 
-      metered = !error
-      // Deliberately not thrown. The reply has already been delivered; failing
-      // the response now would punish the user for a bookkeeping problem that is
-      // ours. But it is not silent either: it is logged, and it rides back on the
-      // `done` event so the probe says so out loud.
-      //
-      // The residual risk is real and is NOT fixed here: if this write fails
-      // permanently — the function absent because only half the migration was
-      // pasted, or EXECUTE never granted — the ceiling has no other source of
-      // truth and the endpoint serves without limit while looking healthy. A
-      // per-instance latch was considered and rejected: it would turn one
-      // transient blip into a dead Bell until the instance recycled. The real fix
-      // is B6's reserve-before-spend, where a failed write fails the request
-      // before any money is spent.
-      if (error) console.error('[bell] meter write failed:', error.message)
+      costed = !error
+      // Deliberately not thrown, and no longer dangerous. The reply has been
+      // delivered and the ring is already counted; what a failure here loses is
+      // the cost columns for one row — the bill drifts, the ceiling does not.
+      // It is logged, and it rides back on `done` so the probe says so out loud.
+      if (error) console.error('[bell] token write failed:', error.message)
     })())
 
   // The consumer can vanish at any moment, and a ReadableStream controller throws
@@ -531,12 +556,20 @@ export default async function handler(req: Request): Promise<Response> {
         const final = await stream.finalMessage()
         tokOut = final.usage.output_tokens ?? tokOut
 
-        await note()
+        await settle()
 
         // The measurement, handed back with the reply. B0's gate is a number, so
         // the number travels with the answer rather than living only in a log.
-        // `metered` included because a ring the meter refused to record is the one
-        // fact this endpoint most needs to admit out loud.
+        //
+        // `metered` is now true by construction: reaching this line means a slot
+        // was claimed, and a ring the meter could not record never got as far as
+        // the model. It stays on the wire because the probe reads it, and because
+        // "the meter definitely counted this" is worth stating rather than
+        // implying. `costed` carries what `metered` used to: whether the token
+        // columns landed, which can still fail on its own.
+        //
+        // The counts come from the reservation rather than from arithmetic here —
+        // it is the statement that actually moved the counter.
         emit('done', {
           ending: ending(final.stop_reason),
           usage: {
@@ -546,16 +579,17 @@ export default async function handler(req: Request): Promise<Response> {
             cache_write: cacheWrite,
           },
           model: MODEL,
-          metered,
+          metered: true,
+          costed,
           day: today,
-          rings_today: already + 1,
-          daily_ceiling: ceiling,
+          rings_today: slot.used,
+          daily_ceiling: slot.allowance,
         })
       } catch (e) {
         // Fact plus remedy, in register, and no stack trace on the wire — the
         // upstream message goes to the function log, never to the browser.
         console.error('[bell] upstream failed:', e instanceof Error ? e.message : String(e))
-        await note()
+        await settle()
         emit('error', {
           message: 'The line dropped mid-sentence, sir. Say the word and I will resume.',
         })
@@ -564,20 +598,24 @@ export default async function handler(req: Request): Promise<Response> {
       }
     },
 
-    // The caller hung up. Stop paying for words nobody will read, and still
-    // record what was already spent.
+    // The caller hung up. Stop paying for words nobody will read, then close the
+    // books: record what was already spent, or return the slot if nothing was.
+    //
+    // The ceiling no longer depends on this path — the slot was claimed before
+    // the model was called, so a caller that rings and hangs up in a loop runs
+    // out of allowance whether or not this ever runs. What still depends on it is
+    // the cost side of the ledger, and the courtesy of giving back a slot that
+    // bought nothing.
     //
     // RETURNING the promise is load-bearing, not tidiness. A `cancel()` that
     // returns undefined resolves the stream's cancel steps immediately, leaving
-    // the meter write as a bare floating promise after the response is finished —
-    // and a serverless platform is entitled to reclaim the invocation at that
-    // point. Returned, the runtime waits for it. Without this, a caller that rings
-    // and hangs up in a loop is billed upstream every time and counted locally
-    // none of them, which is precisely the traffic the ceiling exists to stop.
+    // the write as a bare floating promise after the response is finished — and a
+    // serverless platform is entitled to reclaim the invocation at that point.
+    // Returned, the runtime waits for it.
     cancel() {
       shut = true
       stream.abort()
-      return note()
+      return settle()
     },
   })
 

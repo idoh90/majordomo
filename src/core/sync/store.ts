@@ -16,9 +16,24 @@ import type { RecordKey } from './types'
  *                       plane still arrives.
  *   ownerId             which account this device last answered to, so signing
  *                       in as someone else cannot silently merge two estates.
+ *                       OUTLIVES SIGN-OUT — see below.
  *   cursor              how far the last pull got (server clock, never ours).
  *   adopted             whether this device has completed its one-time
  *                       insert-only reconcile for `ownerId`.
+ *
+ * `ownerId` is the only one of those that survives `reset()`, and the guard it
+ * feeds is worthless without that. The check it exists for reads "this device
+ * already belongs to somebody else" — so it has to be answerable at the moment
+ * the SECOND person signs in, which is necessarily after the first has signed
+ * out. Clearing it on the way out left nothing to compare against: the next
+ * account to sign in on a shared laptop found a blank device, no warning was
+ * possible, and one person's whole estate went up into the other's account —
+ * silently when their cloud was empty, and behind a merge prompt that never said
+ * whose records these were when it was not.
+ *
+ * It is not a secret and it is not a credential: it is a uuid this device has
+ * already synced under. Keeping it costs nothing and is the only thing standing
+ * between two people sharing a machine.
  *
  * What it deliberately does NOT hold is the payload snapshot. That lives in
  * memory only — see engine.ts, which explains why keeping it here would be both
@@ -60,7 +75,13 @@ interface SyncState {
   setError: (lastError: string | null) => void
   setCarried: (at: string) => void
   setPendingChoice: (pendingChoice: { local: number; cloud: number } | null) => void
-  /** sign-out: forget the bookkeeping, keep the estate */
+  /**
+   * Go COLD: drop the queue, the cursor and the adoption, so the next sign-in
+   * reconciles from scratch insert-only. Used by sign-out and by an estate
+   * import, which are the two moments the bookkeeping stops describing reality.
+   *
+   * `ownerId` deliberately SURVIVES — see the note on the field.
+   */
   reset: () => void
 }
 
@@ -123,9 +144,10 @@ export const useSyncStore = create<SyncState>()(
       setError: (lastError) => set({ lastError }),
       setCarried: (at) => set({ lastCarriedAt: at }),
       setPendingChoice: (pendingChoice) => set({ pendingChoice }),
+      // `ownerId` is absent from this list ON PURPOSE, and it is the whole point
+      // of the field — see the note where it is declared.
       reset: () =>
         set({
-          ownerId: null,
           cursor: null,
           adopted: false,
           dirty: {},

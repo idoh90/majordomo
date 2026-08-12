@@ -41,21 +41,33 @@ export default defineConfig({
         // any unknown path falls back to the shell — there is no router, but a
         // stray deep link must never dead-end offline
         navigateFallback: 'index.html',
+        // …except the server's own routes. `api/` is a real backend on the same
+        // origin, and an offline shell that answers for it would turn "the Bell
+        // is unreachable" into "the Bell replied with an HTML page" — a failure
+        // the caller cannot read and cannot retry sensibly. Nothing under /api
+        // is a navigation today, so this changes nothing yet; it is here so the
+        // chat UI does not discover it the hard way.
+        navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         // Quotes are a live-network luxury: serve the cache when it answers,
         // refresh behind it, and never let a failed fetch break a boot.
+        //
+        // THERE IS NO TWELVE DATA RULE HERE, and its absence is the point.
+        // Twelve Data takes its key as a query parameter, and a cache is keyed by
+        // the whole URL — so caching those responses wrote the user's API key
+        // into CacheStorage, where deleting it in the settings sheet does not
+        // reach. It is a free read-only quote key, so the cost of losing one is
+        // somebody burning a daily quota; the reason to stop is that a secret in
+        // a place the app does not know it owns can never be revoked from inside
+        // the app.
+        //
+        // Nothing is lost by dropping it: the Ledger already caches the last
+        // quotes and FX rates in its own store and renders them while a refresh
+        // is in flight, so an offline open shows exactly what it showed before.
+        // `purgeQuoteCache` in `modules/capital/lib/prices.ts` clears the cache
+        // this rule left behind on devices that already have one.
         runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/api\.twelvedata\.com\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'quotes',
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
           {
             urlPattern: /^https:\/\/api\.frankfurter\.dev\/.*/i,
             handler: 'NetworkFirst',

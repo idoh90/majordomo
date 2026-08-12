@@ -266,6 +266,7 @@ async function ring(index) {
     model: done.model,
     ending: done.ending,
     metered: done.metered,
+    costed: done.costed,
     day: done.day,
     ringsToday: done.rings_today,
     ceiling: done.daily_ceiling,
@@ -337,19 +338,35 @@ if (RUNS === 1) {
 /* the things that must not pass quietly                                      */
 /* -------------------------------------------------------------------------- */
 
+// Since 0005 a ring that could not be metered never reaches the model at all —
+// the slot is claimed before anything is spent, and a reservation that fails
+// refuses the request with a 503. So this should now be UNREACHABLE, and the
+// check stays precisely because of that: if it ever fires again, the ordering
+// has been undone and the endpoint can serve without limit once more.
 const unmetered = rings.filter((r) => r.metered === false)
 if (unmetered.length) {
   failed = true
   console.log(`\n  THE METER DID NOT RECORD ${unmetered.length} OF ${RUNS} RINGS.`)
-  console.log(`    The replies arrived, so nothing is broken from where you are sitting —`)
-  console.log(`    but the daily ceiling has no other source of truth, so while this keeps`)
-  console.log(`    happening the endpoint serves without limit and looks healthy doing it.`)
-  console.log(`    Usual cause: only part of 0003_bell.sql reached the SQL editor, so the`)
-  console.log(`    table exists (the read works) but the function or its grant does not.`)
+  console.log(`    This should be impossible: since 0005_bell_reserve.sql the slot is claimed`)
+  console.log(`    BEFORE the model is called, and a ring the meter cannot record is refused`)
+  console.log(`    with a 503 rather than served. Seeing it here means the endpoint has gone`)
+  console.log(`    back to recording after the fact, and while that lasts the daily ceiling`)
+  console.log(`    has no source of truth: it serves without limit and looks healthy doing it.`)
+}
+
+// The cost side can still fail on its own, and it is much less serious: the ring
+// IS counted, so the ceiling holds — what drifts is the token arithmetic that
+// prices a month.
+const uncosted = rings.filter((r) => r.costed === false)
+if (uncosted.length) {
+  failed = true
+  console.log(`\n  THE TOKEN COLUMNS WERE NOT WRITTEN FOR ${uncosted.length} OF ${RUNS} RINGS.`)
+  console.log(`    The ceiling is unaffected — each of these rings claimed its slot before the`)
+  console.log(`    reply, and "rings today" above is the count the database itself returned.`)
+  console.log(`    What is lost is what they COST, so §6's arithmetic drifts quietly.`)
+  console.log(`    Usual cause: only part of 0005_bell_reserve.sql reached the SQL editor —`)
+  console.log(`    bell_reserve landed (you got a reply) and bell_note_tokens did not.`)
   console.log(`    Check the function logs for the exact database error.`)
-  console.log(`    Note also that "rings today" above is the endpoint's arithmetic, not a`)
-  console.log(`    reading from the database — with the meter broken it counts up forever`)
-  console.log(`    from a row that was never written.`)
 }
 
 const unclean = rings.filter((r) => r.ending !== 'complete')

@@ -110,12 +110,30 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
   cached** or the app can't learn it's stale; `noindex` + frame/sniff headers
   because this is a personal estate, not a public product.
+- **The CSP is there for the supply chain, not for injection.** There is no
+  HTML-injection route in this codebase — no `dangerouslySetInnerHTML`, no
+  `innerHTML`, no `eval` — so the policy is not defending against user content.
+  It defends against the thing that cannot be audited from here: a build-time
+  dependency that one day ships code to read `localStorage` (where the Supabase
+  session lives, by deliberate design) and post it somewhere. `script-src 'self'`
+  makes that post fail. Keep `connect-src` as the list of origins the app
+  genuinely talks to — Supabase over both `https:` and `wss:` (realtime is a
+  WebSocket), Twelve Data, Frankfurter — and **add to it only when a real feature
+  needs it**, since every entry is a place data could go. `style-src` carries
+  `'unsafe-inline'` because React writes `style` attributes all over this app;
+  that is a style hole, not a script hole. If the build ever gains an inline
+  `<script>` (it has none today — checked in `dist/index.html`, where the PWA
+  registration is an external `registerSW.js`), it will break loudly rather than
+  silently, which is the correct direction.
 - **`.vercelignore` only governs CLI uploads** — a Git build clones the whole repo.
   Harmless (only `dist/` is served), but never rely on it to hide anything.
 - **Origins don't share storage.** `localhost:5173` and the deployed app are
   different estates. Moving between them is gear → **Export/Import an estate**
-  (`core/backup.ts`) — the M0 backup ritual. That file carries the Twelve Data
-  **API key**; treat an export as a secret.
+  (`core/backup.ts`) — the M0 backup ritual. The export **no longer carries the
+  Twelve Data API key** (`SECRETS` in `core/backup.ts` blanks it, matching the
+  exclusion cloud sync already makes): a file that gets mailed to yourself and
+  dropped in a cloud folder must not quietly be a credential. Restoring onto a
+  new device therefore needs the key re-entered once, in Ledger settings.
 
 ## The Bell — the server seam (`api/`)
 

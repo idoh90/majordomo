@@ -32,6 +32,11 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch: {}
 
+# This job checks out nothing, reads nothing and writes nothing. Its sibling
+# already says so explicitly; saying it here too means a future step that wants
+# a token has to ask for it in the diff, where it can be seen.
+permissions: {}
+
 jobs:
   ping:
     runs-on: ubuntu-latest
@@ -53,11 +58,17 @@ jobs:
             exit 1
           fi
 
-          # 200 is the healthy answer to both probes below: RLS returns an empty
-          # result to an anonymous caller, and the query still ran. Anything else
-          # means the registry is not answering the way it should — fail LOUDLY,
-          # because a keep-alive that quietly stops working is worse than not
-          # having one at all.
+          # A probe passes on two counts, not one: the query RAN (HTTP 200), and
+          # it returned WHAT IT SHOULD HAVE. The second half is new, and it is the
+          # difference between a keep-alive and an alarm — the app's probe asks an
+          # RLS-guarded table for a row as an anonymous caller, so the only
+          # correct answer is none. Row-level security on and row-level security
+          # off both produced HTTP 200 and a green tick, and the evidence was
+          # printed into this log every morning for nobody.
+          #
+          # Anything else means the registry is not answering the way it should —
+          # fail LOUDLY, because a keep-alive that quietly stops working is worse
+          # than not having one at all.
           # A failing probe records its failure and the next one still runs.
           #
           # It used to `exit 1` on the spot, under `set -e`, which meant the
@@ -73,9 +84,15 @@ jobs:
           # single most diagnostic line this job can produce.
           fails=0
 
+          # THE BODY IS NEVER PRINTED. It used to be, on every run, and that was
+          # two mistakes at once: nobody read it, so the one line that could have
+          # said "row-level security is off" scrolled past every morning
+          # unexamined — and on the day it IS off, the body is real household
+          # records being written into a build log. So the job reads it instead,
+          # and reports only its size and its verdict.
           probe() {
-            local label="$1" method="$2" url="$3"
-            shift 3
+            local label="$1" method="$2" url="$3" expect="$4"
+            shift 4
 
             local status
             status=$(curl -sS -o /tmp/body.txt -w '%{http_code}' \
@@ -86,9 +103,9 @@ jobs:
               "$@" \
               "${url}") || status="000"
 
-            echo "${label}: HTTP ${status}"
-            cat /tmp/body.txt 2>/dev/null || true
-            echo
+            local bytes
+            bytes=$(wc -c < /tmp/body.txt 2>/dev/null || echo 0)
+            echo "${label}: HTTP ${status} (${bytes} bytes)"
 
             if [ "${status}" != "200" ]; then
               if [ "${status}" = "000" ]; then
@@ -97,13 +114,30 @@ jobs:
                 echo "::error::${label} answered ${status}, not 200. The project may be paused, the key may be wrong, or the thing being queried may be gone."
               fi
               fails=$((fails + 1))
+              return
+            fi
+
+            # A 200 only proves the query RAN. What it returned is the part that
+            # says whether the door is shut, and until now nothing looked.
+            if [ "${expect}" = "empty" ]; then
+              local body
+              body=$(tr -d ' \n\r\t' < /tmp/body.txt)
+              if [ "${body}" != "[]" ]; then
+                echo "::error::${label} RETURNED ROWS TO AN ANONYMOUS CALLER. Row-level security is off on that table, or its policy no longer constrains — every record in it is readable by anyone holding the anon key, which ships in the browser bundle and is public by design. Re-run supabase/migrations/0001_records.sql and check 'alter table … enable row level security' actually took. The rows themselves are deliberately not printed here."
+                fails=$((fails + 1))
+              else
+                echo "  ${label}: row-level security holds — no rows for an anonymous caller."
+              fi
             fi
           }
 
           # The app's path. `select=id&limit=1` on an RLS-guarded table returns
           # [] for an anonymous caller and is the cheapest thing that genuinely
           # runs a query.
-          probe "the app" GET "${SUPABASE_URL}/rest/v1/records?select=id&limit=1"
+          # `expect=empty` is the assertion: RLS must return [] here. `select=id`
+          # keeps the blast radius small even on the day it fails — an id is the
+          # least revealing column on the table.
+          probe "the app" GET "${SUPABASE_URL}/rest/v1/records?select=id&limit=1" empty
 
           # The landing page's path — the exact call src/lib/waitlist.ts makes
           # for its counter, in the landing repo.
@@ -116,7 +150,10 @@ jobs:
           # an error message no visitor could act on, discovered whenever
           # somebody happens to look. With it, this job goes red the next
           # morning and says which door stopped answering.
-          probe "the waitlist" POST "${SUPABASE_URL}/rest/v1/rpc/waitlist_count" \
+          # No `expect` here: this one is SUPPOSED to answer an anonymous caller —
+          # it is a public signup counter, and returning a number to a stranger is
+          # the feature. Only that it answers 200 is checked.
+          probe "the waitlist" POST "${SUPABASE_URL}/rest/v1/rpc/waitlist_count" any \
             -H "Content-Type: application/json" \
             -d '{}'
 
@@ -125,4 +162,4 @@ jobs:
             exit 1
           fi
 
-          echo "The registry is awake, and both doors answer."
+          echo "The registry is awake, both doors answer, and the app's door is still shut to strangers."

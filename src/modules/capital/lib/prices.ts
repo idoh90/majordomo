@@ -7,6 +7,31 @@ import type { Quote } from '../types'
 const BASE = 'https://api.twelvedata.com'
 
 /**
+ * Delete the service worker's old quote cache.
+ *
+ * The PWA config used to cache Twelve Data responses, and Twelve Data takes its
+ * key as a query parameter — so every cached entry was keyed by a URL with the
+ * user's API key in it. Removing the rule stops new ones being written; it does
+ * nothing about the caches already sitting on devices, and "delete the key in
+ * settings" would still leave those copies behind. This is the only route by
+ * which the app can reach them.
+ *
+ * A one-shot at module load rather than a step inside `refreshPrices`: it should
+ * run once when the Ledger is first opened, and the Ledger is the only thing that
+ * imports this file. Failures are ignored on purpose — no CacheStorage (Safari
+ * private mode), or no such cache, both mean there is nothing to clean.
+ */
+function purgeQuoteCache(): void {
+  try {
+    void caches?.delete('quotes')
+  } catch {
+    /* no CacheStorage here — then there is no cache to clear either */
+  }
+}
+
+purgeQuoteCache()
+
+/**
  * Cache key for a LISTING, not a ticker. VOD is a $9 ADR on NASDAQ and a 7200p
  * line on the LSE; keyed by bare symbol they overwrite each other and one
  * position gets priced — and stamped into net worth — with the other's quote.

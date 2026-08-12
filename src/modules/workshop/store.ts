@@ -5,6 +5,7 @@ import { localDayKey } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import { voice } from '../../core/voice'
 import { noteDeleted } from '../../core/sync/intent'
+import { normalizeUrl } from './url'
 import {
   dueMarkerTitle,
   dueOf,
@@ -209,7 +210,10 @@ export const useWorkshopStore = create<WorkshopState>()(
           type,
           title,
           body: extra?.body,
-          url: extra?.url,
+          // refused rather than repaired: a scheme this app will not open has no
+          // business being stored, and a card that silently keeps one is a hole
+          // waiting for the next thing that opens a URL
+          url: extra?.url ? (normalizeUrl(extra.url) ?? undefined) : undefined,
           // a deadline only ever belongs to a job — see BoardCard.dueAt
           dueAt: type === 'task' ? extra?.dueAt : undefined,
           parentId,
@@ -227,8 +231,14 @@ export const useWorkshopStore = create<WorkshopState>()(
         return card
       },
       updateCard: (id, patch) => {
+        // the edit path needs the same guard as the create path, or a card can
+        // be given a refused scheme one keystroke after it was refused one
+        const safe =
+          'url' in patch
+            ? { ...patch, url: patch.url ? (normalizeUrl(patch.url) ?? undefined) : undefined }
+            : patch
         set((s) => ({
-          cards: s.cards.map((c) => (c.id === id ? { ...c, ...patch, id, ventureId: c.ventureId } : c)),
+          cards: s.cards.map((c) => (c.id === id ? { ...c, ...safe, id, ventureId: c.ventureId } : c)),
         }))
         syncDue(get().cards.find((c) => c.id === id))
       },
