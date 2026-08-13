@@ -15,6 +15,9 @@ export default defineConfig({
      * mode is indistinguishable from one on wifi.
      */
     VitePWA({
+      // registration lives in app/boot.tsx, estate boots only — the landing
+      // entry must not register the worker or precache the app for strangers
+      injectRegister: false,
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
