@@ -1262,7 +1262,7 @@ export const majordomoPack: VoicePack = {
       /** the press-here target at the foot of a column on the phone */
       hangHere: '+ HANG ONE HERE',
       /** the hint under the board on desktop, where the gesture is invisible */
-      pressHint: 'Press bare board to hang a card there. Drag it to move the wall.',
+      pressHint: 'Press bare board to hang a card there. Drag it to move the wall, wheel to zoom.',
       threadHint: "Drag a card's eyelet onto another to thread them, or onto a threaded one to cut it.",
       zoomIn: 'Closer',
       zoomOut: 'Further back',

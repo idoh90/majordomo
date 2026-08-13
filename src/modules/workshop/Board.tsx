@@ -528,6 +528,14 @@ const TAP_SLOP = 6
 
 const ZOOM_MIN = 0.4
 const ZOOM_MAX = 1.6
+/**
+ * How hard one wheel notch bites: the scale step is `exp(-delta * this)`, so a
+ * mouse notch (~100px of delta) is about 16%, while a trackpad's stream of
+ * two-pixel deltas stays a smooth crawl rather than sixty 16% jumps.
+ */
+const ZOOM_WHEEL = 0.0015
+/** …and no single event may scale by more than this, whatever it reports */
+const ZOOM_WHEEL_MAX = 1.35
 const VIEW_H = 560
 /** how far past its own edge the wall may be pulled before it stops */
 const PAN_SLACK = 80
@@ -895,11 +903,15 @@ function DesktopBoard({
     return { dx: next.x - before.x, dy: next.y - before.y }
   }
 
-  /** zoom about a screen point, so the thing under the cursor stays under it */
+  /**
+   * Zoom about a screen point, so the thing under the cursor stays under it.
+   * Reports whether the wall ACTUALLY scaled — at either stop it did not, and
+   * the wheel handler hands the gesture back to the page rather than eating it.
+   */
   const zoomAt = (factor: number, clientX?: number, clientY?: number) => {
     const v = view.current
     const z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v.z * factor))
-    if (z === v.z) return
+    if (z === v.z) return false
     const r = viewRef.current?.getBoundingClientRect()
     const px = r ? (clientX ?? r.left + r.width / 2) - r.left : 0
     const py = r ? (clientY ?? r.top + r.height / 2) - r.top : 0
@@ -907,18 +919,29 @@ function DesktopBoard({
     moveTo(px - (px - v.x) * k, py - (py - v.y) * k, z)
     if (zoomSettle.current) clearTimeout(zoomSettle.current)
     zoomSettle.current = setTimeout(() => setZoomShown(view.current.z), 140)
+    return true
   }
 
   /**
-   * The wheel SCROLLS the wall. It used to zoom it — every notch a scale step
-   * and a preventDefault — which made an ordinary two-finger scroll shudder
-   * in and out instead of moving, and left the page unable to scroll at all
-   * while the pointer was over the board.
+   * The wheel ZOOMS the wall, about the cursor — the canvas convention, and
+   * the thing a mouse in front of a pegboard is actually for. The wall is
+   * still moved by DRAGGING it, which is how it was always moved.
    *
-   * Zoom keeps the gesture that actually means zoom: ctrl/⌘ + wheel, which is
-   * what a trackpad pinch sends. And when the wall has nothing left to give
-   * in that direction, the event is left alone so the PAGE scrolls — a
-   * fixed-height board that swallows every wheel is a trap.
+   * Two rules keep this from becoming the trap the old scroll-the-wall wheel
+   * was written to escape:
+   *
+   *  - the listener is on the board's own viewport, so it is the only surface
+   *    in the app a wheel scales. Everywhere else the wheel is the page's, and
+   *    the document-level refusal in `core/ui/zoomLock` (a TOUCH gesture, not
+   *    this one) is untouched by any of it;
+   *  - at either zoom stop the event is handed BACK — no preventDefault — so
+   *    a wheel over a fixed-height board that has nothing left to give scrolls
+   *    the page, exactly as it would over any other panel.
+   *
+   * Shift is the escape hatch that keeps the wheel able to MOVE the wall, for
+   * a trackpad that cannot notch and a hand that would rather not drag.
+   * Ctrl/⌘ + wheel is still a zoom and is still always swallowed, so the
+   * browser's own zoom cannot fire over the board.
    *
    * Bound natively rather than through React: React's listeners are passive,
    * so preventDefault through onWheel is a no-op.
@@ -928,20 +951,24 @@ function DesktopBoard({
     if (!el) return
     const onWheel = (e: WheelEvent) => {
       eased.current = false
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault()
-        zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY)
-        return
-      }
       // lines and pages are wheel units too, and a mouse that reports them
       // would otherwise crawl a pixel at a time
       const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? VIEW_H : 1
-      const shift = e.shiftKey
-      const dx = -(shift ? e.deltaY || e.deltaX : e.deltaX) * k
-      const dy = shift ? 0 : -e.deltaY * k
-      const v = view.current
-      const { dx: mx, dy: my } = moveTo(v.x + dx, v.y + dy, v.z)
-      if (mx !== 0 || my !== 0) e.preventDefault()
+
+      if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        const v = view.current
+        const { dx, dy } = moveTo(v.x - (e.deltaY || e.deltaX) * k, v.y, v.z)
+        if (dx !== 0 || dy !== 0) e.preventDefault()
+        return
+      }
+
+      const step = Math.exp(-e.deltaY * k * ZOOM_WHEEL)
+      const scaled = zoomAt(
+        Math.min(ZOOM_WHEEL_MAX, Math.max(1 / ZOOM_WHEEL_MAX, step)),
+        e.clientX,
+        e.clientY,
+      )
+      if (scaled || e.ctrlKey || e.metaKey) e.preventDefault()
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
