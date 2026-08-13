@@ -1,9 +1,10 @@
-# This is a personal estate, not a public product. Nothing here should be in a
-# search index, and the same instruction is served as an `X-Robots-Tag` header
-# from `vercel.json` — this file exists so the intent is legible from the
-# filesystem and not only from a response nobody thinks to inspect.
-#
-# When the landing page arrives, THIS FILE MOVES WITH THE APP. A waitlist page
-# that Google cannot index is worse than no waitlist page.
+# The front door wants to be found. The app behind it serves nothing a
+# crawler can read — every estate lives in localStorage behind JavaScript and
+# a sign-in — so opening the origin up indexes exactly one thing: the page
+# that asks to be indexed.
 User-agent: *
-Disallow: /
+Allow: /
+
+# The origin below is filled in during the build from site.config.ts. Nothing
+# to change on a domain move, and nothing to forget.
+Sitemap: __SITE_ORIGIN__/sitemap.xml
