@@ -1,5 +1,6 @@
 import { isRun, type MuscleId, type Workout } from '../types'
 import { addDays, localDayKey } from '../../../core/dates'
+import { SETS_PER_HOUR } from './volume'
 
 /*
  * Training-aware nutrition engine. Protein is held FLAT (total daily intake is
@@ -130,7 +131,12 @@ export function workoutWeightedSets(w: Workout): number {
   // energy is driven by the primary movers; a session with no primary muscle
   // (only reachable via hand-edited imports) contributes no session load.
   if (w.primary.length === 0) return 0
-  const total = SESSION_SETS_BASE * setEffortScale(w.effort)
+  // a logged set count is a measurement and stands as-is; estimates (from
+  // duration, else the flat base) still scale with effort
+  const total =
+    w.setsTotal ??
+    (w.durationMin != null ? (w.durationMin / 60) * SETS_PER_HOUR : SESSION_SETS_BASE) *
+      setEffortScale(w.effort)
   const avg = w.primary.reduce((s, m) => s + ENERGY_WEIGHT[m], 0) / w.primary.length
   return total * avg
 }

@@ -393,10 +393,12 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 
 ### The three stores (one localStorage key each, fully independent)
 
-- **`batman-workouts` v4** (`modules/training/store.ts`) — `{ workouts, weeklyGoal,
-  profile, skin }`. The `skin` field is **legacy/frozen**: nothing reads or writes it
-  anymore, but it stays in the interface/partialize/migrate so old blobs and exports
-  round-trip unchanged. Do not bump the version for shell concerns.
+- **`majordomo-training` v5** (`modules/training/store.ts`) — `{ workouts, weeklyGoal,
+  profile, skin }`. Workouts may carry optional `setsTotal` / `durationMin` (the two
+  session-size inputs on the effort step — additive, so no migrate was needed and old
+  blobs/exports round-trip). The `skin` field is **legacy/frozen**: nothing reads or
+  writes it anymore, but it stays in the interface/partialize/migrate so old blobs and
+  exports round-trip unchanged. Do not bump the version for shell concerns.
 - **`majordomo-shell` v3** (`core/store/shell.ts`) — `{ skin, weekStart }`. On
   true first boot it seeds from the legacy blob's `state.skin`; an existing
   shell blob always wins (persist rehydrates synchronously). Skins pass
@@ -530,9 +532,10 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
 Centerpiece: an SVG "muscle topography" body map, heat-colored by current strain,
 computed from past workouts + recovery-time decay. Layout inside the module mirrors
 the old flat app: `types.ts`, `store.ts`, `data/muscles.ts`, `lib/*`, `components/*`,
-plus `TrainingScreen.tsx` (the console screen) and `index.tsx` (the ConsoleModule:
-Tile = sessions this week vs goal; Briefing = `DailySummary`, which also owns the
-DEV `window.__strains` assignment so it's live even on the menu).
+plus `TrainingScreen.tsx` (the console screen), `Briefing.tsx` (`GroundsBriefing` +
+the `useGroundsBriefingFacts` hook the Manor brief also reads) and `index.tsx` (the
+ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
+`window.__strains` assignment so it's live even on the menu).
 
 - **Skins** — seven visual directions from the Claude Design doc ("Design
   Directions.dc.html": Gotham Gold + its Daylight light variant, Tac-Ops Console,
@@ -580,12 +583,19 @@ DEV `window.__strains` assignment so it's live even on the menu).
   hypertrophy/recovery literature (see [[workout-recovery-science]] memory). Strain
   is always recomputed from raw workouts — never persisted — so constants tune freely.
 - **Weekly volume mode** — `modules/training/lib/volume.ts` estimates "effective hard
-  sets" per muscle for the current calendar week (the app logs sessions, not sets:
-  BASE_SETS× role×effort-scale), classifies each against RP-style MEV/MAV/MRV
-  `LANDMARKS`, and the body map has a **Strain | Volume** toggle. Volume mode colors
-  under→optimal→pushing→over (blue/green/amber/red) and a deload hint shows when ≥2
-  muscles pass MRV. `BodySvg` is mode-agnostic (takes `colorFor`/`glowFor` callbacks).
-  It's an estimate in the app's own units, not real set counts — landmarks are tunable.
+  sets" per muscle over a **trailing 7 days** (deliberately not the calendar week —
+  no Monday reset), classifies each against RP-style MEV/MAV/MRV `LANDMARKS`, and the
+  body map has a **Strain | Volume** toggle. Sets come from a per-session **budget**
+  split across the muscles trained, most-informed source first: the logged
+  `setsTotal` (verbatim; discounted below effort 5) → `durationMin` × ~18 sets/h →
+  a saturating muscle-count estimate — so a chest-only day credits chest ~2.6× what
+  a five-muscle day does, instead of the old flat per-muscle constant. Plates paint
+  by continuous band position (0 untrained → 1 MEV → 2 top of MAV → 3 MRV) and a
+  deload hint shows when ≥2 muscles pass MRV. `BodySvg` is mode-agnostic (takes
+  `colorFor`/`glowFor` callbacks). It's an estimate in the app's own units unless
+  sets were logged — landmarks are tunable. **Lifts only**, the policy stated in
+  volume.ts's header: sets-based surfaces count `isLift`; strain and energy count
+  everything.
 - Still not modeled (needs data the app doesn't log): per-exercise contribution
   vectors (finer synergist/stabilizer tiers than flat ×0.5), per-set diminishing returns.
   Detail sheet uses `workoutActivity` (% of peak) + `recoveryPhase` for wording.
@@ -597,9 +607,13 @@ DEV `window.__strains` assignment so it's live even on the menu).
   `workoutWeightedSets` prices a run from time on feet (`RUN_SETS_PER_H`), distance at
   6 min/km when only distance was logged.
 - **Weekly goal** — persisted in the training store (`weeklyGoal`, 0 = no goal).
-  Tracked against the current *calendar* week (Monday-start). "Slacking this week" =
-  groups trained in the prior 4 weeks but under 50% of their weekly baseline now
-  (`slackingGroups` in `insights.ts`).
+  Tracked against the current *calendar* week (start honors the shell's `weekStart`).
+  "Behind its week" = groups whose trailing-7-day sets sit under half their target
+  (Σ per-muscle min(MEV, own 4-week baseline)) via `groupWeeks` in
+  `lib/trainNext.ts` — the same units and window as the body map, so the card and
+  the map can't disagree. `trainNext` adds a strain gate on top
+  (`READY_STRAIN = 3.5`): a group both **recovered and behind** becomes the
+  briefing aside's "what to train next" recommendation.
 - **Nutrition engine** — `modules/training/lib/nutrition.ts`, training-aware macros.
   Protein FLAT (~1.9 g/kg, split over meals — total intake matters, not timing);
   calories & carbs FLEX with training load. Mifflin–St Jeor BMR × rest-day activity
@@ -607,12 +621,12 @@ DEV `window.__strains` assignment so it's live even on the menu).
   450); carbs = a chronic weekly-load floor (3–4 g/kg, from `avg7WeightedSets`) +
   per-session carb bump; fat = calorie remainder with a ~0.6 g/kg floor that trims
   carbs when hit. Session load is an ESTIMATE (`workoutWeightedSets`:
-  SESSION_SETS_BASE×effort×muscle-size `ENERGY_WEIGHT`) since the app logs sessions,
-  not sets. All coefficients live in `Profile` (persisted, editable via the gear-menu
+  SESSION_SETS_BASE×effort×muscle-size `ENERGY_WEIGHT`), except that a logged
+  `setsTotal` stands verbatim and a logged `durationMin` prices the session by time.
+  All coefficients live in `Profile` (persisted, editable via the gear-menu
   **Profile & nutrition** sheet) — recalibrate to weight trend. Grounded in the
   nutrition build-spec (see [[nutrition-lean-bulk-science]] memory). `profile` also
-  drives the opening **briefing** (`DailySummary` + `lib/summary.ts`) and the
-  `NutritionCard`.
+  drives the Grounds **briefing** (`Briefing.tsx`) and the `NutritionCard`.
 - **Body map** — `modules/training/components/bodymap/paths.ts` is data-only (SVG
   path strings, viewBox 200×440). Paired muscles are authored as LEFT-half paths and
   mirrored via `transform="translate(200 0) scale(-1 1)"` for guaranteed symmetry.
@@ -655,6 +669,8 @@ auto-enter Training so they land on the right screen.
 - `window.__watch` — the Watch's shift-shape store handle in dev
 - `window.__engine` — the strain module (sample `recoveryEnvelope(t, style, muscleFactor, nf)`
   to plot recovery curves without React round-trips)
+- `window.__volume` / `window.__trainNext` — the volume estimator and the
+  train-next selector (probe `sessionBudget`/`sessionSets`/`trainNext` the same way)
 - `window.__nutrition` — the nutrition module (`dailyTargets`, `bmr`, … for macro checks)
 
 ## Environment quirk (this machine's Claude browser pane)

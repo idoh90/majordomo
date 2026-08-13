@@ -6,7 +6,9 @@ import { voice } from '../../../../core/voice'
 import { Collapsible } from '../../../../core/ui/Collapsible'
 import { CollapseChevron } from '../../../../core/ui/CollapseToggle'
 import { REP_STYLES } from '../../lib/strain'
+import { sessionBudget } from '../../lib/volume'
 import { CalendarPicker } from '../ui/CalendarPicker'
+import { Field } from '../ui/Field'
 import { Slider } from '../ui/Slider'
 import type { Selection } from './AddWorkoutSheet'
 import { BlockLinkNote, type BlockLink } from './BlockLinkNote'
@@ -22,9 +24,13 @@ interface EffortStepProps {
   effort: number
   strainFeel: number
   repStyle: RepStyle
+  /** lift session size, string-valued like the run fields — '' = not recorded */
+  setsTotal: string
+  durationMin: string
   onEffort: (v: number) => void
   onStrainFeel: (v: number) => void
   onRepStyle: (s: RepStyle) => void
+  onSession: (patch: Partial<{ setsTotal: string; durationMin: string }>) => void
   editing: boolean
   performedAt: string
   onPerformedAt: (iso: string) => void
@@ -44,9 +50,12 @@ export function EffortStep({
   effort,
   strainFeel,
   repStyle,
+  setsTotal,
+  durationMin,
   onEffort,
   onStrainFeel,
   onRepStyle,
+  onSession,
   editing,
   performedAt,
   onPerformedAt,
@@ -67,6 +76,19 @@ export function EffortStep({
   const now = new Date()
   const dayLabel = relativeDayLabel(performedAt, now)
   const whenLabel = `${dayLabel} · ${timeLabel(performedAt)}`
+
+  // the sets placeholder is the estimate a typed count would replace, built
+  // live from the picks, the effort, and any typed duration — so entering a
+  // duration visibly moves the estimate it feeds
+  const typedMin = Number(durationMin)
+  const budgetPreview = Math.round(
+    sessionBudget({
+      primary,
+      secondary,
+      effort,
+      durationMin: Number.isFinite(typedMin) && typedMin > 0 ? typedMin : undefined,
+    }),
+  )
 
   return (
     <div>
@@ -129,6 +151,32 @@ export function EffortStep({
         <Slider label="Effort given" value={effort} onChange={onEffort} />
         <Slider label="How strained it feels" value={strainFeel} onChange={onStrainFeel} />
       </div>
+
+      {!isRun && !isSport && (
+        <div className="mt-5" role="group" aria-label={voice.grounds.sessionSizeTitle}>
+          <div className="flex gap-2.5">
+            <Field
+              label={voice.grounds.sessionSetsLabel}
+              unit={voice.grounds.sessionSetsUnit}
+              value={setsTotal}
+              onChange={(v) => onSession({ setsTotal: v })}
+              placeholder={`~${budgetPreview}`}
+              step="1"
+              max={60}
+            />
+            <Field
+              label={voice.grounds.sessionMinLabel}
+              unit={voice.grounds.sessionMinUnit}
+              value={durationMin}
+              onChange={(v) => onSession({ durationMin: v })}
+              placeholder="60"
+              step="5"
+              max={480}
+            />
+          </div>
+          <p className="mt-1.5 text-xs text-ink-faint">{voice.grounds.sessionSizeNote}</p>
+        </div>
+      )}
 
       <div className="mt-5">
         <button

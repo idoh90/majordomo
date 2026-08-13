@@ -118,6 +118,12 @@ if (import.meta.env.DEV) {
   import('./lib/nutrition').then((m) => {
     ;(window as unknown as Record<string, unknown>).__nutrition = m
   })
+  import('./lib/volume').then((m) => {
+    ;(window as unknown as Record<string, unknown>).__volume = m
+  })
+  import('./lib/trainNext').then((m) => {
+    ;(window as unknown as Record<string, unknown>).__trainNext = m
+  })
 
   // ?demo seeds a fresh browser profile with fixture workouts (screenshot/testing aid)
   if (
@@ -134,6 +140,7 @@ if (import.meta.env.DEV) {
       effort: number,
       strainFeel: number,
       repStyle?: Workout['repStyle'],
+      extras?: Pick<Workout, 'setsTotal' | 'durationMin'>,
     ): Workout => ({
       id: makeId(),
       performedAt: at(hoursAgo),
@@ -145,6 +152,7 @@ if (import.meta.env.DEV) {
       effort,
       strainFeel,
       repStyle,
+      ...extras,
     })
     const D = 24
     const demoRun = (hoursAgo: number, distanceKm: number, durationMin: number, effort: number): Workout => ({
@@ -158,13 +166,22 @@ if (import.meta.env.DEV) {
       // exclusively on whole minutes
       demoRun(2 * D + 3, 5.2, 26.2, 6),
       demoRun(4 * D + 6, 12, 70, 8),
-      // this calendar week (recent) — note: no legs this week → legs should read "slacking"
-      demo(2, 'push', ['chest'], ['front-delts', 'side-delts', 'triceps'], 9, 8, 'heavy'),
-      demo(26, 'pull', ['lats'], ['biceps', 'rear-delts', 'forearms', 'traps'], 8, 7, 'light'),
+      // this calendar week (recent) — note: no legs this week → legs should read behind.
+      // The three session-size shapes are all exercised: stated sets + duration,
+      // duration only, sets only — the rest estimate from the pick shape.
+      demo(2, 'push', ['chest'], ['front-delts', 'side-delts', 'triceps'], 9, 8, 'heavy', {
+        setsTotal: 16,
+        durationMin: 70,
+      }),
+      demo(26, 'pull', ['lats'], ['biceps', 'rear-delts', 'forearms', 'traps'], 8, 7, 'light', {
+        durationMin: 55,
+      }),
       demo(50, undefined, ['abs'], ['obliques'], 6, 5, 'light'),
       // ~1 week ago
       demo(7 * D + 2, 'legs', ['quads', 'hamstrings', 'glutes'], ['calves', 'lower-back'], 9, 8, 'heavy'),
-      demo(8 * D, 'push', ['chest'], ['front-delts', 'side-delts', 'triceps'], 7, 6),
+      demo(8 * D, 'push', ['chest'], ['front-delts', 'side-delts', 'triceps'], 7, 6, undefined, {
+        setsTotal: 14,
+      }),
       demo(9 * D, 'pull', ['lats'], ['biceps', 'rear-delts', 'forearms', 'traps'], 8, 7),
       // ~2 weeks ago
       demo(15 * D, 'legs', ['quads', 'hamstrings', 'glutes'], ['calves', 'lower-back'], 8, 7),

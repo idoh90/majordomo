@@ -11,11 +11,16 @@ export type HeatRamp = 'standard' | 'noir' | 'daylight'
  * silhouette while the hot end stays the same ember/red.
  */
 export const HEAT_STOPS: Record<HeatRamp, [number, string][]> = {
+  // The lower half stays in the cool family on purpose — low strain means
+  // "fine to train", and painting it warm would cry wolf — but it must be
+  // DISTINGUISHABLE from rest: a muscle three days after a session sits near
+  // 3.0, and the first draft of these stops put that within a few RGB points
+  // of the rested plate, which read as "the app forgot my workout".
   standard: [
     [0.0, '#20242c'], // recovered graphite
-    [1.5, '#1e3a4a'], // faint steel blue
-    [3.0, '#2c6470'], // cool teal — lightly worked
-    [4.5, '#6e6a2e'], // dark olive-gold handoff
+    [1.5, '#25485f'], // steel blue — touched
+    [3.0, '#32748c'], // steel-cyan — worked, cooling
+    [4.5, '#7c7635'], // olive-gold handoff
     [6.0, '#c77e0a'], // amber
     [7.5, '#f0620c'], // orange
     [9.0, '#f53b1e'], // red-orange
@@ -23,25 +28,23 @@ export const HEAT_STOPS: Record<HeatRamp, [number, string][]> = {
   ],
   noir: [
     [0.0, '#2a2320'], // rested paper-soot
-    [2.5, '#4d2e22'], // warmed umber
+    [1.0, '#3f2f26'], // first warmth off the soot
+    [2.5, '#5c3b27'], // warmed umber
     [5.0, '#8a3420'], // rust
     [7.5, '#c93c1f'], // vermilion
     [10.0, '#ff4a22'], // burning
   ],
   daylight: [
     [0.0, '#e3e2d8'], // recovered porcelain
-    [1.5, '#b9cdd9'], // pale steel blue
-    [3.0, '#7fb3bd'], // pastel teal — lightly worked
-    [4.5, '#b0a94f'], // olive-gold handoff
+    [1.5, '#9dbccd'], // steel blue — touched
+    [3.0, '#6ea9b6'], // pastel teal — worked, cooling
+    [4.5, '#a49d3f'], // olive-gold handoff
     [6.0, '#e9a70d'], // amber
     [7.5, '#f0620c'], // orange
     [9.0, '#f53b1e'], // red-orange
     [10.0, '#ff2e1a'], // hot red
   ],
 }
-
-/** default ramp, kept for callers that don't care about skins */
-export const COLOR_STOPS = HEAT_STOPS.standard
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16)

@@ -1,4 +1,5 @@
 import { computeStrains } from '../../modules/training/lib/strain'
+import { HOT_THRESHOLD } from '../../modules/training/lib/recovery'
 import { MUSCLES } from '../../modules/training/data/muscles'
 import type { MuscleId, Workout } from '../../modules/training/types'
 
@@ -11,8 +12,9 @@ import type { MuscleId, Workout } from '../../modules/training/types'
  * calendar: Thursday can be shown as wrecked on Tuesday, before it is planned.
  */
 
-/** at or past this a muscle is "hot" — same threshold the briefing uses */
-export const HOT = 6
+/** at or past this a muscle is "hot" — the wing's own threshold, re-exported
+ *  under the Manor's name so the two can never drift apart */
+export const HOT = HOT_THRESHOLD
 /** a full bar = this many muscles hot at once */
 export const HOT_CAP = 6
 /** samples across one 24 h duty cycle; the envelope is smooth, 4 h is plenty */

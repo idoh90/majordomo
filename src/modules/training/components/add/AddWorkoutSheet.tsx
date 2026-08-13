@@ -39,6 +39,9 @@ interface Draft {
   selection: Selection
   /** run fields kept as strings — empty means "not recorded" */
   run: RunFields
+  /** lift session size, same string convention — empty means "not recorded" */
+  setsTotal: string
+  durationMin: string
   effort: number
   strainFeel: number
   repStyle: RepStyle
@@ -56,6 +59,7 @@ type Action =
   | { type: 'continue' }
   | { type: 'back' }
   | { type: 'run'; patch: Partial<RunFields> }
+  | { type: 'session'; patch: Partial<Pick<Draft, 'setsTotal' | 'durationMin'>> }
   | { type: 'effort'; value: number }
   | { type: 'strainFeel'; value: number }
   | { type: 'repStyle'; value: RepStyle }
@@ -130,6 +134,8 @@ function reducer(d: Draft, a: Action): Draft {
       return d
     case 'run':
       return { ...d, run: { ...d.run, ...a.patch } }
+    case 'session':
+      return { ...d, ...a.patch }
     case 'effort':
       return { ...d, effort: a.value }
     case 'strainFeel':
@@ -153,6 +159,8 @@ const freshDraft = (): Draft => ({
   sportKind: null,
   selection: {},
   run: EMPTY_RUN_FIELDS,
+  setsTotal: '',
+  durationMin: '',
   effort: 7,
   strainFeel: 6,
   repStyle: 'mixed',
@@ -182,6 +190,8 @@ function draftFromWorkout(w: Workout): Draft {
         storedSec > 0 && storedKm ? clampPace(Math.round(storedSec / storedKm)) : DEFAULT_PACE,
       heldSec: storedSec,
     },
+    setsTotal: w.setsTotal != null ? String(w.setsTotal) : '',
+    durationMin: w.durationMin != null ? String(w.durationMin) : '',
     effort: w.effort,
     strainFeel: w.strainFeel,
     repStyle: w.repStyle ?? 'mixed',
@@ -329,6 +339,15 @@ export function AddWorkoutSheet({
       const n = Number(s)
       return s.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined
     }
+    /** session-size entries are whole numbers; a rounded-to-zero entry is
+     *  "not recorded", never a stored 0 */
+    const count = (s: string) => {
+      const n = num(s)
+      if (n === undefined) return undefined
+      const r = Math.round(n)
+      return r > 0 ? r : undefined
+    }
+    const isConditioning = draft.method === 'run' || draft.method === 'sport'
     // a workout cannot have happened in the future — the picker's rule for days
     // and times, enforced once more at the save instant, where a sheet left open
     // has drifted past its own stamp. A moment that still stands is kept
@@ -367,6 +386,10 @@ export function AddWorkoutSheet({
       secondary,
       effort: draft.effort,
       strainFeel: draft.strainFeel,
+      // lifts only — a run's clock lives in run.durationMin, and conditioning
+      // has no working sets to count
+      setsTotal: isConditioning ? undefined : count(draft.setsTotal),
+      durationMin: isConditioning ? undefined : count(draft.durationMin),
       repStyle: draft.repStyle,
       eventId,
     }
@@ -504,9 +527,12 @@ export function AddWorkoutSheet({
             effort={draft.effort}
             strainFeel={draft.strainFeel}
             repStyle={draft.repStyle}
+            setsTotal={draft.setsTotal}
+            durationMin={draft.durationMin}
             onEffort={(value) => dispatch({ type: 'effort', value })}
             onStrainFeel={(value) => dispatch({ type: 'strainFeel', value })}
             onRepStyle={(value) => dispatch({ type: 'repStyle', value })}
+            onSession={(patch) => dispatch({ type: 'session', patch })}
             editing={editing !== null}
             performedAt={draft.performedAt}
             onPerformedAt={(value) => dispatch({ type: 'performedAt', value })}

@@ -768,7 +768,7 @@ export const majordomoPack: VoicePack = {
         }
         return parts.join(' ')
       },
-      aside: ({ carbs, fat, kcal, coldest, done, goal }) => {
+      aside: ({ carbs, fat, kcal, coldest, done, goal, trainNext }) => {
         const parts: string[] = []
         // the carb/fat split was the Grounds' own summary card; the briefing
         // only ever quoted the two headline macros, so opening it now finishes
@@ -776,7 +776,15 @@ export const majordomoPack: VoicePack = {
         if (kcal > 0) {
           parts.push(`${carbs} g of carbohydrate and ${fat} g of fat complete the day.`)
         }
-        if (coldest) parts.push(`${coldest} is your freshest group.`)
+        // a group that is both recovered and behind its week is a real
+        // recommendation; the freshest-group line is the fallback when nothing
+        // is actually owed
+        if (trainNext) {
+          const sets = Math.round(trainNext.sets)
+          parts.push(
+            `${trainNext.group} is recovered and behind its week — ${sets === 0 ? 'none' : lower(sets)} of ${lower(Math.round(trainNext.target))} sets, sir.`,
+          )
+        } else if (coldest) parts.push(`${coldest} is your freshest group.`)
         if (goal > 0) {
           const left = goal - done
           parts.push(
@@ -824,6 +832,13 @@ export const majordomoPack: VoicePack = {
     runHeldTime: ({ time }) => `Holding the logged ${time}. A distance would give it a pace.`,
     runEffortPrefill: ({ n }) => `Effort ${n} · prefilled on the next step`,
     runEffortIdle: 'Effort prefill follows your pace',
+    sessionSizeTitle: 'Session size',
+    sessionSetsLabel: 'Working sets',
+    sessionSetsUnit: 'sets',
+    sessionMinLabel: 'Duration',
+    sessionMinUnit: 'min',
+    sessionSizeNote:
+      'Optional, whole-session figures. They sharpen the volume map; blank keeps the estimate.',
     muscleTwin: {
       front: 'FRONT',
       back: 'BACK',
@@ -872,9 +887,9 @@ export const majordomoPack: VoicePack = {
     weekTitle: 'This week',
     goalMet: "You've hit this week's goal.",
     goalRemaining: (n) => `${n} more to hit this week's goal.`,
-    slackingTitle: 'Below your usual',
-    slackingDetail: ({ group, thisWeek, baseline }) =>
-      `${group}: ${Math.round(thisWeek)} this week, usually ${Math.round(baseline)}`,
+    behindTitle: 'Behind its week',
+    behindDetail: ({ group, sets, target }) =>
+      `${group}: ~${Math.round(sets)} ${plural(Math.round(sets), 'set', 'sets')} in the last 7 days · target ${Math.round(target)}`,
     goalDialogTitle: 'Weekly goal',
     goalDialogBody: 'How many sessions a week are you aiming for? You can change it any time.',
     goalPerWeek: 'per week',
@@ -897,6 +912,19 @@ export const majordomoPack: VoicePack = {
     // and unlike the history empty state there is no second element to swap
     mapIdleStrain: 'Select a muscle for details',
     mapIdleVolume: 'Last 7 days of volume against each muscle’s range',
+    // a muscle with no history says so instead of borrowing "fully recovered",
+    // which used to be the NEVER-trained line — the one state that had done
+    // nothing to recover from
+    mapStrain: ({ muscle, strain, trained, state }) => {
+      if (trained === null) return `${muscle} — nothing logged yet`
+      return [
+        `${muscle} — strain ${strain.toFixed(1)}`,
+        `trained ${trained}`,
+        state === 'recovered' ? 'fully recovered' : state === 'mostly' ? 'mostly recovered' : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    },
     // an untrained muscle needs the window stated once, not twice: "~0 sets in
     // 7 days · nothing logged" is the same fact wearing two hats
     mapVolume: ({ muscle, sets, band, trend }) =>
@@ -930,6 +958,12 @@ export const majordomoPack: VoicePack = {
     deloadTitle: 'Deload check',
     deload: ({ count, muscles }) =>
       `${count} muscles have had too much in the last seven days (${muscles}). A lighter session or an extra rest day would settle them.`,
+    phaseLine: {
+      fresh: 'Acute fatigue is at its peak right now.',
+      peaking: 'Soreness is still building toward its peak.',
+      easing: 'Past the peak — soreness is easing off.',
+      recovered: 'Fully recovered — this workout no longer adds strain.',
+    },
     topMusclesTitle: 'Most Trained · 30d',
     topMusclesNote: 'Lifting only. Runs affect recovery, not this chart.',
     topMusclesEmpty: 'No lifting volume yet',
@@ -2218,8 +2252,6 @@ export const majordomoPack: VoicePack = {
         'What today asks for, worked out from your build and what you actually trained. Training days get more, rest days less.',
       calendar:
         'Every session you’ve logged, by date. Tap a day to see what you did.',
-      summary:
-        'The day in one paragraph: what your body is carrying, what the week still wants from you, and what to eat for it.',
     },
     study: {
       pending:

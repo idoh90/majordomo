@@ -1,13 +1,6 @@
-import { isLift, isRun, isSport, type MuscleGroup, type MuscleId, type Workout } from '../types'
-import { ALL_MUSCLE_IDS, MUSCLES, PICKER_GROUPS } from '../data/muscles'
-import {
-  addDays,
-  localDayKey,
-  startOfLocalDay,
-  startOfWeek,
-  weekKey,
-  type WeekStart,
-} from '../../../core/dates'
+import { isLift, isRun, isSport, type MuscleId, type Workout } from '../types'
+import { ALL_MUSCLE_IDS } from '../data/muscles'
+import { addDays, localDayKey, startOfWeek, weekKey, type WeekStart } from '../../../core/dates'
 import { muscleLoad } from './strain'
 
 export interface WeekBucket {
@@ -105,74 +98,13 @@ export function thisWeekSports(workouts: Workout[], now: Date, weekStart?: WeekS
   return n
 }
 
-const GROUP_OF = Object.fromEntries(
-  ALL_MUSCLE_IDS.map((m) => [m, MUSCLES[m].group]),
-) as Record<MuscleId, MuscleGroup>
-
-function groupVolume(workouts: Workout[], predicate: (w: Workout) => boolean): Map<MuscleGroup, number> {
-  const totals = new Map<MuscleGroup, number>()
-  for (const w of workouts) {
-    if (!predicate(w)) continue
-    for (const m of ALL_MUSCLE_IDS) {
-      const load = muscleLoad(w, m)
-      if (load > 0) totals.set(GROUP_OF[m], (totals.get(GROUP_OF[m]) ?? 0) + load)
-    }
-  }
-  return totals
-}
-
-export interface SlackingGroup {
-  group: MuscleGroup
-  thisWeek: number
-  baseline: number
-}
-
-const DAY_MS = 86_400_000
-/** a week must be this far along before under-training means anything */
-const SLACKING_MIN_DAY = 3
-/** loads are summed floats, so a group EXACTLY on pace lands a few ulps under
- *  the bar — it must not be called slacking over dust */
-const SLACKING_EPSILON = 1e-9
-
-/**
- * Muscle groups you normally train but have under-trained this calendar week.
- * Baseline = average weekly volume over the 4 completed weeks before this one;
- * a group is "slacking" if this week sits below 50% of that baseline PRORATED
- * BY WEEK PROGRESS — half the usual volume is only owed once the week is out.
- * Against a flat 50% every trained group flunked on day one (0 < half of
- * anything), which turned a mid-week nudge into a Monday-morning wall; the
- * butler does not guilt. Nothing is emitted before day 3 at all. Ranked by
- * the largest shortfall relative to baseline.
- */
-export function slackingGroups(workouts: Workout[], now: Date, weekStart?: WeekStart): SlackingGroup[] {
-  const thisWk = weekKey(now, weekStart)
-  const currentStart = startOfWeek(now, weekStart)
-  const priorStart = addDays(currentStart, -28)
-
-  // day 1 = the week-start day itself, so a full week reads 7/7 = the flat 50%.
-  // Rounded, not floored: a DST week puts 23h or 25h between two local
-  // midnights and would otherwise lose (or gain) a day.
-  const dayOfWeek =
-    1 + Math.round((startOfLocalDay(now).getTime() - currentStart.getTime()) / DAY_MS)
-  if (dayOfWeek < SLACKING_MIN_DAY) return []
-  const progress = Math.min(1, dayOfWeek / 7)
-
-  const thisWeekVol = groupVolume(workouts, (w) => weekKey(new Date(w.performedAt), weekStart) === thisWk)
-  const priorVol = groupVolume(workouts, (w) => {
-    const t = new Date(w.performedAt)
-    return t >= priorStart && t < currentStart
-  })
-
-  const out: SlackingGroup[] = []
-  for (const { group } of PICKER_GROUPS) {
-    const baseline = (priorVol.get(group) ?? 0) / 4
-    if (baseline < 2) continue // ignore groups you rarely train — avoids nagging
-    const thisWeek = thisWeekVol.get(group) ?? 0
-    const bar = baseline * 0.5 * progress * (1 - SLACKING_EPSILON)
-    if (thisWeek < bar) out.push({ group, thisWeek, baseline })
-  }
-  return out.sort((a, b) => a.thisWeek / a.baseline - b.thisWeek / b.baseline)
-}
+// "Slacking groups" used to live here: current-calendar-week muscleLoad
+// (runs and sports included) against a 4-week baseline, prorated by week
+// progress, mute before day 3. It measured a different unit over a different
+// window than the body map's volume mode, so the card and the map could
+// disagree. lib/trainNext.ts `groupWeeks` replaced it — same trailing window,
+// same estimated-set units as the map, and a trailing window has no
+// Monday-morning wall to prorate around.
 
 /**
  * Consecutive local days with at least one workout, counting back from today.

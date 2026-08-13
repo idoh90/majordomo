@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Workout } from '../../types'
-import { GROUP_LABELS } from '../../data/muscles'
-import { slackingGroups, thisWeekCount } from '../../lib/insights'
+import { thisWeekCount } from '../../lib/insights'
+import { groupWeeks } from '../../lib/trainNext'
 import { MAX_WEEKLY_GOAL, useWorkoutStore } from '../../store'
 import { useShellStore } from '../../../../core/store/shell'
 import { Hinted } from '../../../../core/ui/Hint'
@@ -20,7 +20,14 @@ export function WeeklyGoalCard({ workouts, now }: WeeklyGoalCardProps) {
 
   const nowDate = new Date(now)
   const done = thisWeekCount(workouts, nowDate, weekStart)
-  const slacking = slackingGroups(workouts, nowDate, weekStart)
+  // the same trailing window and set units as the body map's volume mode, so
+  // this card and the map can never quote different truths. Deficit only, no
+  // strain gate — a sore group can still be behind; readiness and deficit
+  // combine in the briefing aside, not here. Baseline-backed only: a habit
+  // the user never had is not something to flag in red.
+  const behind = groupWeeks(workouts, null, nowDate, weekStart)
+    .filter((g) => g.backed && g.sets < g.target / 2)
+    .sort((a, b) => a.sets / a.target - b.sets / b.target)
   const hasGoal = goal > 0
   const met = hasGoal && done >= goal
   const remaining = Math.max(0, goal - done)
@@ -86,21 +93,21 @@ export function WeeklyGoalCard({ workouts, now }: WeeklyGoalCardProps) {
         </>
       )}
 
-      {slacking.length > 0 && (
+      {behind.length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
-          <div className="card-title text-[10px]">{voice.grounds.slackingTitle}</div>
+          <div className="card-title text-[10px]">{voice.grounds.behindTitle}</div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {slacking.map((s) => (
+            {behind.map((g) => (
               <span
-                key={s.group}
+                key={g.group}
                 className="chip border border-danger/40 bg-danger/10 px-2.5 py-0.5 text-xs font-medium text-ink"
-                title={voice.grounds.slackingDetail({
-                  group: GROUP_LABELS[s.group],
-                  thisWeek: s.thisWeek,
-                  baseline: s.baseline,
+                title={voice.grounds.behindDetail({
+                  group: g.label,
+                  sets: g.sets,
+                  target: g.target,
                 })}
               >
-                {GROUP_LABELS[s.group]}
+                {g.label}
               </span>
             ))}
           </div>

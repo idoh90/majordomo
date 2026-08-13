@@ -13,6 +13,7 @@ import { thisWeekCount } from './lib/insights'
 import { dailyTargets } from './lib/nutrition'
 import { HOT_THRESHOLD } from './lib/recovery'
 import { computeStrains, readiness, type StrainMap } from './lib/strain'
+import { trainNext } from './lib/trainNext'
 import { useWorkoutStore } from './store'
 
 /**
@@ -64,6 +65,14 @@ export function useGroundsBriefingFacts(given?: StrainMap): GroundsBriefingFacts
     return latest === null || t > latest ? t : latest
   }, null)
 
+  // the top of the train-next list — recovered AND behind its trailing week —
+  // computed off the same strain map and the same volume model every other
+  // surface reads, so the aside can never recommend what the map contradicts
+  const nextUp = useMemo(
+    () => trainNext(workouts, strains, new Date(nowH), weekStart)[0] ?? null,
+    [workouts, strains, nowH, weekStart],
+  )
+
   return {
     done: thisWeekCount(workouts, nowDate, weekStart),
     goal: weeklyGoal,
@@ -84,6 +93,7 @@ export function useGroundsBriefingFacts(given?: StrainMap): GroundsBriefingFacts
     // named only when the map has something to rank — with nothing logged every
     // group reads 0 and "chest is your freshest" would be a coin toss
     coldest: hottest && strains[hottest] > 0 ? muscleLabel(coldest) : null,
+    trainNext: nextUp ? { group: nextUp.label, sets: nextUp.sets, target: nextUp.target } : null,
     nextBlock: ahead[0]
       ? { title: ahead[0].title, dayLabel: dayNameLabel(ahead[0].start, nowDate) }
       : null,

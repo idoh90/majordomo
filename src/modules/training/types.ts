@@ -75,6 +75,12 @@ export interface Workout {
   effort: number
   /** 0–10 */
   strainFeel: number
+  /** roughly how many working sets the whole session held — optional, lifts
+      only (runs carry run.durationMin; sports are conditioning). When present
+      it replaces the volume estimator's guess. */
+  setsTotal?: number
+  /** session length in minutes — optional, lifts only */
+  durationMin?: number
   /** affects load and recovery speed; absent on older data = 'mixed' */
   repStyle?: RepStyle
   /** id of the Manor training block this session fulfils (auto-matched at

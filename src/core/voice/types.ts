@@ -65,6 +65,10 @@ export interface GroundsBriefingFacts {
   sinceLastH: number | null
   /** the least-strained group — what the body is actually offering today */
   coldest: string | null
+  /** the train-next selector's top pick: a group both recovered and behind
+   *  its trailing week — null when nothing qualifies. Sets and target are in
+   *  the volume model's estimated-hard-set units. */
+  trainNext: { group: string; sets: number; target: number } | null
   /** the next training block booked on the Manor */
   nextBlock: { title: string; dayLabel: string } | null
   blocksAhead: number
@@ -696,6 +700,15 @@ export interface VoicePack {
     /** the effort line under the band — prefilled, or waiting on a distance */
     runEffortPrefill: (v: { n: number }) => string
     runEffortIdle: string
+    /** lift session size — two optional whole-session figures on the effort
+     *  step. The sets field's placeholder shows the estimate a typed count
+     *  would override, so the note has to say blank keeps the estimate. */
+    sessionSizeTitle: string
+    sessionSetsLabel: string
+    sessionSetsUnit: string
+    sessionMinLabel: string
+    sessionMinUnit: string
+    sessionSizeNote: string
     /** the muscle step's body-map twin (Run Entry Explorations 3a): mini
      *  figures beside the picker that ignite muscle by muscle as chips are
      *  tapped */
@@ -770,8 +783,10 @@ export interface VoicePack {
     weekTitle: string
     goalMet: string
     goalRemaining: (n: number) => string
-    slackingTitle: string
-    slackingDetail: (v: { group: string; thisWeek: number; baseline: number }) => string
+    /** groups behind their trailing week — same units and window as the body
+     *  map's volume mode, so the two can never disagree */
+    behindTitle: string
+    behindDetail: (v: { group: string; sets: number; target: number }) => string
     goalDialogTitle: string
     goalDialogBody: string
     goalPerWeek: string
@@ -788,6 +803,17 @@ export interface VoicePack {
     /** body map: the idle info line per mode, and the over-volume hint */
     mapIdleStrain: string
     mapIdleVolume: string
+    /** the tapped-muscle readout in strain mode. `trained` is the last-session
+     *  day label — null means the muscle has NO history at all; `state` names
+     *  recovery once the figure has cooled enough that a bare number would
+     *  read as "never trained" ('mostly' below the train-next gate, 'recovered'
+     *  below the visual floor) */
+    mapStrain: (v: {
+      muscle: string
+      strain: number
+      trained: string | null
+      state: 'recovered' | 'mostly' | null
+    }) => string
     /** the tapped-muscle readout in volume mode. `band` is the prose status
      *  word, `trend` the comparison with the muscle's own usual week — null
      *  when there isn't enough history to compare against */
@@ -801,6 +827,8 @@ export interface VoicePack {
     volumeTrend: Record<'above' | 'usual' | 'below', string>
     deloadTitle: string
     deload: (v: { count: number; muscles: string }) => string
+    /** workout detail sheet: where the session sits on its recovery arc */
+    phaseLine: Record<'fresh' | 'peaking' | 'easing' | 'recovered', string>
     /** most-trained chart — lifting only, so it says so */
     topMusclesTitle: string
     topMusclesNote: string
@@ -1688,7 +1716,6 @@ export interface VoicePack {
       recovery: string
       fuel: string
       calendar: string
-      summary: string
     }
     study: {
       pending: string

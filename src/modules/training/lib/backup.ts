@@ -23,6 +23,11 @@ function isScore(x: unknown): x is number {
   return typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 10
 }
 
+/** optional positive number — the shape of setsTotal / durationMin */
+function isOptCount(x: unknown): boolean {
+  return x === undefined || (typeof x === 'number' && Number.isFinite(x) && x > 0)
+}
+
 function isRunDetail(x: unknown): boolean {
   if (x === undefined) return true
   if (typeof x !== 'object' || x === null) return false
@@ -52,7 +57,9 @@ function isWorkout(x: unknown): x is Workout {
     Array.isArray(w.secondary) &&
     w.secondary.every(isMuscleId) &&
     isScore(w.effort) &&
-    isScore(w.strainFeel)
+    isScore(w.strainFeel) &&
+    isOptCount(w.setsTotal) &&
+    isOptCount(w.durationMin)
   )
 }
 

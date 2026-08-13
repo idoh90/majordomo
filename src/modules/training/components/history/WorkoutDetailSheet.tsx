@@ -42,12 +42,6 @@ export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDet
   const agoLabel = dt < 1 ? 'just now' : dt < 48 ? `${Math.round(dt)}h ago` : `${Math.round(dt / 24)}d ago`
   const style = repStyleOf(w)
 
-  const PHASE_COPY: Record<typeof phase, string> = {
-    fresh: 'Acute fatigue is at its peak right now.',
-    peaking: 'Soreness is still building toward its peak.',
-    easing: 'Past the peak — soreness is easing off.',
-    recovered: 'Fully recovered — this workout no longer adds strain.',
-  }
 
   const muscles: { id: MuscleId; kind: 'primary' | 'secondary' }[] = [
     ...w.primary.map((id) => ({ id, kind: 'primary' as const })),
@@ -109,7 +103,7 @@ export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDet
         )}
         .
       </p>
-      <p className="mb-3 text-xs text-ink-faint">{PHASE_COPY[phase]}</p>
+      <p className="mb-3 text-xs text-ink-faint">{voice.grounds.phaseLine[phase]}</p>
 
       <div className="flex flex-col gap-2">
         {muscles.map(({ id, kind }) => {

@@ -18,7 +18,7 @@ import { HOT_THRESHOLD } from '../../../modules/training/lib/recovery'
 import { computeStrains, readiness, type StrainMap } from '../../../modules/training/lib/strain'
 import { sessionSets } from '../../../modules/training/lib/volume'
 import { useWorkoutStore } from '../../../modules/training/store'
-import { isRun } from '../../../modules/training/types'
+import { isLift } from '../../../modules/training/types'
 import { fulfilledHoursBetween as benchHoursBetween } from '../../../modules/workshop/lib'
 import { useWorkshopStore } from '../../../modules/workshop/store'
 
@@ -296,7 +296,11 @@ export function useDials(facts: BriefFacts): Dial[] {
 
       const weeks = weekBuckets(nowDate, 8, weekStart)
       const volPts: DialPoint[] = weeks.map((w) => {
+        // lifts only — the volume policy in lib/volume.ts. A run's primaries
+        // used to leak estimated "sets" into this dial that the body map
+        // (correctly) refused to count.
         const inWeek = workouts.filter((x) => {
+          if (!isLift(x)) return false
           const t = new Date(x.performedAt).getTime()
           return t >= w.start.getTime() && t < w.end.getTime()
         })
@@ -323,10 +327,13 @@ export function useDials(facts: BriefFacts): Dial[] {
         V.dial.volume({ now: volNow, avg: volAvg }),
       )
 
+      // lifts only, matching the headline figure (g.done is thisWeekCount,
+      // which is isLift) — a sport week used to put bars above a headline
+      // that refused to count them
       const sessPts: DialPoint[] = weeks.map((w) => ({
         label: w.label,
         v: workouts.filter((x) => {
-          if (isRun(x)) return false
+          if (!isLift(x)) return false
           const t = new Date(x.performedAt).getTime()
           return t >= w.start.getTime() && t < w.end.getTime()
         }).length,

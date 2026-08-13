@@ -3,6 +3,7 @@ import type { BodyView, MuscleId, Workout } from '../../types'
 import { MUSCLES, muscleLabel } from '../../data/muscles'
 import type { StrainMap } from '../../lib/strain'
 import { VISUAL_FLOOR, lastTrained } from '../../lib/strain'
+import { READY_STRAIN } from '../../lib/trainNext'
 import { glowOpacity, strainToColor } from '../../lib/strainColor'
 import { SKINS } from '../../../../core/ui/skins'
 import { Hinted } from '../../../../core/ui/Hint'
@@ -78,16 +79,26 @@ export function BodyMap({ workouts, strains, now }: BodyMapProps) {
     if (mode === 'strain') {
       const strain = strains[selected]
       const last = lastTrained(workouts, selected)
-      const parts = [`${MUSCLES[selected].label} — strain ${strain.toFixed(1)}`]
-      if (last) {
-        const label = relativeDayLabel(last.performedAt, new Date(now))
-        parts.push(
-          `trained ${label === 'Today' || label === 'Yesterday' ? label.toLowerCase() : label}`,
-        )
-      } else if (strain < VISUAL_FLOOR) {
-        parts.push('fully recovered')
+      const label = last ? relativeDayLabel(last.performedAt, new Date(now)) : null
+      // the recovery wording keys off the same thresholds the visuals and the
+      // train-next selector use, so the caption can never contradict either:
+      // below the visual floor the plate reads rested and the words say
+      // recovered; below READY_STRAIN the selector may offer it and the words
+      // say mostly recovered
+      return {
+        text: voice.grounds.mapStrain({
+          muscle: MUSCLES[selected].label,
+          strain,
+          trained:
+            label === null
+              ? null
+              : label === 'Today' || label === 'Yesterday'
+                ? label.toLowerCase()
+                : label,
+          state: strain < VISUAL_FLOOR ? 'recovered' : strain < READY_STRAIN ? 'mostly' : null,
+        }),
+        dim: false,
       }
-      return { text: parts.join(' · '), dim: false }
     }
     const sets = vol[selected]
     const status = volumeStatus(selected, sets)

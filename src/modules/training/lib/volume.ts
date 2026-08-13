@@ -5,12 +5,30 @@ import { rampColor, type HeatRamp } from './strainColor'
 
 /*
  * Training-volume model, classified against RP-style MEV/MAV/MRV landmarks so
- * the map can flag under-stimulation vs overreaching. The app logs sessions
- * (two sliders + rep style), NOT sets — so this ESTIMATES "effective hard
- * sets": a focused session ≈ BASE_SETS hard sets, halved for a secondary
- * muscle, and scaled by effort (a token session counts less than a
- * near-failure one). It's an approximation in the app's own units, not a real
- * set count — the landmarks below are tunable.
+ * the map can flag under-stimulation vs overreaching.
+ *
+ * POLICY, stated once for every surface that quotes sets: sets-based volume
+ * counts LIFTS ONLY (isLift); strain and energy count everything. A run loads
+ * calves but it is not hard sets, and the landmarks are hypertrophy-set
+ * landmarks — counting conditioning here would read as overreaching that
+ * never happened.
+ *
+ * The estimate works from a per-session SET BUDGET split across the muscles
+ * trained, because that is how sessions actually spend themselves: a
+ * chest-only hour puts ~12 hard sets into chest, a five-muscle circuit gives
+ * each a few. The old model handed every primary a flat BASE_SETS regardless
+ * of focus, which made a dedicated chest day and a full-body day credit chest
+ * identically — the focused day could never even reach chest's MEV. Budget
+ * precedence, most-informed first:
+ *
+ *   1. the logged working-set count (setsTotal) — a measurement, taken
+ *      verbatim; discounted only when effort says the sets were plainly not
+ *      hard (RP landmarks count sets NEAR FAILURE, not gestures at a machine)
+ *   2. the logged duration — sessions run ~15–20 hard sets an hour
+ *      (SETS_PER_HOUR picks the middle), scaled by effort
+ *   3. the pick shape — a saturating curve over how much was trained: one
+ *      focused muscle earns most of a real session's budget, and five
+ *      primaries share ~22 rather than stacking 5× a flat constant
  *
  * The halving of secondary work is the literature's "fractional" counting
  * method, which the 2025 dose-response meta-regression found to be the
@@ -18,14 +36,38 @@ import { rampColor, type HeatRamp } from './strainColor'
  * convenience; don't flatten it to 1.
  */
 
-const BASE_SETS = 5
 const SECONDARY = 0.5
 const effortScale = (effort: number) => 0.4 + 0.08 * effort // 0.4 (effort 0) → 1.2 (effort 10)
 
+/** asymptote of the pick-shape estimate — real sessions cap ~22–25 quality sets */
+const BUDGET_MAX = 30
+const BUDGET_K = 1.5
+/** hard-set density when only duration is known (evidence band 15–20/h) */
+export const SETS_PER_HOUR = 18
+/** guard against a typo'd duration inventing an impossible session */
+const BUDGET_CAP = 40
+/** a stated count is taken verbatim at any ordinary effort; below effort 5 it
+ *  fades toward half, because those sets were not near failure */
+const hardness = (effort: number) => Math.min(1, Math.max(0, 0.5 + 0.1 * effort))
+
+/** total hard-set budget of one session (exported: the add sheet shows the
+ *  estimate a typed count would override) */
+export function sessionBudget(
+  w: Pick<Workout, 'primary' | 'secondary' | 'effort' | 'setsTotal' | 'durationMin'>,
+): number {
+  if (w.setsTotal != null && w.setsTotal > 0) return w.setsTotal * hardness(w.effort)
+  if (w.durationMin != null && w.durationMin > 0) {
+    return Math.min(BUDGET_CAP, (w.durationMin / 60) * SETS_PER_HOUR * effortScale(w.effort))
+  }
+  const weight = w.primary.length + SECONDARY * w.secondary.length
+  return BUDGET_MAX * (weight / (weight + BUDGET_K)) * effortScale(w.effort)
+}
+
 export function sessionSets(w: Workout, m: MuscleId): number {
   const role = w.primary.includes(m) ? 1 : w.secondary.includes(m) ? SECONDARY : 0
-  if (role === 0) return 0
-  return BASE_SETS * role * effortScale(w.effort)
+  const weight = w.primary.length + SECONDARY * w.secondary.length
+  if (role === 0 || weight === 0) return 0
+  return (sessionBudget(w) * role) / weight
 }
 
 export type VolumeMap = Record<MuscleId, number>
@@ -174,9 +216,9 @@ export function bandPosition(m: MuscleId, sets: number): number {
 export const VOLUME_STOPS: Record<HeatRamp, [number, string][]> = {
   standard: [
     [0.0, '#20242c'], // untrained graphite
-    [0.35, '#1e3a4a'], // faint steel — barely started
-    [1.0, '#2c6470'], // teal — at MEV
-    [1.5, '#2f8050'], // green — mid band
+    [0.35, '#2d5a70'], // steel — barely started, but visibly started
+    [1.0, '#34778a'], // teal — at MEV
+    [1.5, '#35915b'], // green — mid band
     [2.0, '#7a9c2e'], // yellow-green — top of MAV
     [2.5, '#e08a06'], // amber — pushing
     [3.0, '#f5551e'], // red — at MRV
@@ -194,9 +236,9 @@ export const VOLUME_STOPS: Record<HeatRamp, [number, string][]> = {
   // the two opposite verdicts became one colour.
   noir: [
     [0.0, '#2a2320'], // soot — untrained
-    [0.35, '#382e26'], // barely lifted
-    [1.0, '#584a3c'], // warm ash — at MEV
-    [1.5, '#6f5c46'], // paper — mid band
+    [0.35, '#52402e'], // barely lifted
+    [1.0, '#75604a'], // warm ash — at MEV
+    [1.5, '#7d684e'], // paper — mid band
     [2.0, '#8a6a44'], // paper warming — top of MAV
     [2.5, '#b0552c'], // rust — pushing
     [3.0, '#d94a24'], // vermilion — at MRV
@@ -209,8 +251,8 @@ export const VOLUME_STOPS: Record<HeatRamp, [number, string][]> = {
   // that would read quieter than the band it is warning about.
   daylight: [
     [0.0, '#e3e2d8'], // untrained porcelain
-    [0.35, '#c3d0d6'], // pale grey-blue
-    [1.0, '#79aab4'], // pastel teal — at MEV
+    [0.35, '#aebfc9'], // pale grey-blue
+    [1.0, '#5f9bab'], // pastel teal — at MEV
     [1.5, '#5aa062'], // green — mid band
     [2.0, '#7e8f2a'], // olive — top of MAV
     [2.5, '#a86a05'], // ink-gold — pushing
@@ -240,9 +282,9 @@ export function overreachingMuscles(vol: VolumeMap): MuscleId[] {
 export type VolumeTrend = 'above' | 'usual' | 'below'
 
 /** a muscle must be trained this much in an average week before "your usual"
- *  means anything — the same guard slackingGroups uses to avoid nagging about
- *  something you barely do */
-const BASELINE_MIN = 2
+ *  means anything — the guard the trend line and the train-next selector
+ *  share, so neither ever nags about something you barely do */
+export const BASELINE_MIN = 2
 
 /** How this window compares with the muscle's own four-week average, or null
  *  when there isn't enough history for the comparison to mean anything. */
