@@ -257,6 +257,7 @@ export function ManorScreen() {
               sandbox={sandbox !== null}
               ghosts={ghosts}
               changedIds={changedIds}
+              onJumpTo={setAnchor}
             />
           </div>
           {sandbox && (

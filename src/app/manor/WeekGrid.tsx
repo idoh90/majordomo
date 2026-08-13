@@ -21,6 +21,7 @@ import { useWorkshopStore } from '../../modules/workshop/store'
 import { projRef } from '../../modules/workshop/lib'
 import { BenchForm, CustomEventForm, type QuickAddPick } from './fields'
 import { EventEditSheet, MobileEventSheet, MobileQuickAddSheet } from './MobileSheets'
+import { QuickAddPanel } from './QuickAddPanel'
 import { nearWatch, warnableBlock } from './nearWatch'
 import { StrainBar } from './StrainBar'
 import type { DayStrain } from './strain'
@@ -205,6 +206,7 @@ export function WeekGrid({
   sandbox = false,
   ghosts = [],
   changedIds,
+  onJumpTo,
 }: {
   columns: ColumnWindow[]
   events: CalendarEvent[]
@@ -216,7 +218,17 @@ export function WeekGrid({
   /** committed originals of changed events, rendered as dashed pencil marks */
   ghosts?: CalendarEvent[]
   changedIds?: ReadonlySet<string>
+  /** move the calendar to the week holding `day`. Quick add can now book into
+   *  any week, and a block written where nobody can see it is a block the
+   *  reader has to go hunting for. */
+  onJumpTo?: (day: Date) => void
 }) {
+  /* The `events` PROP is the viewed week only — enough for drags and popovers,
+     which cannot leave it. Quick add can: its date field reaches any week, so
+     its occupancy check has to read the whole estate or it would cheerfully
+     double-book a night three weeks out. The selector returns the store's own
+     array (never a fresh one), so it is a safe subscription. */
+  const estateEvents = useEventsStore((s) => s.sandbox?.events ?? s.events)
   const addEvent = useEventsStore((s) => s.addEvent)
   const updateEvent = useEventsStore((s) => s.updateEvent)
   const deleteEvent = useEventsStore((s) => s.deleteEvent)
@@ -224,6 +236,9 @@ export function WeekGrid({
   const isMobile = useIsMobile()
   const [popover, setPopover] = useState<Popover | null>(null)
   const [quickAdd, setQuickAdd] = useState<QuickAdd | null>(null)
+  /** the QUICK ADD panel: no anchor in the grid, because nobody pointed at
+   *  one — it carries its own day and hour pickers instead */
+  const [panel, setPanel] = useState<{ col: number; ts: number } | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
   /** desktop: a live drag on a block's end edge */
   const [resize, setResize] = useState<ResizeState | null>(null)
@@ -372,6 +387,13 @@ export function WeekGrid({
         occupies(e) &&
         e.id !== ignoreId &&
         overlaps(new Date(e.start), new Date(e.end), start, end),
+    )
+
+  /** the same question asked of the WHOLE estate, for the one surface that can
+   *  point outside the viewed week */
+  const estateFree = (start: Date, end: Date): boolean =>
+    !estateEvents.some(
+      (e) => occupies(e) && overlaps(new Date(e.start), new Date(e.end), start, end),
     )
 
   /** is a [tc, ts, ts+durH) slot free of every other timed event? */
@@ -744,34 +766,35 @@ export function WeekGrid({
     setQuickAdd({ col, ts, y })
   }
 
-  /** the tab bar's + : quick-add on `col` at the next free half-hour (today)
-   *  or a civilised default hour — the sheet's footer flags an occupied slot */
-  const openQuickAddAt = (col: number) => {
+  /** where the panel OPENS on `col`: the next free half-hour from now (today)
+   *  or a civilised default hour. A starting position, not a decision — the
+   *  panel's own day and hour pickers are what actually place the block. */
+  const defaultTs = (col: number): number => {
     const win = columns[col]
     const isToday = now >= win.start.getTime() && now < win.end.getTime()
     let base = isToday ? Math.ceil(((now - win.start.getTime()) / HOUR_MS) * 2) / 2 : 9
     base = Math.max(0, Math.min(23.5, base))
-    let ts = base
     for (let t = base; t <= 23.5; t += 0.5) {
-      if (slotFree(null, col, t, 0.5)) {
-        ts = t
-        break
-      }
+      if (slotFree(null, col, t, 0.5)) return t
     }
-    setPopover(null)
-    setQuickAdd({ col, ts, y: ts * PXH })
+    return base
   }
 
   /* The + is a one-shot mailbox: the tab bar on mobile, QUICK ADD in the nav
      row on desktop. Consumed HERE rather than inside MobileWeek — which is
-     where it used to live, so a desktop press reached nothing. Mobile keeps
-     targeting the day on screen; desktop targets today when the viewed week
-     contains it, else the first column. */
+     where it used to live, so a desktop press reached nothing. It now opens
+     the PANEL rather than dropping the template menu on a slot the house
+     chose: the day it starts on is still the sensible one (mobile: the day on
+     screen; desktop: today when the viewed week holds it, else the first
+     column), but nothing is written until the reader has said where. */
   const quickAddRequested = useManorUi((s) => s.quickAddRequested)
   useEffect(() => {
     if (!quickAddRequested) return
     const todayIdx = columns.findIndex((w) => now >= w.start.getTime() && now < w.end.getTime())
-    openQuickAddAt(isMobile ? mobileColRef.current : todayIdx >= 0 ? todayIdx : 0)
+    const col = isMobile ? mobileColRef.current : todayIdx >= 0 ? todayIdx : 0
+    setPopover(null)
+    setQuickAdd(null)
+    setPanel({ col, ts: defaultTs(col) })
     useManorUi.getState().clearQuickAddRequest()
   }, [quickAddRequested])
 
@@ -791,18 +814,19 @@ export function WeekGrid({
     return true
   }
 
-  const quickAddPick = (tpl: QuickAddPick) => {
-    if (!quickAdd) return
-    // no fit-the-column clamp: a 19:00 night watch or a 23:30 sleep simply
+  /** write a picked block at a chosen INSTANT. ONE booking path: the in-grid
+   *  popover names the slot the reader clicked, the panel names the slot the
+   *  reader dialled — past this line they are the same event. */
+  const bookAt = (start: Date, tpl: QuickAddPick) => {
+    // no fit-the-day clamp: a 19:00 night watch or a 23:30 sleep simply
     // crosses midnight — natural data; the grid splits it at the seam
-    const ts = quickAdd.ts
-    if (!slotFree(null, quickAdd.col, ts, tpl.hours)) {
+    const end = new Date(start.getTime() + tpl.hours * HOUR_MS)
+    if (!estateFree(start, end)) {
       butler(voice.manor.occupied)
       setQuickAdd(null)
+      setPanel(null)
       return
     }
-    const start = new Date(columns[quickAdd.col].start.getTime() + ts * HOUR_MS)
-    const end = new Date(start.getTime() + tpl.hours * HOUR_MS)
     // a bench block booked here is the WORKSHOP's, written exactly as its own
     // sheet writes one — same source, same `proj:` ref, same fulfillment rule
     // (an hour already past files as done). Anything else stays a manual entry.
@@ -820,10 +844,18 @@ export function WeekGrid({
       })
     }
     setQuickAdd(null)
+    setPanel(null)
+    // booked outside the week on screen — go there, or the block is written
+    // somewhere the reader cannot see it (and neither can UNDO's context)
+    if (start < columns[0].start || start >= columns[6].end) onJumpTo?.(start)
     if (!sandbox) {
       setLastAction({ type: 'add', id: added.id })
       butler(voice.manor.onTheBooks, true)
     }
+  }
+
+  const quickAddPick = (tpl: QuickAddPick) => {
+    if (quickAdd) bookAt(new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS), tpl)
   }
 
   /* -------------------------------------------------------------- render */
@@ -1036,6 +1068,22 @@ export function WeekGrid({
         onSave={saveEdit}
         onClose={() => setEditing(null)}
       />
+
+      {/* Both platforms too, and mounted only while open so each press starts
+          on a fresh day/hour rather than on the last one's leftovers. */}
+      {panel && (
+        <QuickAddPanel
+          columns={columns}
+          initialCol={panel.col}
+          initialTs={panel.ts}
+          now={now}
+          rangeFree={(start, hours) =>
+            estateFree(start, new Date(start.getTime() + hours * HOUR_MS))
+          }
+          onBook={bookAt}
+          onClose={() => setPanel(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={confirm !== null}

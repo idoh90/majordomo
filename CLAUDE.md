@@ -69,7 +69,8 @@ technical version.
 - `npm run check:manor` — the **Manor harness** (`scripts/manor-harness.mjs`): drives
   a real headless Chromium through the running dev server and asserts the calendar's
   numeric contract — a 13 h watch survives a drag, the mobile hour rail agrees with
-  its blocks, an unfittable template isn't offered. Needs `npm run dev` up; exits
+  its blocks, an unfittable template isn't offered, QUICK ADD books on the slot
+  its panel showed. Needs `npm run dev` up; exits
   non-zero on failure. `CHROME_PATH` / `MANOR_BASE` override the browser and origin.
 - No test runner **for the app at large**; verification is done in the browser. The
   Manor is the one exception — its contract is numeric, and "looks plausible" is

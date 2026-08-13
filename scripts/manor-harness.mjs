@@ -542,22 +542,105 @@ async function desktopChecks(browser) {
     ? ok('A4 empty week can be rehearsed (Phase 1)')
     : bad('A4 empty week can be rehearsed (Phase 1)', 'What-If hidden on an empty week')
 
-  /* --- A5: desktop QUICK ADD actually books (the lifted mailbox) ---------- */
+  /* --- A5: desktop QUICK ADD asks where, then books THERE ----------------- */
+  //  The button no longer drops the template menu on a slot the house chose:
+  //  it opens a panel carrying its own day chips and start-hour stepper. The
+  //  claim under test is that the block lands on the slot the panel SHOWED —
+  //  a menu that books somewhere else is exactly the bug this replaced.
   await p2.getByText('QUICK ADD', { exact: false }).first().click()
   await p2.waitForTimeout(350)
-  const popped = await p2.evaluate(() => /The Watch|Study|Sleep/.test(document.body.innerText))
-  if (!popped) {
-    bad('A5 desktop QUICK ADD opens the template popover', 'nothing opened — mailbox unconsumed?')
+  const panelText = () =>
+    p2.evaluate(() => document.querySelector('[role="dialog"]')?.innerText ?? '')
+  const opened = await panelText()
+  if (!/The Watch|Study|Sleep/.test(opened)) {
+    bad('A5 desktop QUICK ADD opens the slot panel', 'nothing opened — mailbox unconsumed?')
   } else {
-    ok('A5 desktop QUICK ADD opens the template popover')
+    /WHICH DAY/i.test(opened) && /START/.test(opened)
+      ? ok('A5 the panel asks for the slot before the activity')
+      : bad('A5 the panel asks for the slot before the activity', opened.split(/\n/).slice(0, 6).join(' / '))
+
+    // move OFF the day and hour the panel opened on, so "books where it said"
+    // is a real claim and not a coincidence of the default
+    const chips = p2.locator('[role="dialog"] button', { hasText: /^(MON|TUE|WED|THU|FRI|SAT|SUN)\s*\d{1,2}$/ })
+    if ((await chips.count()) >= 7) await chips.nth(6).click()
+    await p2.locator('[role="dialog"] button[aria-label="START up"]').click()
+    await p2.locator('[role="dialog"] button[aria-label="START up"]').click()
+    await p2.waitForTimeout(250)
+
+    // the header reads "SUN 16 AUG · 16:30" — the day and hour it is about to
+    // write. The month is in there because the panel can leave this week.
+    const shown = (await panelText()).match(/[A-Z]{3}\s+(\d{1,2})\s+[A-Z]{3}\s+·\s+(\d{2}):(\d{2})/)
     // the button reads "Study2.0 h" — a dot span, a bare text node, an hours
     // span — so match the composed label, not an exact "Study"
-    await p2.locator('button', { hasText: /^Study\s*\d/ }).first().click()
+    await p2.locator('[role="dialog"] button', { hasText: /^Study\s*\d/ }).first().click()
     await p2.waitForTimeout(400)
     const booked = await readEvents(p2)
-    booked?.some((e) => e.title === 'Study')
-      ? ok('A5 desktop QUICK ADD books an event', `${booked.length} event(s) on the books`)
-      : bad('A5 desktop QUICK ADD books an event', 'store still empty after picking a template')
+    const study = booked?.find((e) => e.title === 'Study')
+    if (!study) {
+      bad('A5 desktop QUICK ADD books an event', 'store still empty after picking a template')
+    } else {
+      ok('A5 desktop QUICK ADD books an event', `${booked.length} event(s) on the books`)
+      const landed = await p2.evaluate((iso) => {
+        const d = new Date(iso)
+        return { date: d.getDate(), h: d.getHours(), m: d.getMinutes() }
+      }, study.start)
+      shown &&
+      landed.date === Number(shown[1]) &&
+      landed.h === Number(shown[2]) &&
+      landed.m === Number(shown[3])
+        ? ok('A5 it lands on the slot the panel showed', `${shown[0]}`)
+        : bad(
+            'A5 it lands on the slot the panel showed',
+            `panel said ${shown?.[0] ?? '?'}, store says ${landed.date} @ ${landed.h}:${String(landed.m).padStart(2, '0')}`,
+          )
+    }
+  }
+
+  /* --- A5b: the date field books into another week, calendar follows ------ */
+  //  The chips only ever show one week. The date field is the way out of it,
+  //  and a block written where the reader cannot see it is a block they have
+  //  to go hunting for — so the calendar has to move with it.
+  const dayKey = (page, iso) =>
+    page.evaluate((v) => {
+      const d = new Date(v)
+      const p = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    }, iso)
+
+  await p2.getByText('QUICK ADD', { exact: false }).first().click()
+  await p2.waitForTimeout(350)
+  const dateField = p2.locator('[role="dialog"] input[type="date"]')
+  if ((await dateField.count()) === 0) {
+    bad('A5b quick add can reach another week', 'no date field in the panel')
+  } else {
+    const target = await p2.evaluate(() => {
+      const d = new Date()
+      d.setDate(d.getDate() + 16) // always outside the viewed week
+      const p = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    })
+    await dateField.fill(target)
+    await p2.waitForTimeout(300)
+    const noted = /Another week/i.test(await panelText())
+    noted
+      ? ok('A5b the panel owns up to leaving the week on screen')
+      : bad('A5b the panel owns up to leaving the week on screen', 'no note under the chips')
+
+    await p2.locator('[role="dialog"] button', { hasText: /^Sleep\s*\d/ }).first().click()
+    await p2.waitForTimeout(500)
+    const sleep = (await readEvents(p2))?.find((e) => e.title === 'Sleep')
+    if (!sleep) {
+      bad('A5b it books into that week', 'nothing written')
+    } else {
+      const landedKey = await dayKey(p2, sleep.start)
+      landedKey === target
+        ? ok('A5b it books into that week', landedKey)
+        : bad('A5b it books into that week', `asked for ${target}, wrote ${landedKey}`)
+      const visible = await p2.locator('button[aria-label^="Sleep,"]').count()
+      visible > 0
+        ? ok('A5b the calendar follows the booking', `${visible} block(s) on screen`)
+        : bad('A5b the calendar follows the booking', 'grid still shows the old week')
+    }
   }
 
   /* --- A6: month → day tap lands on that week's grid, never a card -------- */

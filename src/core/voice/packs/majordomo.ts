@@ -596,6 +596,12 @@ export const majordomoPack: VoicePack = {
     undoLabel: 'UNDO',
     quickAddTitle: 'QUICK ADD',
     slotClear: 'This slot is free.',
+    quickAdd: {
+      dayLabel: 'WHICH DAY',
+      dateLabel: 'Pick a date',
+      otherWeek: 'Another week. The calendar will follow it.',
+      whatLabel: 'WHAT GOES THERE',
+    },
     movePlace: 'Tap where it should go.',
     releaseCancel: 'RELEASE TO CANCEL',
     movedTo: (time) => `Moved to ${time}.`,

@@ -419,6 +419,19 @@ export interface VoicePack {
     /** mobile quick-add sheet: title + the footer line when the slot is free */
     quickAddTitle: string
     slotClear: string
+    /** the QUICK ADD panel, which asks for the slot before the activity —
+     *  the start-hour row borrows eventSheet.startLabel rather than spelling
+     *  the same word twice */
+    quickAdd: {
+      /** the row of seven day chips */
+      dayLabel: string
+      /** accessible name for the date field that reaches other weeks */
+      dateLabel: string
+      /** note under the chips once they have left the week on screen */
+      otherWeek: string
+      /** the activity list below the slot */
+      whatLabel: string
+    }
     /** banner while placing a move by tap (the mobile MOVE flow) */
     movePlace: string
     /** the drag escape strip */
