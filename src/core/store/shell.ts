@@ -19,6 +19,9 @@ import { setWeekStartDefault, type WeekStart } from '../dates'
  * existing account still deserves to be shown where the wings are.
  * Any blob written before v4 belongs to someone already using the app, so
  * migrate marks it onboarded — the interview is for new users only.
+ * `wingOrder` / `wingsOff` (the navs' running order and what has been taken
+ * off them) need no version bump for the same reason `panelTips` did not: an
+ * older blob simply lacks them and the initializer's defaults stand.
  */
 
 adoptLegacyKey('majordomo-shell', 'batman-shell')
@@ -37,6 +40,12 @@ function seedSkin(): SkinId {
     // blocked storage (private mode) or corrupt blob — fall back to default
     return DEFAULT_SKIN
   }
+}
+
+/** a persisted list of wing ids, defended down to the element — a hand-edited
+ *  blob must not put a number where `.filter(id => …)` expects a string */
+function ids(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
 }
 
 interface ShellState {
@@ -58,10 +67,26 @@ interface ShellState {
    * only a changed meaning would.
    */
   panelTips: boolean
+  /**
+   * Wing ids in the order the navs list them, after the Manor. Empty means
+   * "however the registry is written", which is the default and stays the
+   * default until the user drags something.
+   *
+   * Stored as a plain id list rather than an index map ON PURPOSE: it is
+   * reconciled against the registry on every read (see `app/wings.ts`), so an
+   * id this build has never heard of is ignored and a wing shipped in a later
+   * release lands at the end of the list instead of vanishing from the navs.
+   */
+  wingOrder: string[]
+  /** wing ids taken off both navs. Hiding is not deleting — the wing's records,
+   *  its housekeeping and its briefing facts all carry on untouched. */
+  wingsOff: string[]
   setSkin: (skin: SkinId) => void
   setWeekStart: (ws: WeekStart) => void
   setOnboarded: (onboarded: boolean) => void
   setPanelTips: (panelTips: boolean) => void
+  setWingOrder: (ids: string[]) => void
+  setWingOff: (id: string, off: boolean) => void
 }
 
 export const useShellStore = create<ShellState>()(
@@ -71,6 +96,8 @@ export const useShellStore = create<ShellState>()(
       weekStart: 1,
       onboarded: false,
       panelTips: true,
+      wingOrder: [],
+      wingsOff: [],
       setSkin: (skin) => set({ skin: normalizeSkin(skin) }),
       setWeekStart: (ws) => {
         setWeekStartDefault(ws) // keep core/dates in sync before the re-render
@@ -78,6 +105,11 @@ export const useShellStore = create<ShellState>()(
       },
       setOnboarded: (onboarded) => set({ onboarded }),
       setPanelTips: (panelTips) => set({ panelTips }),
+      setWingOrder: (next) => set({ wingOrder: [...next] }),
+      setWingOff: (id, off) =>
+        set((s) => ({
+          wingsOff: off ? [...new Set([...s.wingsOff, id])] : s.wingsOff.filter((w) => w !== id),
+        })),
     }),
     {
       name: 'majordomo-shell',
@@ -88,12 +120,14 @@ export const useShellStore = create<ShellState>()(
         weekStart: s.weekStart,
         onboarded: s.onboarded,
         panelTips: s.panelTips,
+        wingOrder: s.wingOrder,
+        wingsOff: s.wingsOff,
       }),
       // v1 blobs may hold a founder-only skin (e.g. 'gotham'); v1/v2 blobs
       // carry a now-dead `ambient` key that this simply doesn't return
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<
-          Pick<ShellState, 'skin' | 'weekStart' | 'onboarded' | 'panelTips'>
+          Pick<ShellState, 'skin' | 'weekStart' | 'onboarded' | 'panelTips' | 'wingOrder' | 'wingsOff'>
         >
         return {
           skin: normalizeSkin(p.skin),
@@ -104,6 +138,10 @@ export const useShellStore = create<ShellState>()(
           // absent means "never asked", which is the default; only an explicit
           // false is somebody having turned the marks off
           panelTips: p.panelTips !== false,
+          // no blob this old carries either, but the shallow merge would write
+          // `undefined` over the defaults if these were simply left out
+          wingOrder: ids(p.wingOrder),
+          wingsOff: ids(p.wingsOff),
         }
       },
       // re-apply the persisted week-start into core/dates once rehydrated
@@ -115,11 +153,14 @@ export const useShellStore = create<ShellState>()(
 )
 
 // Same-version blobs skip migrate — normalize once more after rehydration so
-// a hand-edited or founder-flag-toggled blob can never render unstyled.
+// a hand-edited or founder-flag-toggled blob can never render unstyled, and so
+// the wing lists are lists whatever the blob says they are.
 {
   const s = useShellStore.getState()
   const normalized = normalizeSkin(s.skin)
   if (normalized !== s.skin) useShellStore.setState({ skin: normalized })
+  if (!Array.isArray(s.wingOrder)) useShellStore.setState({ wingOrder: [] })
+  if (!Array.isArray(s.wingsOff)) useShellStore.setState({ wingsOff: [] })
 }
 
 // apply synchronously at module load too (before first paint)

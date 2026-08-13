@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CONSOLES } from './consoles'
+import { useWings } from './wings'
 import { voice } from '../core/voice'
 import { useManorUi } from './manor/uiStore'
 import { useTrainingUi } from '../modules/training/uiStore'
@@ -18,6 +18,11 @@ import { useWorkshopUi } from '../modules/workshop/uiStore'
  * design session's answer to the sixth-tab squeeze. The fold opens a small
  * panel above the bar; while a folded wing is open, the WINGS tab wears that
  * wing's accent so the active state never disappears.
+ *
+ * Both the order and the membership are the household's (see `wings.ts`), so
+ * the fold is not a fixed pair of wings: turn two off and the remaining four
+ * ride the bar with no fold at all, because a WINGS tab that opens onto
+ * nothing anyone chose to hide is a tab for its own sake.
  */
 
 // 20×20 stroke glyphs, one per view (the design's icon set + a book for Study)
@@ -50,7 +55,9 @@ const ADD_ARIA: Record<string, string> = {
   capital: 'Add to the ledger',
 }
 
-/** how many wings ride the bar inline; the rest fold behind WINGS */
+/** wings that fit the bar beside the Manor when nothing has to fold */
+const BAR_WINGS = 4
+/** …and how many ride it once the WINGS tab has to take a slot of its own */
 const INLINE_WINGS = 3
 
 /** tab labels drop the leading article — MANOR, WATCH, … per the design */
@@ -58,12 +65,14 @@ const short = (label: string) => label.replace(/^THE\s+/i, '')
 
 export function TabBar({ view, onNav }: { view: string; onNav: (view: string) => void }) {
   const [wingsOpen, setWingsOpen] = useState(false)
+  const { visible } = useWings()
 
+  const cut = visible.length > BAR_WINGS ? INLINE_WINGS : visible.length
   const inline = [
     { id: 'manor', label: voice.manor.name },
-    ...CONSOLES.slice(0, INLINE_WINGS).map((c) => ({ id: c.id, label: c.name })),
+    ...visible.slice(0, cut).map((c) => ({ id: c.id, label: c.name })),
   ]
-  const folded = CONSOLES.slice(INLINE_WINGS).map((c) => ({ id: c.id, label: c.name }))
+  const folded = visible.slice(cut).map((c) => ({ id: c.id, label: c.name }))
   const foldedActive = folded.some((t) => t.id === view)
 
   const nav = (id: string) => {

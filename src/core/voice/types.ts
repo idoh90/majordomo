@@ -1450,6 +1450,18 @@ export interface VoicePack {
     groupAccount: string
     groupEstate: string
     groupGrounds: string
+    /** the navigation itself: which wings it lists, and in what order */
+    groupWings: string
+    wingsBlurb: string
+    /** what the phone's bar does with the top of that order */
+    wingsBarNote: string
+    /** every wing switched off — the navs are the Manor alone */
+    wingsAllOff: string
+    /** the row's controls, which are icons and therefore need words */
+    wingUp: (name: string) => string
+    wingDown: (name: string) => string
+    wingShow: (name: string) => string
+    wingHide: (name: string) => string
     /** appearance */
     themeLabel: string
     weekStartLabel: string

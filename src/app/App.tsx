@@ -8,6 +8,7 @@ import { storageAvailable } from '../core/storage'
 import { useTrainingUi } from '../modules/training/uiStore'
 import { BenchChip } from '../modules/workshop/bench'
 import { CONSOLES } from './consoles'
+import { useWings } from './wings'
 import { ManorScreen } from './manor/ManorScreen'
 import { House } from './house/HouseRail'
 import type { WingId } from './house/house'
@@ -49,6 +50,16 @@ export default function App() {
     }
     useNavStore.getState().consumeView()
   }, [requestedView])
+
+  // Turning a wing off closes it if you happen to be standing in it. The dep
+  // list is the OFF LIST alone, deliberately: a wing that is off the navs can
+  // still be opened by something that asks for it by name (the onboarding
+  // walk, the bench chip), and a `view` dep would bounce those straight back
+  // out again. This fires when the preference changes, not when the view does.
+  const wingsOff = useShellStore((s) => s.wingsOff)
+  useEffect(() => {
+    if (view !== 'manor' && wingsOff.includes(view)) setView('manor')
+  }, [wingsOff]) // `view` is read, not watched — see above
 
   const active = CONSOLES.find((c) => c.id === view) ?? null
 
@@ -155,12 +166,13 @@ function AppHeader({
 }) {
   const skin = useShellStore((s) => s.skin)
   const setSkin = useShellStore((s) => s.setSkin)
+  const wings = useWings()
   const d = new Date(now)
 
-  // the Manor first, then every registered wing — a new wing means a new tab
+  // the Manor first, then every wing the household still shows, in its order
   const tabs = [
     { id: 'manor', label: voice.manor.name },
-    ...CONSOLES.map((c) => ({ id: c.id, label: c.name })),
+    ...wings.visible.map((c) => ({ id: c.id, label: c.name })),
   ]
 
   // the Log button only exists while the Grounds is open

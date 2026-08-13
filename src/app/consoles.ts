@@ -5,8 +5,10 @@ import { trainingConsole } from '../modules/training'
 import { watchConsole } from '../modules/watch'
 import { workshopConsole } from '../modules/workshop'
 
-// registry order = tab order after the Manor, and it also decides the mobile
-// split: the first INLINE_WINGS ride the bar, the rest fold behind WINGS.
+// The house's own order, and the DEFAULT tab order after the Manor. What a
+// household has since done with it — reordered, switched some off — lives in
+// `app/wings.ts`, and that is what both navs read. Adding a wing here still
+// puts it on the navs: an id no saved order mentions is appended, never lost.
 export const CONSOLES: ConsoleModule[] = [
   trainingConsole,
   workshopConsole,

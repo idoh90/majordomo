@@ -252,7 +252,9 @@ HTML/CSS — no chart library. No router — the shell is a `useState<'menu' | c
 ```
 src/
   app/            the shell: App.tsx (header, briefing row, menu grid, view state),
-                  consoles.ts (the console registry), SettingsMenu.tsx (gear menu)
+                  consoles.ts (the console registry), wings.ts (the household's
+                  running order over it — what both navs read),
+                  SettingsMenu.tsx (gear menu)
     manor/briefing/  THE BRIEFING (see below): facts.ts gathers every wing's
                   facts through the wings' own hooks, dials.ts builds the
                   instrument catalogue, geometry.ts plots it, prefs.ts is
@@ -262,7 +264,8 @@ src/
     dates.ts      local-time day/week/streak helpers
     useNow.ts     ticking-now hook (minute interval + visibilitychange)
     ids.ts        makeId()   ·  storage.ts  storageAvailable()
-    store/shell.ts  app-wide store: { skin, weekStart } @ `majordomo-shell` v3
+    store/shell.ts  app-wide store: { skin, weekStart, wing prefs } @
+                  `majordomo-shell` v4
     ui/           index.css (skin bundles) + skins.ts (SKINS flags) +
                   Sheet / ConfirmDialog / SegmentedControl (shared primitives)
   modules/
@@ -302,7 +305,9 @@ src/
                   Design: 'Workshop Wing -
                   Pegboard.dc.html' in the Claude Design project (pre-freeform;
                   directional). The 6th tab folds the mobile bar's overflow
-                  behind a WINGS tab (TabBar INLINE_WINGS).
+                  behind a WINGS tab (TabBar BAR_WINGS / INLINE_WINGS — four
+                  wings ride the bar, three once a fold takes a slot, so
+                  switching two off in settings retires the fold entirely).
     capital/      'WAYNE FUND' — net worth + budget console (see below)
 ```
 
@@ -340,8 +345,15 @@ Manor mounts every wing's so those run whether or not the wing is ever opened.
 They used to ride inside each wing's briefing ROW; the rows are gone (see THE
 BRIEFING below) and a heal pass must not live inside a component that might be
 deleted. The wing screens still render their own `BriefingPanel` directly.
-Navigation is the tab header (desktop) / `TabBar` (mobile) over `CONSOLES` in
-`app/consoles.ts`. The header's Log Workout button renders **only while the
+Navigation is the tab header (desktop) / `TabBar` (mobile) over **`useWings()`
+in `app/wings.ts`**, not over `CONSOLES` directly: `app/consoles.ts` is the
+house's order, `wings.ts` reconciles it against the household's own (settings →
+THE WINGS: nudge up/down, switch off) and is the only thing either nav reads.
+A saved id this build doesn't know is dropped and a registered wing no saved
+order mentions is appended, so adding or removing a wing needs no migration.
+Switching one off takes it off both navs ONLY — its store, its `Upkeep` and its
+briefing facts carry on, and something that asks for it by name (the onboarding
+walk, the bench chip) still opens it. The header's Log Workout button renders **only while the
 Grounds is open** and reaches the add sheet via a one-shot mailbox
 (`modules/training/uiStore.ts` `requestAddSheet`) — never lift console state
 into the shell for this. (`ConsoleModule.Tile/Icon/status/tagline` currently
@@ -404,7 +416,13 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   shell blob always wins (persist rehydrates synchronously). Skins pass
   through `normalizeSkin` on migrate/rehydrate/set — founder-only ids fall back to
   `midnight` unless `VITE_FOUNDER_SKIN=1` (their CSS ships only in the founder bundle).
-  v3 dropped the `ambient` background layer (idle animation cost on old machines).
+  v3 dropped the `ambient` background layer (idle animation cost on old machines);
+  v4 added `onboarded`. It also carries `panelTips` and the wing preference
+  (`wingOrder` / `wingsOff`, read through `app/wings.ts`) — all three defaulted
+  keys added with **no version bump**, since an older blob simply lacks them and
+  persist's shallow merge leaves the initializer standing. Only a changed
+  meaning needs a migration. Deliberately NOT synced: which wings one screen
+  shows is a fact about that device, exactly like the briefing's dial picks.
 - **`batman-capital` v1** (`modules/capital/store.ts`) — Wayne Fund's data: accounts,
   snapshots, holdings, budget/spends, blur flag, plus the Twelve Data `apiKey` and the
   `prices`/`fx` quote cache. Entirely separate from the others.

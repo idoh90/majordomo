@@ -20,6 +20,7 @@ import { ProfileSheet } from '../modules/training/components/ProfileSheet'
 import { useWorkoutStore } from '../modules/training/store'
 import type { Workout } from '../modules/training/types'
 import { useAuthUi } from './authUi'
+import { nudgeWing, useWings } from './wings'
 import { entryStage, useOnboarding } from './onboarding/store'
 
 /**
@@ -121,6 +122,10 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
               <ThemePicker />
               <Divider />
               <WeekStart />
+            </Section>
+
+            <Section title={voice.settings.groupWings}>
+              <WingList />
             </Section>
 
             <Section title={voice.settings.groupGuidance}>
@@ -317,24 +322,142 @@ function Toggle({
           <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-faint">{blurb}</span>
         )}
       </span>
+      <Switch on={on} />
+    </button>
+  )
+}
+
+/** the switch itself, borrowed by anything that needs one without a Toggle's
+ *  label column (the wing rows carry their own) */
+function Switch({ on }: { on: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className="relative h-5 w-9 flex-none rounded-pill border transition-colors"
+      style={{
+        borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
+        background: on
+          ? 'color-mix(in srgb, var(--color-accent) 22%, transparent)'
+          : 'var(--color-panel-2)',
+      }}
+    >
       <span
-        aria-hidden
-        className="relative h-5 w-9 flex-none rounded-pill border transition-colors"
+        className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-[left]"
         style={{
-          borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
-          background: on
-            ? 'color-mix(in srgb, var(--color-accent) 22%, transparent)'
-            : 'var(--color-panel-2)',
+          left: on ? 'calc(100% - 17px)' : '3px',
+          background: on ? 'var(--color-accent)' : 'var(--color-ink-faint)',
         }}
-      >
-        <span
-          className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-[left]"
-          style={{
-            left: on ? 'calc(100% - 17px)' : '3px',
-            background: on ? 'var(--color-accent)' : 'var(--color-ink-faint)',
-          }}
+      />
+    </span>
+  )
+}
+
+/* ------------------------------------------------------------------ wings */
+
+/**
+ * The navigation, made editable: every wing in the house, in the order both
+ * navs read, each with a switch and a pair of nudges.
+ *
+ * Hidden wings stay IN this list rather than moving to a second one. A wing
+ * that is off is not gone — it keeps its records and its place in the running
+ * order — and shunting it to the bottom of the page would lose exactly the
+ * fact the reader needs to see: where it comes back to when it is switched on
+ * again.
+ */
+function WingList() {
+  const { all, visible } = useWings()
+  const off = useShellStore((s) => s.wingsOff)
+  const setOff = useShellStore((s) => s.setWingOff)
+
+  return (
+    <div className="py-1">
+      <p className="text-[11.5px] leading-snug text-ink-faint">{voice.settings.wingsBlurb}</p>
+      <p className="mt-1 text-[11.5px] leading-snug text-ink-faint">
+        {voice.settings.wingsBarNote}
+      </p>
+
+      <ul className="mt-2.5 flex flex-col">
+        {all.map((w, i) => {
+          const hidden = off.includes(w.id)
+          return (
+            <li key={w.id} className="flex min-h-11 items-center gap-1 py-1">
+              <span
+                className={`min-w-0 flex-1 truncate font-display text-[12.5px] font-semibold uppercase tracking-[0.14em] ${
+                  hidden ? 'text-ink-faint line-through' : 'text-ink'
+                }`}
+              >
+                {w.name}
+              </span>
+
+              <Nudge
+                label={voice.settings.wingUp(w.name)}
+                dir={-1}
+                disabled={i === 0}
+                onClick={() => nudgeWing(w.id, -1)}
+              />
+              <Nudge
+                label={voice.settings.wingDown(w.name)}
+                dir={1}
+                disabled={i === all.length - 1}
+                onClick={() => nudgeWing(w.id, 1)}
+              />
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!hidden}
+                aria-label={
+                  hidden ? voice.settings.wingShow(w.name) : voice.settings.wingHide(w.name)
+                }
+                onClick={() => setOff(w.id, !hidden)}
+                className="ml-2 flex h-11 flex-none items-center pl-1"
+              >
+                <Switch on={!hidden} />
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+
+      {visible.length === 0 && (
+        <p className="mt-1.5 text-[11.5px] leading-snug text-ink-faint">
+          {voice.settings.wingsAllOff}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function Nudge({
+  label,
+  dir,
+  disabled,
+  onClick,
+}: {
+  label: string
+  dir: -1 | 1
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-9 w-9 flex-none items-center justify-center rounded-md border border-line transition-colors ${
+        disabled ? 'text-ink-faint/40' : 'text-ink-dim hover:border-accent/40 hover:text-accent'
+      }`}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d={dir === -1 ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'}
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
-      </span>
+      </svg>
     </button>
   )
 }
