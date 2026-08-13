@@ -2,22 +2,54 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <!-- maximum-scale + user-scalable=no: the app is an installed instrument,
-         not a document, and a stray pinch on the Workshop's board or the
-         Manor's week left the whole page scaled with no obvious way back.
-         Zooming lives INSIDE the board, on desktop, where it has controls and
-         a reset. Note this is the one accessibility trade the app makes; text
-         still scales with the OS setting, which is the thing most people
-         actually rely on. -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
-    />
+    <!-- The landing's viewport, zoomable: the document a stranger and a crawler
+         meet is a public page, and pinch-zoom on it is an accessibility
+         requirement (Lighthouse fails user-scalable=no). The app swaps in its
+         own locked viewport in app/boot.tsx the moment an estate boots. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1017" />
-    <meta name="description" content="Majordomo — the calendar that survives your schedule" />
-    <!-- the manifest link + service-worker registration are injected at build
-         time by vite-plugin-pwa (see vite.config.ts) -->
+
+    <title>Majordomo — the calendar that survives your schedule</title>
+    <meta
+      name="description"
+      content="A calendar-first life OS for rotating shifts, serious training, and study — run by a dry, deadpan butler. The beta is open."
+    />
+
+    <!-- This page WANTS to be found. The app behind it renders nothing a
+         crawler can see — every estate lives in localStorage behind
+         JavaScript — so nothing else here needs a noindex. -->
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- The origin in every absolute URL below is filled in at build time from
+         site.config.ts, which reads Vercel's own production domain when there
+         is one. A domain move changes nothing in this file. -->
+    <link rel="canonical" href="__SITE_ORIGIN__/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Majordomo" />
+    <meta property="og:url" content="__SITE_ORIGIN__/" />
+    <meta property="og:title" content="Majordomo — the calendar that survives your schedule" />
+    <meta
+      property="og:description"
+      content="A calendar-first life OS for rotating shifts, serious training, and study — run by a dry, deadpan butler. The beta is open."
+    />
+    <meta property="og:image" content="__SITE_ORIGIN__/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Every mission needs a MAJORDOMO." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Majordomo — the calendar that survives your schedule" />
+    <meta
+      name="twitter:description"
+      content="A calendar-first life OS for rotating shifts, serious training, and study — run by a dry, deadpan butler. The beta is open."
+    />
+    <meta name="twitter:image" content="__SITE_ORIGIN__/og.png" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- the manifest link + SW asset links are injected at build time by
+         vite-plugin-pwa; registration itself happens in app/boot.tsx, estate
+         boots only -->
     <link rel="apple-touch-icon" href="./icons/icon-180.png" />
     <!-- iOS reads the manifest for display mode only from 15.4; these keep the
          standalone launch (and the dark status bar over the masthead) honest
@@ -25,58 +57,35 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Majordomo" />
-    <title>Majordomo</title>
 
-    <!-- ====================================================================
-         THE ONE PLACE THE PRODUCTION ORIGIN IS WRITTEN DOWN.
-
-         Everything else in this repo is origin-relative on purpose — `base`,
-         the manifest, the OAuth redirect, the invite links — so the app runs
-         unchanged on localhost, on the vercel.app alias, and on the domain.
-         Open Graph is the exception the standard forces: canonical and
-         `og:*` URLs MUST be absolute, because the consumer is a crawler on
-         another machine with no page to resolve a relative path against.
-
-         So it is all in one block. The next domain move is this block and the
-         allowlist in `api/bell.ts`, and nothing else.
-
-         The copy is duplicated from `src/core/voice/` rather than read from
-         it, which is the one place this project's no-inline-strings rule has
-         to bend: static HTML is served before any JavaScript runs, and a
-         crawler never runs it at all. Keep the duplication to this block —
-         it repeats the `description` meta above and the manifest's own
-         `description` in `vite.config.ts`, and those three should agree.
-
-         `og:image` is `public/og.png`, built from `scripts/og-card.html` by
-         `node scripts/og-render.mjs`. Deliberately NOT the app icon: a square
-         icon letterboxes into a 1.91:1 card and reads as a broken share.
-         ==================================================================== -->
-    <link rel="canonical" href="https://majordomocal.com/" />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Majordomo" />
-    <meta property="og:title" content="Majordomo" />
-    <meta
-      property="og:description"
-      content="The calendar that survives your schedule."
-    />
-    <meta property="og:url" content="https://majordomocal.com/" />
-    <meta property="og:image" content="https://majordomocal.com/og.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta
-      property="og:image:alt"
-      content="The Majordomo wordmark in brass on near-black, above the line: the calendar that survives your schedule."
-    />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Majordomo" />
-    <meta
-      name="twitter:description"
-      content="The calendar that survives your schedule."
-    />
-    <meta name="twitter:image" content="https://majordomocal.com/og.png" />
+    <!-- The gate. Synchronous and first, so an estate holder never paints a
+         landing frame. External file: the CSP forbids inline script. -->
+    <script src="/boot-gate.js"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- The build prerenders, so the whole pitch above reads without
+         JavaScript. The estate itself is an app and cannot. -->
+    <noscript>
+      <div
+        style="
+          position: fixed;
+          inset: 0 0 auto 0;
+          z-index: 50;
+          padding: 12px 20px;
+          background: #d4ae6a;
+          color: #0c1017;
+          font-family: 'Source Sans 3', system-ui, sans-serif;
+          font-size: 14px;
+          line-height: 1.5;
+          text-align: center;
+        "
+      >
+        The estate itself needs JavaScript — the page above reads fine without it. Questions to
+        <a href="mailto:__CONTACT_EMAIL__" style="color: #0c1017"><b>__CONTACT_EMAIL__</b></a>.
+      </div>
+    </noscript>
   </body>
 </html>
