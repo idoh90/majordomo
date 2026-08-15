@@ -405,10 +405,16 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 
 ### The three stores (one localStorage key each, fully independent)
 
-- **`majordomo-training` v5** (`modules/training/store.ts`) — `{ workouts, weeklyGoal,
+- **`majordomo-training` v6** (`modules/training/store.ts`) — `{ workouts, weeklyGoal,
   profile, skin }`. Workouts may carry optional `setsTotal` / `durationMin` (the two
   session-size inputs on the effort step — additive, so no migrate was needed and old
-  blobs/exports round-trip). The `skin` field is **legacy/frozen**: nothing reads or
+  blobs/exports round-trip). **v6 bumped for a NESTED field**: `Profile` gained `goal`
+  and `deficitKcal`, and persist's merge is a shallow spread — a nested object is
+  replaced wholesale, so a new profile field rehydrates as `undefined` unless the
+  version changes and `migrate` (which already spreads `DEFAULT_PROFILE`) actually
+  runs. That is the rule the top-level-key precedents do NOT cover. The same migrate
+  re-prices `kcalPerSet` 12 → 20 where the dial was never touched. The `skin` field is
+  **legacy/frozen**: nothing reads or
   writes it anymore, but it stays in the interface/partialize/migrate so old blobs and
   exports round-trip unchanged. Do not bump the version for shell concerns.
 - **`majordomo-shell` v3** (`core/store/shell.ts`) — `{ skin, weekStart }`. On
@@ -632,19 +638,33 @@ ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
   the map can't disagree. `trainNext` adds a strain gate on top
   (`READY_STRAIN = 3.5`): a group both **recovered and behind** becomes the
   briefing aside's "what to train next" recommendation.
-- **Nutrition engine** — `modules/training/lib/nutrition.ts`, training-aware macros.
-  Protein FLAT (~1.9 g/kg, split over meals — total intake matters, not timing);
-  calories & carbs FLEX with training load. Mifflin–St Jeor BMR × rest-day activity
-  factor = maintenance; training days add a surplus + per-session kcal (min-capped
-  450); carbs = a chronic weekly-load floor (3–4 g/kg, from `avg7WeightedSets`) +
-  per-session carb bump; fat = calorie remainder with a ~0.6 g/kg floor that trims
-  carbs when hit. Session load is an ESTIMATE (`workoutWeightedSets`:
-  SESSION_SETS_BASE×effort×muscle-size `ENERGY_WEIGHT`), except that a logged
-  `setsTotal` stands verbatim and a logged `durationMin` prices the session by time.
-  All coefficients live in `Profile` (persisted, editable via the gear-menu
-  **Profile & nutrition** sheet) — recalibrate to weight trend. Grounded in the
-  nutrition build-spec (see [[nutrition-lean-bulk-science]] memory). `profile` also
-  drives the Grounds **briefing** (`Briefing.tsx`) and the `NutritionCard`.
+- **Nutrition engine** — `modules/training/lib/nutrition.ts`. Full model, equations
+  and evidence live in **`majordomo-nutrition-spec.md`**; the shape of it:
+  maintenance (Mifflin–St Jeor × rest activity factor, no training baked in) + the
+  day's OWN logged sessions + the goal's adjustment. It keeps **three currencies
+  apart, deliberately** — energy (`workoutKcal`, kcal), load (`workoutWeightedSets`,
+  set-equivalents, which is what the chronic carb floor reads), and protein (g/kg).
+  Collapsing them is the bug the pre-Aug-2026 version had: everything was priced in
+  sets and the whole DAY capped at 450 kcal, so a half marathon fed the day like an
+  ordinary gym hour and a two-a-day fed it once.
+  - **Per-session pricing, by how the session was measured**: a run by distance
+    (~0.95 kcal/kg/km, near enough speed-independent), or by inverting `lib/pace.ts`'s
+    own `runEffort` model when only a clock was logged, else 30 min at easy pace; a
+    sport by its `met` (in `data/sports.ts`) as one effort-scaled MET-hour; a lift by
+    weighted sets × `kcalPerSet`. Caps are **per workout and are typo guards** (900
+    measured / 500 estimated), never a day cap.
+  - **`Profile.goal`** — `'cut' | 'maintain' | 'bulk'` (type in `core/voice/types.ts`,
+    since the briefing facts carry it). Bulk adds `surplusKcal` on training days only;
+    cut removes `deficitKcal` EVERY day, applied after the session's energy, so a
+    trained day still eats more and calorie cycling falls out of the arithmetic;
+    maintain adds nothing. Protein is a **ladder, not a flat figure**: base +0.5 g/kg
+    cutting +0.1 g/kg on a trained day.
+  - A **calorie floor** keeps the headline ≥ protein + fat-floor kcal, so an absurd
+    deficit can't print macros summing above the total — and keeps kcal > 0, which
+    three brief prose sites gate on.
+  - All coefficients live in `Profile` (persisted; edited from the **fuel card's
+    PROFILE button**, NOT the gear menu) — recalibrate to weight trend. `profile` also
+    drives the Grounds **briefing** (`Briefing.tsx`) and the `NutritionCard`.
 - **Body map** — `modules/training/components/bodymap/paths.ts` is data-only (SVG
   path strings, viewBox 200×440). Paired muscles are authored as LEFT-half paths and
   mirrored via `transform="translate(200 0) scale(-1 1)"` for guaranteed symmetry.
@@ -676,6 +696,8 @@ auto-enter Training so they land on the right screen.
   — opens the add sheet on load (effort = edit mode on newest workout; when = also
   expands the calendar; sport / muscles = the blank flow open on that picker)
 - `?sheet=skin` — opens the App-skin picker sheet on load
+- `?sheet=profile` — opens the Grounds' **Profile & nutrition** sheet (the fuel
+  card owns it now; like the other sheet params this auto-enters Training)
 - `?board` / `?board=<ventureId>` — opens the Workshop on a venture's pegboard
   (first venture when unnamed) — screenshot aid · `window.__workshop` — store handle
 - `?detail` — opens the newest workout's detail sheet

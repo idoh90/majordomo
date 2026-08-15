@@ -102,8 +102,10 @@ that never ships.
     migrate chain applies; old keys kept as insurance). `scripts/check-brand.mjs`
     greps a founder-flag-less `dist/` for `/batman|gotham|wayne/i` → must be empty.
 13. **Settings gear stays** (restyled): skin picker shows the 3 presets (+ legacy
-    skins only under FOUNDER; an active hidden skin is never stomped), profile
-    & nutrition, week start, backup export/import, clear the workout log.
+    skins only under FOUNDER; an active hidden skin is never stomped), week
+    start, backup export/import, clear the workout log. (Profile & nutrition
+    was listed here and has since moved onto the Grounds' own fuel card, beside
+    the figures it changes — see `majordomo-nutrition-spec.md`.)
 
 ## §2 · Milestones
 
