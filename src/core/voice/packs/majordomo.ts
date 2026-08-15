@@ -59,6 +59,14 @@ function untilLabel(h: number, m: number): string {
   return h > 0 ? `${h} h ${String(m).padStart(2, '0')} m` : `${m} m`
 }
 
+/** the diet goal as prose names it — the chips say Cut/Maintain/Bulk, but a
+ *  sentence wants the rates, not the setting */
+const DIET_RATES: Record<'cut' | 'maintain' | 'bulk', string> = {
+  cut: 'cutting',
+  maintain: 'maintenance',
+  bulk: 'lean-bulk',
+}
+
 /** The Majordomo — the commercial voice. Dry, composed, quietly satisfied. */
 export const majordomoPack: VoicePack = {
   house: {
@@ -224,10 +232,14 @@ export const majordomoPack: VoicePack = {
           const cold = g.coldest ? ` ${g.coldest} is the freshest.` : ''
           return `${sentence(word(g.hot))} ${plural(g.hot, 'muscle group is', 'muscle groups are')} still sore — ${g.top.name} leads at ${g.top.strain.toFixed(1)}.${cold}`
         },
-        food: ({ grounds: g }) =>
-          !g || g.kcal <= 0
-            ? null
-            : `Today wants ${g.kcal.toLocaleString('en-US')} kcal and ${g.protein} g of protein across ${lower(g.meals)} ${plural(g.meals, 'meal', 'meals')} — ${g.isTrainingDay ? 'training-day' : 'rest-day'} rates.`,
+        food: ({ grounds: g }) => {
+          if (!g || g.kcal <= 0) return null
+          const burn =
+            g.burnKcal > 0
+              ? ` Today's training accounts for ${g.burnKcal.toLocaleString('en-US')} of them.`
+              : ''
+          return `Today wants ${g.kcal.toLocaleString('en-US')} kcal and ${g.protein} g of protein across ${lower(g.meals)} ${plural(g.meals, 'meal', 'meals')} — ${DIET_RATES[g.dietGoal]} rates on ${g.isTrainingDay ? 'a training' : 'a rest'} day.${burn}`
+        },
         bench: ({ workshop: k }) => {
           if (!k) return null
           if (k.benchLive) return `The bench clock is running on ${k.benchLive.venture} right now.`
@@ -320,7 +332,12 @@ export const majordomoPack: VoicePack = {
             : null,
         muscles: ({ grounds: g }) =>
           g && g.hot >= 4 ? 'That is a lot to be carrying. A rest day would settle it.' : null,
-        food: () => null,
+        // the figure already has the session in it — eating the burn back on
+        // top is the oldest way to undo a deficit
+        food: ({ grounds: g }) =>
+          g && g.dietGoal === 'cut' && g.burnKcal >= 300
+            ? 'That figure already feeds the session. I would not eat the burn back on top of it.'
+            : null,
         bench: ({ workshop: k }) =>
           k && k.milestone && k.milestone.days >= 0 && k.milestone.days <= 7 && k.fulfilledH < k.goalH
             ? 'The bench is behind, with that date close.'
@@ -728,6 +745,7 @@ export const majordomoPack: VoicePack = {
         protein,
         meals,
         isTrainingDay,
+        dietGoal,
         nextBlock,
         blocksAhead,
         sinceLastH,
@@ -754,7 +772,7 @@ export const majordomoPack: VoicePack = {
         }
         if (kcal > 0) {
           parts.push(
-            `You need ${kcal.toLocaleString('en-US')} kcal on ${isTrainingDay ? 'a training day' : 'a rest day'}, and ${protein} g of protein across ${lower(meals)} ${plural(meals, 'meal', 'meals')}.`,
+            `You need ${kcal.toLocaleString('en-US')} kcal on ${isTrainingDay ? 'a training day' : 'a rest day'} at ${DIET_RATES[dietGoal]} rates, and ${protein} g of protein across ${lower(meals)} ${plural(meals, 'meal', 'meals')}.`,
           )
         }
         if (nextBlock) {
@@ -768,13 +786,16 @@ export const majordomoPack: VoicePack = {
         }
         return parts.join(' ')
       },
-      aside: ({ carbs, fat, kcal, coldest, done, goal, trainNext }) => {
+      aside: ({ carbs, fat, kcal, burnKcal, coldest, done, goal, trainNext }) => {
         const parts: string[] = []
         // the carb/fat split was the Grounds' own summary card; the briefing
         // only ever quoted the two headline macros, so opening it now finishes
         // the plate rather than sending the reader to another screen
         if (kcal > 0) {
           parts.push(`${carbs} g of carbohydrate and ${fat} g of fat complete the day.`)
+        }
+        if (burnKcal > 0) {
+          parts.push(`${burnKcal.toLocaleString('en-US')} kcal of that is what you trained off.`)
         }
         // a group that is both recovered and behind its week is a real
         // recommendation; the freshest-group line is the fallback when nothing
@@ -905,6 +926,52 @@ export const majordomoPack: VoicePack = {
       'Oats or a supplement closes the fibre gap.',
       'On a red-meat diet, check your LDL and ApoB now and then.',
     ],
+    fuelGoalChip: { cut: 'Cut', maintain: 'Maintain', bulk: 'Bulk' },
+    fuelBurn: ({ kcal }) => `Today's training adds ${kcal.toLocaleString('en-US')} kcal.`,
+    fuelSession: ({ label, kcal }) => `${label} · ${kcal.toLocaleString('en-US')} kcal`,
+    fuelPerMeal: ({ grams, meals }) =>
+      `${grams} g protein × ${meals} ${plural(meals, 'meal', 'meals')}`,
+    fuelWeek: ({ avgKcal, days }) =>
+      `${avgKcal.toLocaleString('en-US')} kcal a day this week · ${lower(days)} ${plural(days, 'day', 'days')} trained`,
+    fuelProfileButton: 'Profile',
+    effortKcalPreview: ({ kcal }) => `Adds about ${kcal.toLocaleString('en-US')} kcal to the day.`,
+    profileSheet: {
+      title: 'Profile & nutrition',
+      intro: ({ maint, bmr }) =>
+        `Your targets are worked out from this. Rest-day maintenance is about ${maint} kcal, over a BMR of ${bmr}.`,
+      goalLabel: 'Goal',
+      goalBlurb: {
+        cut: 'The deficit comes off every day, on top of what you trained — so a session still earns its food. Protein rises to hold on to muscle.',
+        maintain: 'Maintenance. The figures follow your training and nothing else.',
+        bulk: 'A small surplus, on training days only. Rest days sit at maintenance.',
+      },
+      surplusLabel: 'Train-day surplus',
+      deficitLabel: 'Daily deficit',
+      kcalUnit: 'kcal',
+      weightLabel: 'Weight',
+      weightUnit: 'kg',
+      heightLabel: 'Height',
+      heightUnit: 'cm',
+      ageLabel: 'Age',
+      ageUnit: 'yr',
+      sexLabel: 'Sex',
+      sexMale: 'Male',
+      sexFemale: 'Female',
+      proteinLabel: 'Protein',
+      proteinUnit: 'g/kg',
+      mealsLabel: 'Meals / day',
+      activityLabel: 'Activity',
+      activityUnit: '× BMR',
+      advancedTitle: 'Advanced flex tuning',
+      carbFloorLabel: 'Carb floor',
+      fatFloorLabel: 'Fat floor',
+      gramsPerKgUnit: 'g/kg',
+      kcalPerSetLabel: 'kcal / hard set',
+      carbPerSetLabel: 'Carbs / hard set',
+      gramsUnit: 'g',
+      reset: 'Reset',
+      save: 'Save',
+    },
     historyEmptyTitle: 'Nothing logged yet',
     historyEmptyMobile: 'Tap the glowing + to log your first one.',
     historyEmptyDesktop: 'Hit LOG WORKOUT above to log your first one.',
@@ -2025,8 +2092,6 @@ export const majordomoPack: VoicePack = {
     weekMon: 'Monday',
     rerunBlurb: 'Run the intro and the setup questions again, from the start.',
     exportBlurb: 'One file with everything in it. Use it to move to another device.',
-    profileLabel: 'Profile & nutrition',
-    profileBlurb: 'Your body stats, and the numbers your food targets are worked out from.',
     exportWorkouts: 'Export workouts only',
     exportWorkoutsBlurb: 'The old workouts-only file. The full export above already covers it.',
     copyWorkouts: 'Copy workouts as JSON',
@@ -2258,7 +2323,7 @@ export const majordomoPack: VoicePack = {
       recovery:
         'When each sore muscle should be back to normal, so you can aim the next session at something that’s ready.',
       fuel:
-        'What today asks for, worked out from your build and what you actually trained. Training days get more, rest days less.',
+        'What today asks for, worked out from your build, your goal, and the sessions you actually logged — lifts by their sets, runs by their distance. Profile changes any of it.',
       calendar:
         'Every session you’ve logged, by date. Tap a day to see what you did.',
     },

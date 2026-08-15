@@ -41,6 +41,9 @@ interface EffortStepProps {
   blockLink?: BlockLink | null
   /** dev screenshot aid — start with the calendar expanded */
   whenInitiallyOpen?: boolean
+  /** what this session will add to the day's calories, priced live by the
+   *  sheet — null before there is anything worth pricing */
+  kcalPreview?: number | null
 }
 
 export function EffortStep({
@@ -63,6 +66,7 @@ export function EffortStep({
   onSave,
   blockLink,
   whenInitiallyOpen,
+  kcalPreview,
 }: EffortStepProps) {
   const [whenOpen, setWhenOpen] = useState(whenInitiallyOpen ?? false)
 
@@ -175,7 +179,18 @@ export function EffortStep({
             />
           </div>
           <p className="mt-1.5 text-xs text-ink-faint">{voice.grounds.sessionSizeNote}</p>
+          {kcalPreview != null && kcalPreview > 0 && (
+            <p className="mt-1 text-xs text-accent">
+              {voice.grounds.effortKcalPreview({ kcal: kcalPreview })}
+            </p>
+          )}
         </div>
+      )}
+      {/* conditioning has no session-size block to hang the figure under */}
+      {(isRun || isSport) && kcalPreview != null && kcalPreview > 0 && (
+        <p className="mt-4 text-xs text-accent">
+          {voice.grounds.effortKcalPreview({ kcal: kcalPreview })}
+        </p>
       )}
 
       <div className="mt-5">

@@ -16,6 +16,7 @@ import { PplStep } from './PplStep'
 import { SportStep } from './SportStep'
 import { DEFAULT_PACE, EMPTY_RUN_FIELDS, RunStep, runFieldSeconds, type RunFields } from './RunStep'
 import { secondsToMinutes } from '../../lib/runs'
+import { workoutKcal } from '../../lib/nutrition'
 import { gymEffort } from '../../lib/gymEffort'
 import { clampPace, EFFORT_LIVE, runEffort } from '../../lib/pace'
 import { strainToColor } from '../../lib/strainColor'
@@ -207,6 +208,34 @@ const runDurationMin = (f: RunFields): number | undefined => {
   return sec > 0 ? secondsToMinutes(sec) : undefined
 }
 
+const num = (s: string): number | undefined => {
+  const n = Number(s)
+  return s.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined
+}
+
+/** session-size entries are whole numbers; a rounded-to-zero entry is
+ *  "not recorded", never a stored 0 */
+const count = (s: string): number | undefined => {
+  const n = num(s)
+  if (n === undefined) return undefined
+  const r = Math.round(n)
+  return r > 0 ? r : undefined
+}
+
+/** the picks, split into the two lists every consumer of a session wants */
+const selectionSplit = (selection: Selection) => {
+  const primary: MuscleId[] = []
+  const secondary: MuscleId[] = []
+  for (const [m, kind] of Object.entries(selection) as [
+    MuscleId,
+    'primary' | 'secondary' | undefined,
+  ][]) {
+    if (kind === 'primary') primary.push(m)
+    else if (kind === 'secondary') secondary.push(m)
+  }
+  return { primary, secondary }
+}
+
 /** every field the user can change — the step they stand on is not one, and
  *  neither is HOW a run's clock was typed: a time and a pace are two ways of
  *  stating one number, so dirty compares the number, not the boxes. */
@@ -256,7 +285,8 @@ export function AddWorkoutSheet({
   const addWorkout = useWorkoutStore((s) => s.addWorkout)
   const updateWorkout = useWorkoutStore((s) => s.updateWorkout)
   const workouts = useWorkoutStore((s) => s.workouts)
-  const easyPace = useWorkoutStore((s) => s.profile.easyPaceSec)
+  const profile = useWorkoutStore((s) => s.profile)
+  const easyPace = profile.easyPaceSec
   const heatRamp = SKINS[useShellStore((s) => s.skin)].heatRamp
   // COMMITTED events only — a what-if rehearsal must never be linked against
   const events = useEventsStore((s) => s.events)
@@ -325,28 +355,34 @@ export function AddWorkoutSheet({
       }
     : null
 
+  /** the session the draft currently describes, priced live so the effort step
+   *  can say what it will add to the day — the same shape `save` commits, so
+   *  the preview and the stored session can never be priced differently */
+  const kcalPreview = useMemo(() => {
+    if (draft.step !== 'effort') return null
+    const { primary, secondary } = selectionSplit(draft.selection)
+    const isConditioning = draft.method === 'run' || draft.method === 'sport'
+    const kcal = workoutKcal(
+      {
+        method: draft.method ?? 'custom',
+        run:
+          draft.method === 'run'
+            ? { distanceKm: num(draft.run.distanceKm), durationMin: runDurationMin(draft.run) }
+            : undefined,
+        sport: draft.method === 'sport' && draft.sportKind ? { kind: draft.sportKind } : undefined,
+        primary,
+        secondary,
+        effort: draft.effort,
+        setsTotal: isConditioning ? undefined : count(draft.setsTotal),
+        durationMin: isConditioning ? undefined : count(draft.durationMin),
+      },
+      profile,
+    )
+    return Math.round(kcal)
+  }, [draft, profile])
+
   const save = () => {
-    const primary: MuscleId[] = []
-    const secondary: MuscleId[] = []
-    for (const [m, kind] of Object.entries(draft.selection) as [
-      MuscleId,
-      'primary' | 'secondary' | undefined,
-    ][]) {
-      if (kind === 'primary') primary.push(m)
-      else if (kind === 'secondary') secondary.push(m)
-    }
-    const num = (s: string) => {
-      const n = Number(s)
-      return s.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined
-    }
-    /** session-size entries are whole numbers; a rounded-to-zero entry is
-     *  "not recorded", never a stored 0 */
-    const count = (s: string) => {
-      const n = num(s)
-      if (n === undefined) return undefined
-      const r = Math.round(n)
-      return r > 0 ? r : undefined
-    }
+    const { primary, secondary } = selectionSplit(draft.selection)
     const isConditioning = draft.method === 'run' || draft.method === 'sport'
     // a workout cannot have happened in the future — the picker's rule for days
     // and times, enforced once more at the save instant, where a sheet left open
@@ -540,6 +576,7 @@ export function AddWorkoutSheet({
             onSave={save}
             blockLink={blockLink}
             whenInitiallyOpen={devWhenOpen}
+            kcalPreview={kcalPreview}
           />
         )}
       </div>

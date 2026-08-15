@@ -16,7 +16,6 @@ import { Sheet } from '../core/ui/Sheet'
 import { SKINS, SKIN_IDS } from '../core/ui/skins'
 import { voice } from '../core/voice'
 import { downloadJson, parseImport, serializeExport } from '../modules/training/lib/backup'
-import { ProfileSheet } from '../modules/training/components/ProfileSheet'
 import { useWorkoutStore } from '../modules/training/store'
 import type { Workout } from '../modules/training/types'
 import { useAuthUi } from './authUi'
@@ -44,7 +43,6 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
   const replaceAll = useWorkoutStore((s) => s.replaceAll)
   const clearAll = useWorkoutStore((s) => s.clearAll)
 
-  const [profileOpen, setProfileOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [estateOpen, setEstateOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
@@ -57,14 +55,14 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
   // otherwise one key would dismiss the sheet AND the page under it
   useEffect(() => {
     if (!open) return
-    const busy = profileOpen || importOpen || estateOpen || confirmClear
+    const busy = importOpen || estateOpen || confirmClear
     if (busy) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose, profileOpen, importOpen, estateOpen, confirmClear])
+  }, [open, onClose, importOpen, estateOpen, confirmClear])
 
   if (!open) return null
 
@@ -177,12 +175,6 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
 
             <Section title={voice.settings.groupGrounds}>
               <Row
-                label={voice.settings.profileLabel}
-                blurb={voice.settings.profileBlurb}
-                onClick={() => setProfileOpen(true)}
-              />
-              <Divider />
-              <Row
                 label={voice.settings.exportWorkouts}
                 blurb={voice.settings.exportWorkoutsBlurb}
                 onClick={exportWorkoutsFile}
@@ -205,7 +197,6 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
         </div>
       </div>
 
-      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ImportSheet open={importOpen} onClose={() => setImportOpen(false)} onImport={replaceAll} />
       <EstateImportSheet open={estateOpen} onClose={() => setEstateOpen(false)} />
 

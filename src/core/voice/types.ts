@@ -810,6 +810,61 @@ export interface VoicePack {
     fuelTrainingDay: string
     fuelRestDay: string
     fuelTips: string[]
+    /** the diet goal, as the card's chip and the profile sheet's three
+     *  segments print it — one vocabulary, so the setting and its consequence
+     *  are visibly the same thing */
+    fuelGoalChip: Record<NutritionGoal, string>
+    /** what the day's logged training added to the figure above */
+    fuelBurn: (v: { kcal: number }) => string
+    /** one of those sessions, itemised. `label` arrives pre-resolved by the
+     *  wing (core stays ignorant of the sport roster and the run's units) */
+    fuelSession: (v: { label: string; kcal: number }) => string
+    /** footer: today's protein split over the day's meals */
+    fuelPerMeal: (v: { grams: number; meals: number }) => string
+    /** footer: what the trailing week actually asked for */
+    fuelWeek: (v: { avgKcal: number; days: number }) => string
+    /** the card's door into the profile sheet */
+    fuelProfileButton: string
+    /** live on the effort step: what this session will add to the day */
+    effortKcalPreview: (v: { kcal: number }) => string
+    /** PROFILE & NUTRITION — the sheet behind the fuel card's button. The
+     *  whole editor's copy, down to the field units. */
+    profileSheet: {
+      title: string
+      /** maintenance and BMR arrive pre-formatted by the wing */
+      intro: (v: { maint: string; bmr: string }) => string
+      goalLabel: string
+      /** one line per goal, saying what choosing it will do to the figures */
+      goalBlurb: Record<NutritionGoal, string>
+      /** the rate field, which is the surplus while bulking and the deficit
+       *  while cutting — maintaining has neither */
+      surplusLabel: string
+      deficitLabel: string
+      kcalUnit: string
+      weightLabel: string
+      weightUnit: string
+      heightLabel: string
+      heightUnit: string
+      ageLabel: string
+      ageUnit: string
+      sexLabel: string
+      sexMale: string
+      sexFemale: string
+      proteinLabel: string
+      proteinUnit: string
+      mealsLabel: string
+      activityLabel: string
+      activityUnit: string
+      advancedTitle: string
+      carbFloorLabel: string
+      fatFloorLabel: string
+      gramsPerKgUnit: string
+      kcalPerSetLabel: string
+      carbPerSetLabel: string
+      gramsUnit: string
+      reset: string
+      save: string
+    }
     /** history with nothing in it — the prompt differs by where the button is */
     historyEmptyTitle: string
     historyEmptyMobile: string
@@ -1486,9 +1541,8 @@ export interface VoicePack {
     rerunBlurb: string
     /** the estate backup pair */
     exportBlurb: string
-    /** the Grounds' own rows */
-    profileLabel: string
-    profileBlurb: string
+    /** the Grounds' own rows. Profile & nutrition is NOT among them — it
+     *  lives on the fuel card now, where its consequences are on screen. */
     exportWorkouts: string
     exportWorkoutsBlurb: string
     copyWorkouts: string
