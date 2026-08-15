@@ -89,6 +89,8 @@ export function useGroundsBriefingFacts(given?: StrainMap): GroundsBriefingFacts
     fat: macros.fat,
     meals: profile.mealsPerDay,
     isTrainingDay: macros.isTrainingDay,
+    dietGoal: macros.goal,
+    burnKcal: macros.exerciseKcal,
     sinceLastH: lastAt === null ? null : Math.max(0, (now - lastAt) / 3_600_000),
     // named only when the map has something to rank — with nothing logged every
     // group reads 0 and "chest is your freshest" would be a coin toss

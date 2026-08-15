@@ -80,9 +80,12 @@ export const useWorkoutStore = create<WorkoutState>()(
     }),
     {
       name: 'majordomo-training',
-      // v5: workouts may carry an optional eventId (the Manor block a session
-      // fulfils) — additive, so older blobs/exports just come through unlinked
-      version: 5,
+      // v6: the profile gained a diet goal + its deficit, and lifting was
+      // re-priced (kcalPerSet 12 → 20). The bump is what makes migrate RUN:
+      // persist's merge is a shallow spread, so a nested profile missing a new
+      // field would otherwise rehydrate with it undefined rather than falling
+      // back to the default. (v5: workouts may carry an optional eventId.)
+      version: 6,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         workouts: s.workouts,
@@ -94,6 +97,12 @@ export const useWorkoutStore = create<WorkoutState>()(
         const p = (persisted ?? {}) as Partial<
           Pick<WorkoutState, 'workouts' | 'weeklyGoal' | 'profile' | 'skin'>
         >
+        // merge so older exports missing new tunables still get sane defaults
+        const profile = { ...DEFAULT_PROFILE, ...(p.profile ?? {}) }
+        // lifting was under-priced at 12 kcal a set. 12 was the seeded default,
+        // so moving exactly that value forward re-prices every profile that
+        // never touched the dial while leaving a hand-tuned figure alone.
+        if (profile.kcalPerSet === 12) profile.kcalPerSet = DEFAULT_PROFILE.kcalPerSet
         return {
           workouts: (p.workouts ?? []).map((w) =>
             typeof w.eventId === 'string' || w.eventId === undefined
@@ -101,8 +110,7 @@ export const useWorkoutStore = create<WorkoutState>()(
               : { ...w, eventId: undefined },
           ),
           weeklyGoal: p.weeklyGoal ?? DEFAULT_WEEKLY_GOAL,
-          // merge so older exports missing new tunables still get sane defaults
-          profile: { ...DEFAULT_PROFILE, ...(p.profile ?? {}) },
+          profile,
           skin: typeof p.skin === 'string' ? p.skin : DEFAULT_SKIN,
         }
       },

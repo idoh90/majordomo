@@ -12,16 +12,21 @@ import type { MuscleId, RepStyle, SportId, Workout } from '../types'
  * - `repStyle` sets the recovery character the strain engine already models:
  *   'mixed' for explosive/intermittent efforts (acute + DOMS), 'light' for
  *   endurance-flavored sessions (smaller immediate hit, sorer next day).
+ * - `met` is the session's metabolic cost as a multiple of rest, read off the
+ *   ACSM compendium band for that sport at club intensity. A sport logs no
+ *   duration, so the nutrition engine prices it as one MET-hour scaled by the
+ *   effort given — see majordomo-nutrition-spec.md.
  */
 export const SPORT_MAP: Record<
   SportId,
-  { label: string; repStyle: RepStyle; primary: MuscleId[]; secondary: MuscleId[] }
+  { label: string; repStyle: RepStyle; met: number; primary: MuscleId[]; secondary: MuscleId[] }
 > = {
   // strikes + takedowns + grappling: rotation and the legs drive everything,
   // grip and the pulling chain carry the ground game
   mma: {
     label: 'MMA',
     repStyle: 'mixed',
+    met: 10,
     primary: ['obliques', 'quads', 'forearms'],
     secondary: ['front-delts', 'triceps', 'lats', 'traps', 'glutes', 'abs'],
   },
@@ -30,6 +35,7 @@ export const SPORT_MAP: Record<
   boxing: {
     label: 'Boxing',
     repStyle: 'mixed',
+    met: 9,
     primary: ['obliques', 'front-delts'],
     secondary: ['triceps', 'side-delts', 'abs', 'calves', 'lats'],
   },
@@ -38,6 +44,7 @@ export const SPORT_MAP: Record<
   muaythai: {
     label: 'Muay Thai',
     repStyle: 'mixed',
+    met: 9.5,
     primary: ['quads', 'obliques'],
     secondary: ['glutes', 'calves', 'abs', 'hamstrings', 'forearms', 'lats'],
   },
@@ -46,6 +53,7 @@ export const SPORT_MAP: Record<
   wrestling: {
     label: 'Wrestling',
     repStyle: 'mixed',
+    met: 9.5,
     primary: ['quads', 'traps', 'forearms'],
     secondary: ['glutes', 'hamstrings', 'lower-back', 'lats', 'biceps', 'abs'],
   },
@@ -54,6 +62,7 @@ export const SPORT_MAP: Record<
   bjj: {
     label: 'BJJ / Grappling',
     repStyle: 'light',
+    met: 8.5,
     primary: ['forearms', 'lats', 'abs'],
     secondary: ['biceps', 'obliques', 'hamstrings', 'glutes', 'traps', 'chest'],
   },
@@ -62,6 +71,7 @@ export const SPORT_MAP: Record<
   tennis: {
     label: 'Tennis',
     repStyle: 'light',
+    met: 7.3,
     primary: ['obliques', 'forearms'],
     secondary: ['front-delts', 'side-delts', 'triceps', 'quads', 'glutes', 'calves'],
   },
@@ -70,6 +80,7 @@ export const SPORT_MAP: Record<
   swimming: {
     label: 'Swimming',
     repStyle: 'light',
+    met: 8,
     primary: ['lats', 'chest'],
     secondary: ['triceps', 'front-delts', 'side-delts', 'biceps', 'abs', 'quads'],
   },
@@ -78,6 +89,7 @@ export const SPORT_MAP: Record<
   basketball: {
     label: 'Basketball',
     repStyle: 'light',
+    met: 8,
     primary: ['quads', 'calves'],
     secondary: ['glutes', 'hamstrings', 'abs', 'obliques'],
   },
@@ -86,6 +98,7 @@ export const SPORT_MAP: Record<
   soccer: {
     label: 'Soccer',
     repStyle: 'light',
+    met: 8.5,
     primary: ['quads', 'hamstrings'],
     secondary: ['glutes', 'calves', 'abs', 'obliques'],
   },
@@ -94,6 +107,7 @@ export const SPORT_MAP: Record<
   cycling: {
     label: 'Cycling',
     repStyle: 'light',
+    met: 8,
     primary: ['quads', 'glutes'],
     secondary: ['hamstrings', 'calves', 'lower-back'],
   },
@@ -102,6 +116,7 @@ export const SPORT_MAP: Record<
   climbing: {
     label: 'Climbing',
     repStyle: 'mixed',
+    met: 7.5,
     primary: ['forearms', 'lats'],
     secondary: ['biceps', 'abs', 'obliques', 'rear-delts'],
   },
@@ -110,6 +125,7 @@ export const SPORT_MAP: Record<
   hiking: {
     label: 'Hiking',
     repStyle: 'light',
+    met: 5.3,
     primary: ['quads', 'calves'],
     secondary: ['glutes', 'hamstrings', 'lower-back'],
   },

@@ -1,5 +1,5 @@
 import type { Workout } from '../../types'
-import { dailyTargets, proteinPerMeal, weeklyProtein } from '../../lib/nutrition'
+import { dailyTargets } from '../../lib/nutrition'
 import { useWorkoutStore } from '../../store'
 import { Hinted } from '../../../../core/ui/Hint'
 import { voice } from '../../../../core/voice'
@@ -22,8 +22,9 @@ export function NutritionCard({ workouts, now }: NutritionCardProps) {
   const profile = useWorkoutStore((s) => s.profile)
   const nowDate = new Date(now)
   const t = dailyTargets(profile, workouts, nowDate)
-  const perMeal = proteinPerMeal(profile)
-  const weekProtein = weeklyProtein(profile)
+  // per-meal is TODAY's protein split, not a flat figure — the ladder moves it
+  const perMeal = Math.round(t.protein / Math.max(1, profile.mealsPerDay))
+  const weekProtein = t.protein * 7
 
   const pKcal = t.protein * 4
   const cKcal = t.carbs * 4

@@ -46,8 +46,16 @@ export interface WatchBriefingFacts {
   turnaroundH: number | null
 }
 
+/**
+ * Which way the food is pointed. It lives in core rather than in the Grounds
+ * because the briefing facts carry it into the Manor's prose — a wing may
+ * import core, never the other way about.
+ */
+export type NutritionGoal = 'cut' | 'maintain' | 'bulk'
+
 export interface GroundsBriefingFacts {
   done: number
+  /** the WEEKLY SESSION goal — not the diet's. `dietGoal` is that one. */
   goal: number
   hot: number
   muscles: number
@@ -58,6 +66,12 @@ export interface GroundsBriefingFacts {
   protein: number
   meals: number
   isTrainingDay: boolean
+  /** cut / maintain / bulk — the rates the day's figures were struck at */
+  dietGoal: NutritionGoal
+  /** net kcal of the day's logged sessions; 0 on a rest day. Moves only when
+   *  something is logged or the day turns over, so brief prose built on it
+   *  stays stable within the hour. */
+  burnKcal: number
   /** the rest of the plate — the split DailySummary used to own alone */
   carbs: number
   fat: number
