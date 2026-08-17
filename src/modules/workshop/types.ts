@@ -1,3 +1,5 @@
+import type { CrewRole, CrewStanding } from '../../core/sync/shareTransport'
+
 /**
  * The Workshop's own records. Bench SESSIONS are not here — they are ordinary
  * CalendarEvents (kind 'workshop') in the shared events store, linked to a
@@ -146,10 +148,17 @@ export interface WorkEntry {
   by: string
 }
 
-/** one name on a crew's roster — cached locally so labels render offline */
+/**
+ * One name on a crew's roster — cached locally so labels, ranks and the
+ * waiting list all render offline. `role` and `status` are the registry's
+ * word (0006 enforces both in RLS); this copy is what the screen draws and
+ * what decides whether this device bothers pushing at all.
+ */
 export interface ShareMember {
   userId: string
   label: string
   /** ISO instant */
   joinedAt: string
+  role: CrewRole
+  status: CrewStanding
 }

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import type { CrewVisibility } from './shareTransport'
 import type { RecordKey } from './types'
 
 /**
@@ -18,6 +19,14 @@ import type { RecordKey } from './types'
  * fresh page load — memory does not survive that trip; localStorage does.
  */
 
+/** an application lodged with a vetted crew, and how it ended */
+export interface CrewApplication {
+  /** the code that was typed — the only name a waiting crew has */
+  code: string
+  /** the keeper said no (or the crew was disbanded) — shown until dismissed */
+  declined?: boolean
+}
+
 interface ShareBookkeeping {
   /** per-share pull cursor (server clock, never ours) */
   cursors: Record<string, string | null>
@@ -25,12 +34,25 @@ interface ShareBookkeeping {
   codes: Record<string, string>
   /** per-share keeper (owner user id), cached with the code */
   owners: Record<string, string>
+  /** per-share door policy, cached with the code so the sheet reads offline */
+  visibilities: Record<string, CrewVisibility>
   /** key → when this device noticed the change */
   dirty: Record<RecordKey, number>
   /** key → when this device was TOLD to delete it (never inferred) */
   tombstones: Record<RecordKey, number>
   /** a join code waiting for sign-in + network — survives the OAuth redirect */
   pendingJoin: string | null
+  /**
+   * Crews this device has APPLIED to and is waiting on. A vetted crew tells
+   * nobody its name until the keeper says yes, so the code is the whole of
+   * what can be shown while waiting — and it is persisted because "I asked"
+   * must survive closing the tab.
+   *
+   * A turned-away application is KEPT, flagged, until the user dismisses it.
+   * An entry that simply vanished would leave someone who applied yesterday
+   * with no way to tell a refusal from a crew they imagined applying to.
+   */
+  applications: Record<string, CrewApplication>
   /** share ids a wing has asked the service to pull now — the mailbox that
    *  keeps modules/ from importing app/ */
   pendingPull: string[]
@@ -43,7 +65,11 @@ interface ShareBookkeeping {
   markDeleted: (keys: RecordKey[], at: number) => void
   clearPending: (keys: RecordKey[]) => void
   setCursor: (shareId: string, cursor: string | null) => void
-  setCode: (shareId: string, code: string, ownerId?: string) => void
+  setCode: (shareId: string, code: string, ownerId?: string, visibility?: CrewVisibility) => void
+  /** the keeper changed the door policy — reflected now, confirmed on the pull */
+  setVisibility: (shareId: string, visibility: CrewVisibility) => void
+  /** an application lodged, flagged as refused, or cleared away */
+  setApplication: (shareId: string, app: CrewApplication | null) => void
   /** a share this device no longer belongs to: its queue and cursor go */
   dropShare: (shareId: string) => void
   setPendingJoin: (code: string | null) => void
@@ -80,9 +106,11 @@ export const useShareStore = create<ShareBookkeeping>()(
       cursors: {},
       codes: {},
       owners: {},
+      visibilities: {},
       dirty: {},
       tombstones: {},
       pendingJoin: null,
+      applications: {},
       pendingPull: [],
       busy: false,
       lastError: null,
@@ -113,11 +141,28 @@ export const useShareStore = create<ShareBookkeeping>()(
 
       setCursor: (shareId, cursor) =>
         set((s) => ({ cursors: { ...s.cursors, [shareId]: cursor } })),
-      setCode: (shareId, code, ownerId) =>
+      setCode: (shareId, code, ownerId, visibility) =>
         set((s) => ({
           codes: { ...s.codes, [shareId]: code },
           owners: ownerId ? { ...s.owners, [shareId]: ownerId } : s.owners,
+          visibilities: visibility
+            ? { ...s.visibilities, [shareId]: visibility }
+            : s.visibilities,
         })),
+
+      setVisibility: (shareId, visibility) =>
+        set((s) => ({ visibilities: { ...s.visibilities, [shareId]: visibility } })),
+
+      setApplication: (shareId, app) =>
+        set((s) => {
+          if (app === null) {
+            if (!(shareId in s.applications)) return s
+            const applications = { ...s.applications }
+            delete applications[shareId]
+            return { applications }
+          }
+          return { applications: { ...s.applications, [shareId]: app } }
+        }),
 
       dropShare: (shareId) =>
         set((s) => {
@@ -128,10 +173,16 @@ export const useShareStore = create<ShareBookkeeping>()(
           delete codes[shareId]
           const owners = { ...s.owners }
           delete owners[shareId]
+          const visibilities = { ...s.visibilities }
+          delete visibilities[shareId]
+          const applications = { ...s.applications }
+          delete applications[shareId]
           return {
             cursors,
             codes,
             owners,
+            visibilities,
+            applications,
             dirty: withoutPrefix(s.dirty, prefix),
             tombstones: withoutPrefix(s.tombstones, prefix),
             pendingPull: s.pendingPull.filter((id) => id !== shareId),
@@ -153,9 +204,11 @@ export const useShareStore = create<ShareBookkeeping>()(
           cursors: {},
           codes: {},
           owners: {},
+          visibilities: {},
           dirty: {},
           tombstones: {},
           pendingJoin: null,
+          applications: {},
           pendingPull: [],
           lastError: null,
         }),
@@ -169,9 +222,11 @@ export const useShareStore = create<ShareBookkeeping>()(
         cursors: s.cursors,
         codes: s.codes,
         owners: s.owners,
+        visibilities: s.visibilities,
         dirty: s.dirty,
         tombstones: s.tombstones,
         pendingJoin: s.pendingJoin,
+        applications: s.applications,
         pendingPull: s.pendingPull,
       }),
     },

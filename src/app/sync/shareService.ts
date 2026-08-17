@@ -16,6 +16,7 @@ import {
   type ShareWireRecord,
 } from '../../core/sync/shareTransport'
 import { parseKey, recordKey, type IncomingRecord } from '../../core/sync/types'
+import { canWorkCrew } from '../../modules/workshop/share'
 import { buildShareSources, shareIdsOf, shareSource } from '../../modules/workshop/shareSource'
 import { useWorkshopStore } from '../../modules/workshop/store'
 
@@ -66,6 +67,17 @@ async function drainShare(shareId: string): Promise<void> {
   const dirtyKeys = Object.keys(st.dirty).filter((k) => k.startsWith(prefix))
   const tombKeys = Object.keys(st.tombstones).filter((k) => k.startsWith(prefix))
   if (dirtyKeys.length === 0 && tombKeys.length === 0) return
+
+  // A GUEST may look and not touch, and the registry says so in the only way
+  // that counts (0006's write policies). Sending the push anyway would earn a
+  // refusal for the whole batch, which reads here as an outage and would put
+  // an error on screen every cycle. The queue is cleared rather than kept: a
+  // guest's local edit is never going anywhere, and a queue that only grows is
+  // a slow leak. The screen is what stops those edits being made at all.
+  if (!canWorkCrew(shareId)) {
+    useShareStore.getState().clearPending([...dirtyKeys, ...tombKeys])
+    return
+  }
 
   const byKey = new Map(
     shareEngine.allRecords().map((r) => [recordKey(r.wing, r.kind, r.id), r]),
@@ -167,18 +179,26 @@ async function pullOne(shareId: string): Promise<void> {
     }
   }
 
-  // roster + code refresh — cached so labels and the code render offline
+  // roster + code refresh — cached so labels, ranks and the code render offline
   const members = await listMembers(shareId)
   if (members.length > 0) {
     useWorkshopStore.getState().setMembers(
       shareId,
-      members.map((m) => ({ userId: m.userId, label: m.label, joinedAt: m.joinedAt })),
+      members.map((m) => ({
+        userId: m.userId,
+        label: m.label,
+        joinedAt: m.joinedAt,
+        role: m.role,
+        status: m.status,
+      })),
     )
   }
-  if (!useShareStore.getState().codes[shareId] || !useShareStore.getState().owners[shareId]) {
-    const info = await getShare(shareId).catch(() => null)
-    if (info) useShareStore.getState().setCode(shareId, info.code, info.ownerId)
-  }
+  // The share row is read on EVERY pull, not just the first. The code and the
+  // keeper never change, but the door policy does, and no realtime channel
+  // watches `shares` — without this a crew shut to applications would go on
+  // reading "open" on every device but the keeper's.
+  const info = await getShare(shareId).catch(() => null)
+  if (info) useShareStore.getState().setCode(shareId, info.code, info.ownerId, info.visibility)
 }
 
 /* ----------------------------------------------------------------- cycle */
@@ -190,6 +210,23 @@ let again = false
 function myLabel(): string {
   const email = useAuthStore.getState().email
   return email ? email.split('@')[0] : 'someone'
+}
+
+/**
+ * Settle every application this device is carrying against the roster rows the
+ * registry actually holds. An entry already flagged `declined` is left alone —
+ * it is a message waiting to be read, not a job waiting to be done.
+ */
+function reconcileApplications(memberships: Set<string>, waiting: Set<string>): void {
+  const apps = useShareStore.getState().applications
+  for (const [shareId, app] of Object.entries(apps)) {
+    if (memberships.has(shareId)) {
+      useShareStore.getState().setApplication(shareId, null)
+      useShareStore.getState().requestPull(shareId)
+    } else if (!waiting.has(shareId) && !app.declined) {
+      useShareStore.getState().setApplication(shareId, { ...app, declined: true })
+    }
+  }
 }
 
 async function cycle(): Promise<void> {
@@ -212,8 +249,13 @@ async function cycle(): Promise<void> {
        belonging. A crew we left (or were removed from) becomes a private
        copy; a crew we belong to with no local presence gets pulled — which
        is also how a fresh device (or an estate imported under this account)
-       bootstraps every crew it is owed. */
-    const memberships = new Set(await listMemberships())
+       bootstraps every crew it is owed.
+
+       A crew we have only APPLIED to is not a membership: it holds a roster
+       row, so it comes back from the same query, but it carries no records we
+       may read and no venture to adopt. It is reconciled separately below. */
+    const { active, pending } = await listMemberships()
+    const memberships = new Set(active)
     const localIds = shareIdsOf(useWorkshopStore.getState().ventures)
     for (const id of localIds) {
       if (!memberships.has(id)) {
@@ -226,14 +268,27 @@ async function cycle(): Promise<void> {
       if (!localIds.includes(id)) useShareStore.getState().requestPull(id)
     }
 
-    /* 2 — a held join code (possibly carried across the OAuth redirect) */
+    /* 1b — applications lodged with vetted crews. Three ends, all decided by
+       the roster rather than by anything the keeper sends us: admitted (we are
+       a member now), still waiting, or turned away — the row is gone, and the
+       entry is KEPT and flagged so the screen can say so once. */
+    reconcileApplications(memberships, new Set(pending))
+
+    /* 2 — a held join code (possibly carried across the OAuth redirect). On a
+       vetted crew this LODGES rather than joins, and there is nothing to pull
+       until the keeper answers. */
     const code = useShareStore.getState().pendingJoin
     if (code) {
       try {
         const joined = await joinShare(code, myLabel())
         useShareStore.getState().setPendingJoin(null)
-        useShareStore.getState().requestPull(joined)
-        memberships.add(joined)
+        if (joined.status === 'pending') {
+          useShareStore.getState().setApplication(joined.shareId, { code })
+        } else {
+          useShareStore.getState().setApplication(joined.shareId, null)
+          useShareStore.getState().requestPull(joined.shareId)
+          memberships.add(joined.shareId)
+        }
       } catch (e) {
         // an unknown code is an answer, not an outage — stop retrying it
         useShareStore.getState().setPendingJoin(null)
@@ -249,7 +304,7 @@ async function cycle(): Promise<void> {
         // a push refused wholesale usually means we are no longer on the
         // roster (kicked mid-flight) — check, and step out gracefully
         const still = await listMemberships().catch(() => null)
-        if (still && !still.includes(id)) {
+        if (still && !still.active.includes(id)) {
           useWorkshopStore.getState().adoptPrivateCopy(id)
           useShareStore.getState().dropShare(id)
           ensureSources()
@@ -391,7 +446,9 @@ export function shareDebug() {
     tombstones: Object.keys(st.tombstones),
     cursors: st.cursors,
     codes: st.codes,
+    visibilities: st.visibilities,
     pendingJoin: st.pendingJoin,
+    applications: st.applications,
     pendingPull: st.pendingPull,
     lastError: st.lastError,
     channels: [...liveChannels.keys()],

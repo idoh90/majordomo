@@ -13,7 +13,8 @@ import { voice } from '../../core/voice'
 import { WorkshopBriefing } from './Briefing'
 import { Board } from './Board'
 import { BenchControl } from './bench'
-import { JoinSheet, crewsAvailable } from './ShareSheet'
+import { CrewScreen } from './CrewScreen'
+import { crewsAvailable } from './share'
 import {
   COPPER,
   DayStrip,
@@ -76,6 +77,8 @@ export function WorkshopScreen() {
     return vs.find((v) => v.id === wanted)?.id ?? vs[0]?.id ?? null
   })
   const [sheet, setSheet] = useState<'open' | 'book' | 'bench' | null>(null)
+  /** null = not in the crew room; `focus` = the venture that sent us there */
+  const [crews, setCrews] = useState<{ focus: string | null } | null>(null)
   const [editVenture, setEditVenture] = useState<Venture | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -129,10 +132,33 @@ export function WorkshopScreen() {
 
   const board = boardFor ? (active.find((v) => v.id === boardFor) ?? null) : null
 
+  /**
+   * THE CREW ROOM sits over both rooms rather than beside them: the crew
+   * button on a board and the door on the shelf lead to the same screen, and
+   * BACK returns to whichever one asked — which is `boardFor` still standing,
+   * untouched, behind it. `crews` carries the venture the reader arrived
+   * asking about, so that crew leads the room.
+   */
+  const crewRoom = crews && crewsAvailable() ? crews : null
+
   // the board replaces the wing's furniture but keeps the sheets and the
   // toast mounted — the tab bar's + must reach BOOK BENCH TIME from either room
-  const wing = board ? (
-    <Board venture={board} onBack={() => setBoardFor(null)} butler={butler} />
+  const wing = crewRoom ? (
+    <div className="mt-4">
+      <CrewScreen
+        ventures={active}
+        focus={crewRoom.focus}
+        onBack={() => setCrews(null)}
+        butler={butler}
+      />
+    </div>
+  ) : board ? (
+    <Board
+      venture={board}
+      onBack={() => setBoardFor(null)}
+      onOpenCrew={() => setCrews({ focus: board.id })}
+      butler={butler}
+    />
   ) : (
     <div className="mt-4 flex flex-col gap-4">
       {active.length > 0 && <WorkshopBriefing />}
@@ -175,6 +201,7 @@ export function WorkshopScreen() {
               sessions={sessions}
               now={now}
               onOpenBoard={setBoardFor}
+              onOpenCrews={() => setCrews({ focus: null })}
               onNew={() => {
                 setEditVenture(null)
                 setSheet('open')
@@ -768,6 +795,7 @@ function Shelf({
   sessions,
   now,
   onOpenBoard,
+  onOpenCrews,
   onNew,
   onRename,
   butler,
@@ -777,6 +805,7 @@ function Shelf({
   sessions: Record<string, SessionMeta>
   now: number
   onOpenBoard: (id: string) => void
+  onOpenCrews: () => void
   onNew: () => void
   onRename: (v: Venture) => void
   butler: (msg: string) => void
@@ -784,7 +813,6 @@ function Shelf({
   const milestones = useWorkshopStore((s) => s.milestones)
   const cards = useWorkshopStore((s) => s.cards)
   const [confirmArchive, setConfirmArchive] = useState<Venture | null>(null)
-  const [joinOpen, setJoinOpen] = useState(false)
   const shipped = ventures.filter((v) => v.status === 'shipped').length
 
   return (
@@ -821,16 +849,19 @@ function Shelf({
       >
         {voice.workshop.openVenture}
       </button>
+      {/* one door for the whole of sharing: opening a venture to a crew,
+          joining someone else's, and everything after. It used to be a JOIN
+          button and a sheet behind the board's CREW pill, which meant the
+          only way to reach the roster of a venture was through that venture. */}
       {crewsAvailable() && (
         <button
           type="button"
-          onClick={() => setJoinOpen(true)}
+          onClick={onOpenCrews}
           className="mt-2 w-full py-1.5 text-center font-display text-[9.5px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:text-ink-dim"
         >
-          {voice.workshop.crew.joinButton}
+          {voice.workshop.crew.manageButton}
         </button>
       )}
-      <JoinSheet open={joinOpen} onClose={() => setJoinOpen(false)} butler={butler} />
 
       <ConfirmDialog
         open={confirmArchive !== null}

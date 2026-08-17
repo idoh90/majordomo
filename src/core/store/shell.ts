@@ -81,10 +81,20 @@ interface ShellState {
   /** wing ids taken off both navs. Hiding is not deleting — the wing's records,
    *  its housekeeping and its briefing facts all carry on untouched. */
   wingsOff: string[]
+  /**
+   * Has this device been told, once, that the house is laid out for a desk?
+   *
+   * Per-device for the same reason `onboarded` is: it is a fact about a screen,
+   * not about the estate, and the phone deserves the note even when the laptop
+   * has already had it. Defaulted, so no version bump — an older blob simply
+   * lacks the key and the initializer's `false` stands.
+   */
+  deskNoticeSeen: boolean
   setSkin: (skin: SkinId) => void
   setWeekStart: (ws: WeekStart) => void
   setOnboarded: (onboarded: boolean) => void
   setPanelTips: (panelTips: boolean) => void
+  setDeskNoticeSeen: (seen: boolean) => void
   setWingOrder: (ids: string[]) => void
   setWingOff: (id: string, off: boolean) => void
 }
@@ -98,6 +108,7 @@ export const useShellStore = create<ShellState>()(
       panelTips: true,
       wingOrder: [],
       wingsOff: [],
+      deskNoticeSeen: false,
       setSkin: (skin) => set({ skin: normalizeSkin(skin) }),
       setWeekStart: (ws) => {
         setWeekStartDefault(ws) // keep core/dates in sync before the re-render
@@ -105,6 +116,7 @@ export const useShellStore = create<ShellState>()(
       },
       setOnboarded: (onboarded) => set({ onboarded }),
       setPanelTips: (panelTips) => set({ panelTips }),
+      setDeskNoticeSeen: (deskNoticeSeen) => set({ deskNoticeSeen }),
       setWingOrder: (next) => set({ wingOrder: [...next] }),
       setWingOff: (id, off) =>
         set((s) => ({
@@ -122,12 +134,22 @@ export const useShellStore = create<ShellState>()(
         panelTips: s.panelTips,
         wingOrder: s.wingOrder,
         wingsOff: s.wingsOff,
+        deskNoticeSeen: s.deskNoticeSeen,
       }),
       // v1 blobs may hold a founder-only skin (e.g. 'gotham'); v1/v2 blobs
       // carry a now-dead `ambient` key that this simply doesn't return
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<
-          Pick<ShellState, 'skin' | 'weekStart' | 'onboarded' | 'panelTips' | 'wingOrder' | 'wingsOff'>
+          Pick<
+            ShellState,
+            | 'skin'
+            | 'weekStart'
+            | 'onboarded'
+            | 'panelTips'
+            | 'wingOrder'
+            | 'wingsOff'
+            | 'deskNoticeSeen'
+          >
         >
         return {
           skin: normalizeSkin(p.skin),
@@ -142,6 +164,9 @@ export const useShellStore = create<ShellState>()(
           // `undefined` over the defaults if these were simply left out
           wingOrder: ids(p.wingOrder),
           wingsOff: ids(p.wingsOff),
+          // a blob this old belongs to someone already settled in; the note
+          // about small screens is for arrivals, so count it as said
+          deskNoticeSeen: version < 4 ? true : p.deskNoticeSeen === true,
         }
       },
       // re-apply the persisted week-start into core/dates once rehydrated

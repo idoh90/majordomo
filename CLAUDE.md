@@ -302,6 +302,9 @@ src/
                   door into that card (closing returns to the list); the phone
                   keeps the grouped column pager (col/row still maintained)
                   with two-tap threading, and a rail tap mid-pick is a no-op.
+                  It also owns THE CREW ROOM (`CrewScreen.tsx`) — the wing's
+                  third room, reached from the shelf's door and the board's
+                  CREW pill, and the only place sharing is worked (see below).
                   Design: 'Workshop Wing -
                   Pegboard.dc.html' in the Claude Design project (pre-freeform;
                   directional). The 6th tab folds the mobile bar's overflow
@@ -411,18 +414,20 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   blobs/exports round-trip). The `skin` field is **legacy/frozen**: nothing reads or
   writes it anymore, but it stays in the interface/partialize/migrate so old blobs and
   exports round-trip unchanged. Do not bump the version for shell concerns.
-- **`majordomo-shell` v3** (`core/store/shell.ts`) — `{ skin, weekStart }`. On
+- **`majordomo-shell` v4** (`core/store/shell.ts`) — `{ skin, weekStart }`. On
   true first boot it seeds from the legacy blob's `state.skin`; an existing
   shell blob always wins (persist rehydrates synchronously). Skins pass
   through `normalizeSkin` on migrate/rehydrate/set — founder-only ids fall back to
   `midnight` unless `VITE_FOUNDER_SKIN=1` (their CSS ships only in the founder bundle).
   v3 dropped the `ambient` background layer (idle animation cost on old machines);
-  v4 added `onboarded`. It also carries `panelTips` and the wing preference
-  (`wingOrder` / `wingsOff`, read through `app/wings.ts`) — all three defaulted
-  keys added with **no version bump**, since an older blob simply lacks them and
-  persist's shallow merge leaves the initializer standing. Only a changed
-  meaning needs a migration. Deliberately NOT synced: which wings one screen
-  shows is a fact about that device, exactly like the briefing's dial picks.
+  v4 added `onboarded`. It also carries `panelTips`, the wing preference
+  (`wingOrder` / `wingsOff`, read through `app/wings.ts`) and `deskNoticeSeen`
+  — all defaulted keys added with **no version bump**, since an older blob
+  simply lacks them and persist's shallow merge leaves the initializer
+  standing. Only a changed meaning needs a migration. Deliberately NOT synced:
+  which wings one screen shows is a fact about that device, exactly like the
+  briefing's dial picks and whether this screen has had the note about being
+  small.
 - **`batman-capital` v1** (`modules/capital/store.ts`) — Wayne Fund's data: accounts,
   snapshots, holdings, budget/spends, blur flag, plus the Twelve Data `apiKey` and the
   `prices`/`fx` quote cache. Entirely separate from the others.
@@ -437,14 +442,16 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   event id (sessions themselves are `majordomo-events` entries). Homework/exam actions
   write their Manor marker through the events store; `reconcileMarkers` heals drift
   (and trails overdue homework chips to today), never while a what-if sandbox is open.
-- **`majordomo-workshop` v1** (`modules/workshop/store.ts`) — the Workshop's
+- **`majordomo-workshop` v3** (`modules/workshop/store.ts`) — the Workshop's
   records: ventures, board cards + threads, milestones, per-session fulfillment
   metadata keyed by event id (sessions themselves are `majordomo-events`
-  entries, exactly the Study's split), and the live `bench` timer — persisted
-  so a reload cannot lose a running clock, but **never synced** (a stopwatch is
-  one device's present, not a record). Milestone actions write their Manor
-  marker through the events store; `reconcileMarkers` heals drift and trails
-  overdue chips to today, never while a what-if sandbox is open.
+  entries, exactly the Study's split), the cached crew `members` rosters, and
+  the live `bench` timer — persisted so a reload cannot lose a running clock,
+  but **never synced** (a stopwatch is one device's present, not a record).
+  Milestone actions write their Manor marker through the events store;
+  `reconcileMarkers` heals drift and trails overdue chips to today, never while
+  a what-if sandbox is open. v3 gave each roster row a `role` and a `status`
+  (migrate states what old rows already were: an active hand).
 - **`majordomo-watch` v1** (`modules/watch/store.ts`) — shift *shapes* only
   (`ShiftTemplate { name, startMin, endMin }`, minutes since local midnight,
   `endMin > 1440` = ends next day). The watches themselves are events. Four starters
@@ -460,9 +467,81 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 
 **Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
 `majordomo-events` / `majordomo-study` / `majordomo-workshop` / `majordomo-watch` /
-`majordomo-briefing`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+`majordomo-briefing`, plus the two device-local bookkeeping blobs that are NOT part
+of the estate: `majordomo-sync` and `majordomo-share`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
 boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
 still applies; the old keys are left in place as insurance and never read again.
+
+## Crews — a venture shared, and who may touch it
+
+A crew is a second namespace beside `records`, never a loosening of it — the
+reasoning is at the top of `supabase/migrations/0004_shares.sql` and still holds.
+`0006_crew_roles.sql` gave that namespace a door policy, a waiting room and ranks.
+Both files are pasted into the SQL editor by hand, IN FULL, like every migration here.
+
+- **THE CREW ROOM (`modules/workshop/CrewScreen.tsx`) is the only sharing surface.**
+  It replaced `ShareSheet.tsx`, which is deleted: a sheet could not hold a roster,
+  a waiting list and a rank control at once, and reaching a venture's crew meant
+  going through that venture's board first. The shelf's door and the board's CREW
+  pill now both open the room; BACK returns to whichever asked, because `boardFor`
+  is left standing behind it.
+- **Three ranks, and they are the REGISTRY's, not the screen's.** `keeper` (the
+  owner: admits, ranks, disbands), `hand` (writes the board, milestones and hours),
+  `guest` (reads, changes nothing). `is_share_member()` now means an ACTIVE member
+  and `is_share_writer()` means an active keeper or hand — the `share_records` write
+  policies check the second. A guest whose client is persuaded to push is refused by
+  Postgres, which is the only refusal worth anything. The Board's `readOnly` flag is
+  courtesy on top of that, so nobody spends an evening arranging a wall whose every
+  change is going to be thrown away; `drainShare` skips a guest's queue for the same
+  reason, or one doomed push would read as an outage every cycle.
+- **WHICH COLUMNS the keeper may write is a GRANT, not a policy** — RLS has no column
+  granularity, so `grant update (role, status) on share_members` and
+  `grant update (visibility) on shares` are load-bearing. Without them the keeper's
+  UPDATE policy is also a licence to rewrite a member's self-chosen label.
+- **The keeper's own roster row is a trigger** (`guard_keeper_row`), UPDATE only.
+  Guarding DELETE would sit in the path of the FK cascade `delete from shares` fires
+  on that table — the one operation in a crew's life that must never fail.
+- **`vetted` means the code APPLIES rather than admits.** `join_share` returns the
+  standing it left the caller in, and a `pending` answer goes into
+  `useShareStore.applications` (shareId → code, persisted). The service settles those
+  against the roster each cycle: admitted → pull; row gone → flagged `declined` and
+  KEPT until dismissed, because an entry that simply vanished cannot tell a refusal
+  from a crew you imagined applying to. An applicant reads nothing — not the records,
+  not the roster, not the crew's name — which is what a waiting room is for.
+- **The share row is read on EVERY pull now**, not just the first: no realtime channel
+  watches `shares`, so a crew shut to applications would otherwise go on reading
+  "open" on every device but the keeper's.
+- **The join CODE has two forms** (`modules/workshop/joinCode.ts`): canonical
+  (8 chars, no separators — what the registry stores) and display (`XXXX-XXXX` — what
+  a person reads and types). The field dashes as it fills, and `editCode` exists for
+  one reason: a backspace that lands on the separator shortens the FIELD without
+  changing the code behind it, so re-deriving the display would put the dash back and
+  the key would appear to do nothing. A pasted invite LINK is understood too, since
+  COPY LINK is the button an owner actually reaches for.
+
+## The home screen, and the small screen (`src/app/install/`)
+
+The app has been installable since `vite-plugin-pwa` went in and never said so.
+
+- **`install.ts` catches `beforeinstallprompt` at MODULE SCOPE** (wired from
+  `main.tsx`): it fires once, early, cannot be asked for again, and a listener hung
+  inside a component would simply never hear it.
+- **`handheld()` asks the PLATFORM; `useIsMobile()` asks the VIEWPORT.** Two different
+  questions that agree most of the time — a laptop window dragged narrow is still a
+  laptop, and telling its owner the app is better on a desktop is both wrong and a
+  little insulting. iPadOS reports itself as a Mac, so the platform test asks whether
+  the "Mac" has a touchscreen.
+- **The desk notice is said ONCE per device** (`deskNoticeSeen` in the shell store —
+  a defaulted key, so no version bump), on the Manor only, and never while the
+  first-time setup is running. Reading the tutorial retires it too.
+- **The tutorial's steps are per platform and there is no way round that**: iOS buries
+  this in the share sheet with no API at all, Chromium hands the whole thing over in
+  one tap, a desktop browser puts an icon in the address bar. Where the one-tap button
+  exists it goes first and the written steps stay UNDER it — the prompt is single-use
+  and browsers decline to show it for reasons of their own.
+- **The onboarding walk gains an `install` stop** before `close`, on a handheld that is
+  still a browser tab. Both its buttons advance: a tour that could not be finished
+  without installing something would be the first wall the house ever put up.
 
 ## Capital console — Wayne Fund (`src/modules/capital/`)
 
@@ -678,6 +757,9 @@ auto-enter Training so they land on the right screen.
 - `?sheet=skin` — opens the App-skin picker sheet on load
 - `?board` / `?board=<ventureId>` — opens the Workshop on a venture's pegboard
   (first venture when unnamed) — screenshot aid · `window.__workshop` — store handle
+- `?onboard[=stage]` — opens the first-time setup (in DEV it NEVER opens by
+  itself). `?onboard=install` lands on the home-screen stop, which the flow
+  itself only offers on a handheld
 - `?detail` — opens the newest workout's detail sheet
 - `?map=volume` — starts the body map in weekly-volume mode
 - `?debugmap` — rainbow-colors every muscle plate to spot gaps/overlaps

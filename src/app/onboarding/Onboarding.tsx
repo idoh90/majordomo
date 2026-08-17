@@ -1,3 +1,4 @@
+import { InstallStage } from '../install/InstallStage'
 import { SetupPanel } from './SetupPanel'
 import { WalkCard } from './WalkCard'
 import { WelcomeStage } from './WelcomeStage'
@@ -31,5 +32,6 @@ export function Onboarding() {
   ) {
     return <SetupPanel stage={stage} />
   }
+  if (stage === 'install') return <InstallStage />
   return <WalkCard stage={stage} />
 }

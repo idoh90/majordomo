@@ -7,6 +7,7 @@ import { offReason } from '../../core/sync/gate'
 import { useStudyStore } from '../../modules/study/store'
 import { useWorkoutStore } from '../../modules/training/store'
 import { useWorkshopStore } from '../../modules/workshop/store'
+import { handheld, isStandalone } from '../install/install'
 import { sweepSample } from './sample'
 
 /**
@@ -47,6 +48,8 @@ export type OnboardStage =
   | 'walk-study'
   | 'walk-workshop'
   | 'walk-ledger'
+  /** on a phone that is still a browser tab: the house can be an icon */
+  | 'install'
   | 'close'
 
 /** what the user said fills their week — every key optional to answer */
@@ -95,6 +98,19 @@ export function setupStages(c: Composition | null): OnboardStage[] {
   return stages
 }
 
+/**
+ * Whether this run ends with the home-screen stop.
+ *
+ * Only on a handheld, and only in a browser tab: on a desktop the icon buys
+ * little over a bookmark, and on a device already launched from its icon the
+ * stop would be a tour of something the user has plainly already found. The
+ * check runs when the walk reaches its end rather than when the run starts, so
+ * a device installed halfway through never sees it.
+ */
+function installStage(): boolean {
+  return handheld() && !isStandalone()
+}
+
 /** the walk, in registry order, then the send-off */
 const WALK_STAGES: OnboardStage[] = [
   'walk-watch',
@@ -116,6 +132,7 @@ const ALL_STAGES: OnboardStage[] = [
   'workshop',
   'preset',
   ...WALK_STAGES,
+  'install',
   'close',
 ]
 
@@ -220,6 +237,7 @@ export const useOnboarding = create<OnboardState>((set, get) => ({
       'composition',
       ...setupStages(composition),
       ...WALK_STAGES,
+      ...(installStage() ? (['install'] as OnboardStage[]) : []),
       'close',
     ]
     const i = stage ? flow.indexOf(stage) : -1

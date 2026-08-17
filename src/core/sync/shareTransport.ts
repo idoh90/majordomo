@@ -17,17 +17,39 @@ export interface ShareWireRecord {
   author_id?: string | null
 }
 
+/**
+ * A crew's door policy. `open` — the code admits, which is all 0004 could do.
+ * `vetted` — the code applies, and the keeper admits.
+ */
+export type CrewVisibility = 'open' | 'vetted'
+
+/** what a hand on the crew may do. Enforced in the registry, not just drawn. */
+export type CrewRole = 'keeper' | 'hand' | 'guest'
+
+/** admitted, or still in the hall */
+export type CrewStanding = 'pending' | 'active'
+
 export interface ShareInfo {
   id: string
   code: string
   ownerId: string
+  visibility: CrewVisibility
 }
 
 export interface MemberRow {
   userId: string
   label: string
   joinedAt: string
+  role: CrewRole
+  status: CrewStanding
 }
+
+/** the registry's word, defended: an unknown rank is the LEAST of them, so a
+ *  future rank this build has never heard of can only ever look, never write */
+const asRole = (v: unknown): CrewRole =>
+  v === 'keeper' || v === 'hand' || v === 'guest' ? v : 'guest'
+const asStanding = (v: unknown): CrewStanding => (v === 'pending' ? 'pending' : 'active')
+const asVisibility = (v: unknown): CrewVisibility => (v === 'vetted' ? 'vetted' : 'open')
 
 /** Postgres refuses a batch that touches the same row twice; last write wins */
 function dedupe(rows: ShareWireRecord[]): ShareWireRecord[] {
@@ -51,17 +73,29 @@ export async function createShare(label: string): Promise<ShareInfo> {
   if (error) throw new Error(error.message)
   const row = (data as Array<{ share_id: string; code: string }> | null)?.[0]
   if (!row) throw new Error('create_share returned nothing')
-  return { id: row.share_id, code: row.code, ownerId: '' }
+  return { id: row.share_id, code: row.code, ownerId: '', visibility: 'open' }
 }
 
-/** redeem a code — the server normalizes what a human actually typed */
-export async function joinShare(code: string, label: string): Promise<string> {
+export interface JoinResult {
+  shareId: string
+  /** 'pending' on a vetted crew — the code applied rather than admitted */
+  status: CrewStanding
+}
+
+/**
+ * Redeem a code. The server normalizes what a human actually typed, and
+ * answers with the standing it left us in — which on a vetted crew is
+ * `pending` and means the keeper has been asked, not that anything failed.
+ */
+export async function joinShare(code: string, label: string): Promise<JoinResult> {
   const client = getClient()
   if (!client) throw new Error('sync is off')
   const sb = await client
   const { data, error } = await sb.rpc('join_share', { p_code: code, p_label: label })
   if (error) throw new Error(error.message)
-  return data as string
+  const row = (data as Array<{ share_id: string; member_status: string }> | null)?.[0]
+  if (!row) throw new Error('join_share returned nothing')
+  return { shareId: row.share_id, status: asStanding(row.member_status) }
 }
 
 /**
@@ -147,16 +181,32 @@ export async function countShareRecords(shareId: string): Promise<number | null>
   return count ?? null
 }
 
-/** every crew this account belongs to — RLS scopes the rows */
-export async function listMemberships(): Promise<string[]> {
+export interface Memberships {
+  /** crews this account is on */
+  active: string[]
+  /** crews it has applied to and is waiting on */
+  pending: string[]
+}
+
+/**
+ * Every crew this account has a roster row in — RLS scopes it, and since an
+ * applicant may read their own row, a standing comes back with each. One
+ * query answers both "which crews are mine" and "which am I still waiting on",
+ * which is why the service never has to ask a second time.
+ */
+export async function listMemberships(): Promise<Memberships> {
   const client = getClient()
-  if (!client) return []
+  if (!client) return { active: [], pending: [] }
   const sb = await client
-  const { data, error } = await sb.from('share_members').select('share_id')
+  const { data, error } = await sb.from('share_members').select('share_id,status')
   if (error) throw new Error(error.message)
-  const mine = new Set<string>()
-  for (const r of (data ?? []) as Array<{ share_id: string }>) mine.add(r.share_id)
-  return [...mine]
+  const active = new Set<string>()
+  const pending = new Set<string>()
+  for (const r of (data ?? []) as Array<{ share_id: string; status: string }>) {
+    if (asStanding(r.status) === 'pending') pending.add(r.share_id)
+    else active.add(r.share_id)
+  }
+  return { active: [...active], pending: [...pending] }
 }
 
 export async function listMembers(shareId: string): Promise<MemberRow[]> {
@@ -165,28 +215,91 @@ export async function listMembers(shareId: string): Promise<MemberRow[]> {
   const sb = await client
   const { data, error } = await sb
     .from('share_members')
-    .select('user_id,label,joined_at')
+    .select('user_id,label,joined_at,role,status')
     .eq('share_id', shareId)
   if (error) throw new Error(error.message)
-  return ((data ?? []) as Array<{ user_id: string; label: string; joined_at: string }>).map(
-    (r) => ({ userId: r.user_id, label: r.label, joinedAt: r.joined_at }),
-  )
+  return (
+    (data ?? []) as Array<{
+      user_id: string
+      label: string
+      joined_at: string
+      role: string
+      status: string
+    }>
+  ).map((r) => ({
+    userId: r.user_id,
+    label: r.label,
+    joinedAt: r.joined_at,
+    role: asRole(r.role),
+    status: asStanding(r.status),
+  }))
 }
 
-/** the share row itself — who keeps it, and the code to hand out */
+/** the share row itself — who keeps it, its door policy, and the code */
 export async function getShare(shareId: string): Promise<ShareInfo | null> {
   const client = getClient()
   if (!client) return null
   const sb = await client
   const { data, error } = await sb
     .from('shares')
-    .select('id,code,owner_id')
+    .select('id,code,owner_id,visibility')
     .eq('id', shareId)
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
-  const row = data as { id: string; code: string; owner_id: string }
-  return { id: row.id, code: row.code, ownerId: row.owner_id }
+  const row = data as { id: string; code: string; owner_id: string; visibility: string }
+  return {
+    id: row.id,
+    code: row.code,
+    ownerId: row.owner_id,
+    visibility: asVisibility(row.visibility),
+  }
+}
+
+/**
+ * The keeper's three verbs, all plain DML: the door policy, a rank, and
+ * admitting an applicant. No RPC, because RLS plus the column grants in 0006
+ * already say exactly who may write which column — an RPC would only be a
+ * second place for that rule to drift.
+ */
+export async function setShareVisibility(
+  shareId: string,
+  visibility: CrewVisibility,
+): Promise<void> {
+  const client = getClient()
+  if (!client) return
+  const sb = await client
+  const { error } = await sb.from('shares').update({ visibility }).eq('id', shareId)
+  if (error) throw new Error(error.message)
+}
+
+export async function setMemberRole(
+  shareId: string,
+  userId: string,
+  role: CrewRole,
+): Promise<void> {
+  const client = getClient()
+  if (!client) return
+  const sb = await client
+  const { error } = await sb
+    .from('share_members')
+    .update({ role })
+    .eq('share_id', shareId)
+    .eq('user_id', userId)
+  if (error) throw new Error(error.message)
+}
+
+/** admit an applicant. Declining is `kickMember` — the row simply goes. */
+export async function admitMember(shareId: string, userId: string): Promise<void> {
+  const client = getClient()
+  if (!client) return
+  const sb = await client
+  const { error } = await sb
+    .from('share_members')
+    .update({ status: 'active' })
+    .eq('share_id', shareId)
+    .eq('user_id', userId)
+  if (error) throw new Error(error.message)
 }
 
 /** leaving is deleting your own roster row — plain DML under RLS */

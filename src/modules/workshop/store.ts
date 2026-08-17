@@ -542,7 +542,13 @@ export const useWorkshopStore = create<WorkshopState>()(
     },
     {
       name: 'majordomo-workshop',
-      version: 2,
+      // v3: a roster row gained `role` and `status`. Every row written before
+      // this build was an admitted member with no rank to speak of, so migrate
+      // states what they already were rather than leaving the screen to read
+      // `undefined` as a rank. The keeper is not written in here — it is
+      // shares.owner_id, cached beside the code — so the first pull is what
+      // paints the crown, and until then the owner reads as an ordinary hand.
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         ventures: s.ventures,
@@ -576,7 +582,16 @@ export const useWorkshopStore = create<WorkshopState>()(
           sessions: p.sessions ?? {},
           bench: p.bench ?? null,
           workEntries: p.workEntries ?? {},
-          members: p.members ?? {},
+          members: Object.fromEntries(
+            Object.entries(p.members ?? {}).map(([shareId, roster]) => [
+              shareId,
+              (roster ?? []).map((m) => ({
+                ...m,
+                role: m.role ?? 'hand',
+                status: m.status ?? 'active',
+              })),
+            ]),
+          ),
         }
       },
     },

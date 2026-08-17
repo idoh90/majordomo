@@ -18,6 +18,7 @@ import { voice } from './core/voice'
 import { initAuth } from './core/auth/store'
 import { initSync } from './app/sync/init'
 import { initJoinGate } from './app/share/joinGate'
+import { initInstall } from './app/install/install'
 import { initOnboarding } from './app/onboarding/store'
 import { useShellStore } from './core/store/shell'
 
@@ -60,6 +61,9 @@ try {
   // a ?join=CODE invite: stash the code (it must survive an OAuth round-trip),
   // strip the param, and open the sign-in door if one is needed.
   initJoinGate()
+  // catch `beforeinstallprompt`. It fires once, early, and cannot be asked for
+  // again — a listener hung inside a component would simply never hear it.
+  initInstall()
   // …and only then decide whether this boot is somebody's first: the setup reads
   // the estate to know whether there is anything here already.
   initOnboarding()

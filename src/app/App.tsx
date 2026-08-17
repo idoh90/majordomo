@@ -18,6 +18,7 @@ import { SyncButton } from './SyncButton'
 import { useAuthUi } from './authUi'
 import { offReason } from '../core/sync/gate'
 import { TabBar } from './TabBar'
+import { DeskNotice } from './install/DeskNotice'
 import { Onboarding } from './onboarding/Onboarding'
 
 export default function App() {
@@ -97,6 +98,10 @@ export default function App() {
               : undefined
           }
         />
+
+        {/* the word about small screens, said once, and only at home: a notice
+            that followed the reader into every wing would be an alarm */}
+        {view === 'manor' && <DeskNotice />}
 
         {/* The House rides beside every wing at xl and folds into the flow
             below it. min-w-0 on the screen column is load-bearing: without it

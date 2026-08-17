@@ -28,7 +28,9 @@ import {
   taskProgress,
   workshopStats,
 } from './lib'
-import { ShareSheet, crewsAvailable } from './ShareSheet'
+import { crewRole, crewsAvailable } from './share'
+import { useAuthStore } from '../../core/auth/store'
+import { useShareStore } from '../../core/sync/shareStore'
 import { useWorkshopStore } from './store'
 import { safeHref } from './url'
 import type { BoardGroup } from './lib'
@@ -81,10 +83,13 @@ interface PlaceSpot {
 export function Board({
   venture,
   onBack,
+  onOpenCrew,
   butler,
 }: {
   venture: Venture
   onBack: () => void
+  /** the CREW button leads to the crew room now, not to a sheet over the wall */
+  onOpenCrew: () => void
   butler: (msg: string) => void
 }) {
   const activeEvents = useEventsStore((s) => (s.sandbox ? s.sandbox.events : s.events))
@@ -96,7 +101,7 @@ export function Board({
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
 
-  const [sheet, setSheet] = useState<'hang' | 'milestones' | 'column' | 'crew' | null>(null)
+  const [sheet, setSheet] = useState<'hang' | 'milestones' | 'column' | null>(null)
   const [editCard, setEditCard] = useState<BoardCard | null>(null)
   /** where a press on bare board asked for the new card to go */
   const [placeAt, setPlaceAt] = useState<PlaceSpot | null>(null)
@@ -108,7 +113,19 @@ export function Board({
 
   const workEntries = useWorkshopStore((s) => s.workEntries)
   const members = useWorkshopStore((s) => s.members)
-  const crewSize = venture.shareId ? (members[venture.shareId]?.length ?? 1) : 0
+  const owners = useShareStore((s) => s.owners)
+  const me = useAuthStore((s) => s.userId)
+  const crewSize = venture.shareId
+    ? (members[venture.shareId]?.filter((m) => m.status === 'active').length ?? 1)
+    : 0
+  /**
+   * A GUEST on this crew reads the wall and does not touch it. The registry
+   * refuses their writes outright (0006), so the point of this flag is not
+   * safety — it is not letting someone spend an evening arranging a board
+   * whose every change is going to be thrown away. Every door onto an edit
+   * goes through it: hanging, editing, dragging, threading and cutting.
+   */
+  const readOnly = crewRole(venture.shareId, members, owners, me) === 'guest'
   const mine = cards.filter((c) => c.ventureId === venture.id)
   const groups = boardGroups(mine)
   const myThreads = threads.filter((t) => t.ventureId === venture.id)
@@ -137,6 +154,9 @@ export function Board({
   }
 
   const openCreateAt = (spot: PlaceSpot) => {
+    // the one gate every "hang something HERE" gesture passes through — bare
+    // board on the desktop, the phone's + at the end of a column
+    if (readOnly) return
     setEditCard(null)
     setPlaceAt(spot)
     setBackToColumn(false)
@@ -238,7 +258,7 @@ export function Board({
         {crewsAvailable() && (
           <button
             type="button"
-            onClick={() => setSheet('crew')}
+            onClick={onOpenCrew}
             className="rounded-pill border-[1.5px] px-4 py-2.5 font-display text-[12px] font-bold tracking-[0.14em] transition-colors [font-variant-numeric:tabular-nums]"
             style={{
               borderColor: venture.shareId
@@ -264,22 +284,29 @@ export function Board({
             }}
             onStopped={butler}
           />
-          <button
-            type="button"
-            onClick={() => {
-              setEditCard(null)
-              setSheet('hang')
-            }}
-            className="btn-soft px-3.5 py-2 font-display text-[10.5px] font-bold tracking-[0.14em]"
-          >
-            {voice.workshop.board.hang}
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditCard(null)
+                setSheet('hang')
+              }}
+              className="btn-soft px-3.5 py-2 font-display text-[10.5px] font-bold tracking-[0.14em]"
+            >
+              {voice.workshop.board.hang}
+            </button>
+          )}
         </span>
+        {readOnly && (
+          <p className="basis-full text-[12px] italic text-ink-faint">
+            {voice.workshop.crew.guestBoard}
+          </p>
+        )}
       </div>
 
       {/* ------------------------------------------------ the pegboard */}
       {mine.length === 0 ? (
-        <EmptyBoard onHang={() => setSheet('hang')} />
+        <EmptyBoard onHang={readOnly ? null : () => setSheet('hang')} />
       ) : (
         <>
           <DesktopBoard
@@ -287,6 +314,7 @@ export function Board({
             groups={groups}
             threads={myThreads}
             now={now}
+            readOnly={readOnly}
             onEdit={openEdit}
             onCreateAt={openCreateAt}
             butler={butler}
@@ -296,6 +324,7 @@ export function Board({
             groups={groups}
             threads={myThreads}
             now={now}
+            readOnly={readOnly}
             onEdit={openEdit}
             onCreateAt={openCreateAt}
             butler={butler}
@@ -311,6 +340,7 @@ export function Board({
         threads={myThreads}
         editing={editCard}
         placeAt={placeAt}
+        readOnly={readOnly}
         butler={butler}
       />
       <ColumnSheet
@@ -323,6 +353,7 @@ export function Board({
         rows={groups.find((g) => g.title?.id === columnOf)?.children ?? []}
         threads={myThreads}
         now={now}
+        readOnly={readOnly}
         onOpenCard={(card) => openFromColumn(card, null)}
         onHangHere={(index) =>
           openFromColumn(null, { parentId: columnOf ?? undefined, index })
@@ -335,31 +366,30 @@ export function Board({
         venture={venture}
         milestones={milestones.filter((m) => m.ventureId === venture.id)}
         now={now}
-        butler={butler}
-      />
-      <ShareSheet
-        open={sheet === 'crew'}
-        onClose={() => setSheet(null)}
-        venture={venture}
+        readOnly={readOnly}
         butler={butler}
       />
     </div>
   )
 }
 
-function EmptyBoard({ onHang }: { onHang: () => void }) {
+/** `onHang` is null for a guest: an empty wall they cannot hang anything on
+ *  says so with the empty line alone rather than with a dead button */
+function EmptyBoard({ onHang }: { onHang: (() => void) | null }) {
   return (
     <div
       className="trough flex min-h-[300px] flex-col items-center justify-center gap-3.5 px-6 py-10"
       style={PEGBOARD_BG}
     >
-      <button
-        type="button"
-        onClick={onHang}
-        className="w-[200px] rounded-[2px] border-[1.5px] border-dashed border-line px-4 py-3.5 text-center font-display text-[10px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
-      >
-        {voice.workshop.board.hangFirst}
-      </button>
+      {onHang && (
+        <button
+          type="button"
+          onClick={onHang}
+          className="w-[200px] rounded-[2px] border-[1.5px] border-dashed border-line px-4 py-3.5 text-center font-display text-[10px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
+        >
+          {voice.workshop.board.hangFirst}
+        </button>
+      )}
       <span className="text-[12.5px] italic text-ink-dim">{voice.workshop.board.empty}</span>
     </div>
   )
@@ -617,6 +647,7 @@ function DesktopBoard({
   groups,
   threads,
   now,
+  readOnly,
   onEdit,
   onCreateAt,
   butler,
@@ -625,6 +656,8 @@ function DesktopBoard({
   groups: BoardGroup[]
   threads: Thread[]
   now: number
+  /** a guest: the wall pans and zooms, and nothing on it moves */
+  readOnly: boolean
   onEdit: (card: BoardCard) => void
   /** a press on bare board: hang something at that spot on the wall */
   onCreateAt: (spot: PlaceSpot) => void
@@ -736,6 +769,11 @@ function DesktopBoard({
 
   const cardMove = (e: React.PointerEvent) => {
     if (!drag) return
+    // A guest's press is armed as a drag that never travels: `moved` stays
+    // false, so the card does not lift, does not write a position on release,
+    // and the release reads as a press — which opens the card to be READ.
+    // Refusing the pointer-down instead would have taken that away too.
+    if (readOnly) return
     const pt = boardPoint(e)
     const moved = drag.moved || Math.hypot(pt.x - drag.x, pt.y - drag.y) > 6
     setDrag({ ...drag, x: pt.x, y: pt.y, moved })
@@ -1128,7 +1166,7 @@ function DesktopBoard({
                   groupIndex={titleIndex.get(p.card.id) ?? 0}
                   now={now}
                   thread={
-                    p.card.type === 'title'
+                    p.card.type === 'title' || readOnly
                       ? undefined
                       : { role: twineRole(p.card.id), onPointerDown: twineDown(p.card) }
                   }
@@ -1192,12 +1230,19 @@ function DesktopBoard({
         </div>
 
         {/* a press and a drag on the same surface do different things, and
-            neither leaves a mark — so the board says so, once, quietly */}
+            neither leaves a mark — so the board says so, once, quietly. For a
+            guest the first two would be instructions for gestures that have
+            been taken away; the third still stands, since a column still
+            opens to be read. */}
         <div className="pointer-events-none absolute bottom-3 left-4 max-w-[60%] text-[10.5px] italic leading-snug text-ink-faint">
-          {voice.workshop.board.pressHint}
-          <br />
-          {voice.workshop.board.threadHint}
-          <br />
+          {!readOnly && (
+            <>
+              {voice.workshop.board.pressHint}
+              <br />
+              {voice.workshop.board.threadHint}
+              <br />
+            </>
+          )}
           {voice.workshop.board.headingHint}
         </div>
       </div>
@@ -1597,6 +1642,7 @@ function MobileBoard({
   groups,
   threads,
   now,
+  readOnly,
   onEdit,
   onCreateAt,
   butler,
@@ -1605,6 +1651,8 @@ function MobileBoard({
   groups: BoardGroup[]
   threads: Thread[]
   now: number
+  /** a guest: the pager and the pinch still work, the twine and the + do not */
+  readOnly: boolean
   onEdit: (card: BoardCard) => void
   onCreateAt: (spot: PlaceSpot) => void
   butler: (msg: string) => void
@@ -1788,16 +1836,20 @@ function MobileBoard({
                     <CardFace
                       card={c}
                       now={now}
-                      thread={{
-                        role: mobileRole(c.id),
-                        onClick: (e) => {
-                          // the eyelet arms and disarms; the card behind it
-                          // must not open its editor under the tap
-                          e.stopPropagation()
-                          navigator.vibrate?.(6)
-                          setArmed((a) => (a === c.id ? null : c.id))
-                        },
-                      }}
+                      thread={
+                        readOnly
+                          ? undefined
+                          : {
+                              role: mobileRole(c.id),
+                              onClick: (e) => {
+                                // the eyelet arms and disarms; the card behind
+                                // it must not open its editor under the tap
+                                e.stopPropagation()
+                                navigator.vibrate?.(6)
+                                setArmed((a) => (a === c.id ? null : c.id))
+                              },
+                            }
+                      }
                     />
                   </div>
                   {k < g.children.length - 1 && !linked(c, g.children[k + 1]) && (
@@ -1809,13 +1861,15 @@ function MobileBoard({
             {/* the phone's version of pressing bare board: an explicit target
                 at the foot of the column, because an invisible tap zone on a
                 touch screen is a thing nobody finds */}
-            <button
-              type="button"
-              onClick={() => onCreateAt({ parentId: g.title?.id, index: g.children.length })}
-              className="mt-3 w-full rounded-[2px] border-[1.5px] border-dashed border-line py-3 text-center font-display text-[9.5px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
-            >
-              {voice.workshop.board.hangHere}
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => onCreateAt({ parentId: g.title?.id, index: g.children.length })}
+                className="mt-3 w-full rounded-[2px] border-[1.5px] border-dashed border-line py-3 text-center font-display text-[9.5px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
+              >
+                {voice.workshop.board.hangHere}
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -1908,6 +1962,7 @@ function ColumnSheet({
   rows,
   threads,
   now,
+  readOnly,
   onOpenCard,
   onHangHere,
   butler,
@@ -1919,6 +1974,8 @@ function ColumnSheet({
   /** the venture's twine, so the confirm can say what a delete would cut */
   threads: Thread[]
   now: number
+  /** a guest: the column reads as a list, with no tick, no arrows, no bin */
+  readOnly: boolean
   onOpenCard: (card: BoardCard) => void
   onHangHere: (index: number) => void
   butler: (msg: string) => void
@@ -1950,7 +2007,7 @@ function ColumnSheet({
             >
               {/* a job's tick lives on the row, so a column can be worked
                   through without opening a single card */}
-              {c.type === 'task' ? (
+              {c.type === 'task' && !readOnly ? (
                 <button
                   type="button"
                   aria-label={voice.workshop.board.done}
@@ -1969,10 +2026,15 @@ function ColumnSheet({
                   {c.done ? '✓' : ''}
                 </button>
               ) : (
+                // a guest still sees WHICH jobs are struck — the tick just
+                // stops being a control
                 <span
                   aria-hidden
                   className="h-[8px] w-[8px] flex-none"
-                  style={{ border: `1.5px solid ${COPPER}` }}
+                  style={{
+                    border: `1.5px solid ${COPPER}`,
+                    background: c.type === 'task' && c.done ? COPPER : 'transparent',
+                  }}
                 />
               )}
 
@@ -2013,47 +2075,53 @@ function ColumnSheet({
 
               {/* order is `row`, the same order the phone pages — the arrows
                   are the only way to set it now that the wall is freeform */}
-              <button
-                type="button"
-                aria-label={voice.workshop.board.moveUp}
-                disabled={i === 0}
-                onClick={() => store().placeCard(c.id, heading.id, i - 1)}
-                className="flex-none px-1.5 text-[13px] text-ink-faint transition-colors hover:text-ink disabled:opacity-25"
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                aria-label={voice.workshop.board.moveDown}
-                disabled={i === rows.length - 1}
-                onClick={() => store().placeCard(c.id, heading.id, i + 1)}
-                className="flex-none px-1.5 text-[13px] text-ink-faint transition-colors hover:text-ink disabled:opacity-25"
-              >
-                ↓
-              </button>
-              {/* the same destruction as the card sheet's button, so it asks
-                  the same question — a row here is a smaller target than that
-                  one, not a lesser act */}
-              <button
-                type="button"
-                aria-label={voice.workshop.board.takeDown}
-                onClick={() => setConfirm(c)}
-                className="relative flex-none text-ink-faint transition-colors after:absolute after:-inset-2 after:content-[''] hover:text-danger"
-              >
-                <TrashGlyph />
-              </button>
+              {!readOnly && (
+                <>
+                  <button
+                    type="button"
+                    aria-label={voice.workshop.board.moveUp}
+                    disabled={i === 0}
+                    onClick={() => store().placeCard(c.id, heading.id, i - 1)}
+                    className="flex-none px-1.5 text-[13px] text-ink-faint transition-colors hover:text-ink disabled:opacity-25"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={voice.workshop.board.moveDown}
+                    disabled={i === rows.length - 1}
+                    onClick={() => store().placeCard(c.id, heading.id, i + 1)}
+                    className="flex-none px-1.5 text-[13px] text-ink-faint transition-colors hover:text-ink disabled:opacity-25"
+                  >
+                    ↓
+                  </button>
+                  {/* the same destruction as the card sheet's button, so it
+                      asks the same question — a row here is a smaller target
+                      than that one, not a lesser act */}
+                  <button
+                    type="button"
+                    aria-label={voice.workshop.board.takeDown}
+                    onClick={() => setConfirm(c)}
+                    className="relative flex-none text-ink-faint transition-colors after:absolute after:-inset-2 after:content-[''] hover:text-danger"
+                  >
+                    <TrashGlyph />
+                  </button>
+                </>
+              )}
             </div>
           )
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={() => onHangHere(rows.length)}
-        className="mt-3 w-full rounded-[2px] border-[1.5px] border-dashed border-line py-2.5 text-center font-display text-[9.5px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
-      >
-        {voice.workshop.board.hangHere}
-      </button>
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={() => onHangHere(rows.length)}
+          className="mt-3 w-full rounded-[2px] border-[1.5px] border-dashed border-line py-2.5 text-center font-display text-[9.5px] font-semibold tracking-[0.16em] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
+        >
+          {voice.workshop.board.hangHere}
+        </button>
+      )}
 
       <button
         type="button"
@@ -2104,6 +2172,7 @@ function HangCardSheet({
   threads,
   editing,
   placeAt,
+  readOnly,
   butler,
 }: {
   open: boolean
@@ -2114,6 +2183,8 @@ function HangCardSheet({
   editing: BoardCard | null
   /** set when the sheet was opened by pressing a spot on the board */
   placeAt: PlaceSpot | null
+  /** a guest: the sheet becomes a READING of the card rather than an editor */
+  readOnly: boolean
   butler: (msg: string) => void
 }) {
   const [type, setType] = useState<CardType>('note')
@@ -2208,6 +2279,17 @@ function HangCardSheet({
       butler(type === 'title' ? voice.workshop.toast.titleHung : voice.workshop.toast.cardHung)
     }
     onClose()
+  }
+
+  // A guest gets the card READ to them rather than an editor full of disabled
+  // fields: the note's text and the job's deadline are exactly what they came
+  // for, and a form nobody may submit is furniture pretending to be a door.
+  if (readOnly) {
+    return (
+      <Sheet open={open} onClose={onClose}>
+        <CardReading card={editing} threads={threads} cards={cards} />
+      </Sheet>
+    )
   }
 
   return (
@@ -2432,12 +2514,91 @@ function HangCardSheet({
   )
 }
 
+/**
+ * A card, read rather than edited — what a GUEST sees when they press one.
+ * Everything the editor would have shown as a field is shown here as a fact,
+ * in the same order, so the two surfaces stay recognisably the same card.
+ */
+function CardReading({
+  card,
+  threads,
+  cards,
+}: {
+  card: BoardCard | null
+  threads: { id: string; from: string; to: string }[]
+  cards: BoardCard[]
+}) {
+  const now = useNow()
+  if (!card) return null
+  const due = dueRead(card, now)
+  const tied = threads.filter((t) => t.from === card.id || t.to === card.id)
+  const nameOf = (id: string) => cards.find((c) => c.id === id)?.title ?? '—'
+
+  return (
+    <>
+      <div className="text-[8.5px] tracking-[0.2em] text-ink-faint">
+        {voice.workshop.sheet.cardType[card.type]}
+      </div>
+      <h2 className="card-title mt-1">{card.title}</h2>
+
+      {card.body && (
+        <p className="mt-3 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink-dim">
+          {card.body}
+        </p>
+      )}
+
+      {card.url && (
+        <a
+          href={safeHref(card.url) ?? undefined}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="mt-3 block truncate text-[13px] text-accent underline"
+        >
+          {card.url}
+        </a>
+      )}
+
+      {due && (
+        <div
+          className="mt-3 text-[12px] font-semibold tracking-[0.1em] [font-variant-numeric:tabular-nums]"
+          style={{ color: due.overdue ? 'var(--color-danger)' : 'var(--color-ink-dim)' }}
+        >
+          {voice.workshop.due.chip({
+            date: fdate(due.at),
+            time: hhmm(due.at),
+            days: due.days,
+            overdue: due.overdue,
+          })}
+        </div>
+      )}
+
+      {tied.length > 0 && (
+        <div className="mt-4 flex flex-col gap-1">
+          {tied.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 text-[12px] text-ink-dim">
+              <span
+                aria-hidden
+                className="h-[7px] w-[7px]"
+                style={{ border: `1.5px solid ${COPPER}` }}
+              />
+              <span className="truncate">{nameOf(t.from === card.id ? t.to : t.from)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-5 text-[12px] italic text-ink-faint">{voice.workshop.crew.guestBoard}</p>
+    </>
+  )
+}
+
 function MilestonesSheet({
   open,
   onClose,
   venture,
   milestones,
   now,
+  readOnly,
   butler,
 }: {
   open: boolean
@@ -2445,6 +2606,8 @@ function MilestonesSheet({
   venture: Venture
   milestones: Milestone[]
   now: number
+  /** a guest: the dates read, the diamonds do not strike, nothing is added */
+  readOnly: boolean
   butler: (msg: string) => void
 }) {
   const [title, setTitle] = useState('')
@@ -2481,11 +2644,12 @@ function MilestonesSheet({
                 type="button"
                 aria-label={voice.workshop.done}
                 aria-pressed={m.done}
+                disabled={readOnly}
                 onClick={() => {
                   useWorkshopStore.getState().setMilestoneDone(m.id, !m.done)
                   butler(m.done ? voice.workshop.toast.msUndone : voice.workshop.toast.msDone)
                 }}
-                className="relative h-[8px] w-[8px] flex-none rotate-45 after:absolute after:-inset-3 after:content-['']"
+                className="relative h-[8px] w-[8px] flex-none rotate-45 after:absolute after:-inset-3 after:content-[''] disabled:after:content-none"
                 style={{
                   border: `1.5px solid ${m.done ? 'var(--color-ink-faint)' : COPPER}`,
                   background: m.done || nextOne ? (m.done ? 'var(--color-ink-faint)' : COPPER) : 'transparent',
@@ -2509,37 +2673,45 @@ function MilestonesSheet({
                 {fdate(dayKeyToDate(m.on))}
                 {!m.done && ` · ${voice.workshop.countdown(days)}`}
               </span>
-              <button
-                type="button"
-                aria-label="Remove"
-                onClick={() => {
-                  useWorkshopStore.getState().deleteMilestone(m.id)
-                  butler(voice.workshop.toast.msGone)
-                }}
-                className="relative flex-none text-[13px] text-ink-faint transition-colors after:absolute after:-inset-2.5 after:content-[''] hover:text-danger"
-              >
-                ×
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  aria-label="Remove"
+                  onClick={() => {
+                    useWorkshopStore.getState().deleteMilestone(m.id)
+                    butler(voice.workshop.toast.msGone)
+                  }}
+                  className="relative flex-none text-[13px] text-ink-faint transition-colors after:absolute after:-inset-2.5 after:content-[''] hover:text-danger"
+                >
+                  ×
+                </button>
+              )}
             </div>
           )
         })}
       </div>
-      <SheetLabel>{voice.workshop.addMs}</SheetLabel>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder={voice.workshop.sheet.msPlaceholder}
-        className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
-      />
-      <SheetLabel>{voice.workshop.sheet.theDay}</SheetLabel>
-      <Stepper
-        label={`${voice.workshop.countdown(onDays)} — ${fdate(day)}`}
-        minWidth={170}
-        onDec={() => setOnDays((d) => Math.max(1, d - 1))}
-        onInc={() => setOnDays((d) => Math.min(180, d + 1))}
-      />
-      <div className="mt-3.5 text-xs italic text-ink-dim">{voice.workshop.sheet.msHint}</div>
-      <SheetActions cta={voice.workshop.sheet.ctaMs} onCancel={onClose} onSave={add} />
+      {readOnly ? (
+        <p className="mt-4 text-[12px] italic text-ink-faint">{voice.workshop.crew.guestBoard}</p>
+      ) : (
+        <>
+          <SheetLabel>{voice.workshop.addMs}</SheetLabel>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={voice.workshop.sheet.msPlaceholder}
+            className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+          />
+          <SheetLabel>{voice.workshop.sheet.theDay}</SheetLabel>
+          <Stepper
+            label={`${voice.workshop.countdown(onDays)} — ${fdate(day)}`}
+            minWidth={170}
+            onDec={() => setOnDays((d) => Math.max(1, d - 1))}
+            onInc={() => setOnDays((d) => Math.min(180, d + 1))}
+          />
+          <div className="mt-3.5 text-xs italic text-ink-dim">{voice.workshop.sheet.msHint}</div>
+          <SheetActions cta={voice.workshop.sheet.ctaMs} onCancel={onClose} onSave={add} />
+        </>
+      )}
     </Sheet>
   )
 }

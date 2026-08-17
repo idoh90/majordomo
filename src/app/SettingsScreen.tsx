@@ -21,6 +21,8 @@ import { useWorkoutStore } from '../modules/training/store'
 import type { Workout } from '../modules/training/types'
 import { useAuthUi } from './authUi'
 import { nudgeWing, useWings } from './wings'
+import { InstallGuide } from './install/InstallGuide'
+import { useInstall } from './install/install'
 import { entryStage, useOnboarding } from './onboarding/store'
 
 /**
@@ -49,22 +51,25 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
   const [estateOpen, setEstateOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
 
   const authStatus = useAuthStore((s) => s.status)
   const registryShut = offReason()
+  // already an icon: the row would be a door onto "there is nothing to do"
+  const installed = useInstall((s) => s.installed)
 
   // Esc closes the page, but only when nothing it opened is in front of it —
   // otherwise one key would dismiss the sheet AND the page under it
   useEffect(() => {
     if (!open) return
-    const busy = profileOpen || importOpen || estateOpen || confirmClear
+    const busy = profileOpen || importOpen || estateOpen || confirmClear || installOpen
     if (busy) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose, profileOpen, importOpen, estateOpen, confirmClear])
+  }, [open, onClose, profileOpen, importOpen, estateOpen, confirmClear, installOpen])
 
   if (!open) return null
 
@@ -139,6 +144,16 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
                   useOnboarding.getState().begin(entryStage())
                 }}
               />
+              {!installed && (
+                <>
+                  <Divider />
+                  <Row
+                    label={voice.install.settingsItem}
+                    blurb={voice.install.settingsBlurb}
+                    onClick={() => setInstallOpen(true)}
+                  />
+                </>
+              )}
             </Section>
 
             {/* a shut registry says why (?demo) or says nothing at all (no
@@ -208,6 +223,7 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
       <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ImportSheet open={importOpen} onClose={() => setImportOpen(false)} onImport={replaceAll} />
       <EstateImportSheet open={estateOpen} onClose={() => setEstateOpen(false)} />
+      <InstallGuide open={installOpen} onClose={() => setInstallOpen(false)} />
 
       <ConfirmDialog
         open={confirmClear}

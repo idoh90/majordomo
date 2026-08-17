@@ -5,15 +5,20 @@ import { noteDeleted } from '../../core/sync/intent'
 import { shareRecordKey } from '../../core/sync/shareIntent'
 import { useShareStore } from '../../core/sync/shareStore'
 import {
+  admitMember,
   createShare,
   deleteShare,
+  setMemberRole,
+  setShareVisibility,
   kickMember as wireKick,
   leaveShare as wireLeave,
+  type CrewRole,
+  type CrewVisibility,
 } from '../../core/sync/shareTransport'
 import { voice } from '../../core/voice'
 import { fulfilledHours, metaOf, ventureOfEvent } from './lib'
 import { useWorkshopStore } from './store'
-import type { WorkEntry } from './types'
+import type { ShareMember, WorkEntry } from './types'
 
 /**
  * The crew lifecycle — the deliberate acts: open a venture to a crew, join
@@ -41,6 +46,55 @@ function myLabel(): string {
   return email ? email.split('@')[0] : 'someone'
 }
 
+/** whether the crew doors should exist at all on this device */
+export function crewsAvailable(): boolean {
+  return offReason() === null
+}
+
+/* ------------------------------------------------------------------ ranks */
+
+/**
+ * What this account may do on a crew, read from the cached roster.
+ *
+ * Pure on purpose — components pass their own subscribed slices so the screen
+ * re-renders when a rank changes. Two deliberate defaults:
+ *
+ *  · the KEEPER is `shares.owner_id`, cached beside the code, and it outranks
+ *    whatever the roster row says. A roster that has not come down yet still
+ *    knows who opened the venture.
+ *  · a crew whose roster is not here yet reads `hand`, not `guest`. Being
+ *    optimistic costs nothing — the registry refuses anything it shouldn't
+ *    accept — while being pessimistic would lock a member out of their own
+ *    board every time they opened it offline.
+ */
+export function crewRole(
+  shareId: string | undefined,
+  members: Record<string, ShareMember[]>,
+  owners: Record<string, string>,
+  me: string | null,
+): CrewRole | null {
+  if (!shareId || !me) return null
+  if (owners[shareId] === me) return 'keeper'
+  const row = (members[shareId] ?? []).find((m) => m.userId === me)
+  if (!row) return 'hand'
+  return row.status === 'pending' ? 'guest' : row.role
+}
+
+/** the same question from outside React — the sync loop's own guard */
+export function crewRoleNow(shareId: string): CrewRole | null {
+  return crewRole(
+    shareId,
+    useWorkshopStore.getState().members,
+    useShareStore.getState().owners,
+    useAuthStore.getState().userId,
+  )
+}
+
+/** may this device put a hand on the crew's board? A guest never may. */
+export function canWorkCrew(shareId: string): boolean {
+  return crewRoleNow(shareId) !== 'guest'
+}
+
 /**
  * Open a venture to a crew.
  *
@@ -65,7 +119,8 @@ export async function shareVenture(ventureId: string): Promise<CrewResult> {
   }
   const shareId = created.id
   const me = useAuthStore.getState().userId
-  useShareStore.getState().setCode(shareId, created.code, me ?? undefined)
+  // a crew opens with its door open — vetting is a thing the keeper turns ON
+  useShareStore.getState().setCode(shareId, created.code, me ?? undefined, 'open')
 
   const ws = useWorkshopStore.getState()
   ws.updateVenture(ventureId, { shareId })
@@ -160,7 +215,11 @@ export async function leaveCrew(ventureId: string): Promise<CrewResult> {
   return { ok: true }
 }
 
-/** Remove a member (keeper only). Their device notices and keeps a copy. */
+/**
+ * Remove a member (keeper only). Their device notices and keeps a copy. The
+ * same wire turns an applicant away — the roster row simply goes, and there is
+ * no third state to record.
+ */
 export async function removeMember(shareId: string, userId: string): Promise<CrewResult> {
   const refused = gate()
   if (refused) return { ok: false, reason: refused }
@@ -176,4 +235,69 @@ export async function removeMember(shareId: string, userId: string): Promise<Cre
     ws.setMembers(shareId, roster.filter((m) => m.userId !== userId))
   }
   return { ok: true }
+}
+
+/* ------------------------------------------------------- the keeper's acts */
+
+/**
+ * The door policy. `open` — the code admits, which is how every crew starts.
+ * `vetted` — the code applies and the keeper admits. Changing it never
+ * disturbs anyone already on the roster: shutting the door does not turn out
+ * the people inside, and opening it lets in whoever was already waiting (the
+ * registry does that on their next knock).
+ */
+export async function setCrewPrivacy(
+  shareId: string,
+  visibility: CrewVisibility,
+): Promise<CrewResult> {
+  const refused = gate()
+  if (refused) return { ok: false, reason: refused }
+  try {
+    await setShareVisibility(shareId, visibility)
+  } catch {
+    return { ok: false, reason: voice.workshop.crew.toast.offline }
+  }
+  useShareStore.getState().setVisibility(shareId, visibility)
+  return { ok: true }
+}
+
+/** Promote or demote (keeper only). The keeper's own row is refused upstream. */
+export async function setCrewRole(
+  shareId: string,
+  userId: string,
+  role: CrewRole,
+): Promise<CrewResult> {
+  const refused = gate()
+  if (refused) return { ok: false, reason: refused }
+  try {
+    await setMemberRole(shareId, userId, role)
+  } catch {
+    return { ok: false, reason: voice.workshop.crew.toast.offline }
+  }
+  patchMember(shareId, userId, { role })
+  return { ok: true }
+}
+
+/** Admit an applicant (keeper only) — they are on the crew from this moment. */
+export async function admitApplicant(shareId: string, userId: string): Promise<CrewResult> {
+  const refused = gate()
+  if (refused) return { ok: false, reason: refused }
+  try {
+    await admitMember(shareId, userId)
+  } catch {
+    return { ok: false, reason: voice.workshop.crew.toast.offline }
+  }
+  patchMember(shareId, userId, { status: 'active' })
+  return { ok: true }
+}
+
+/** reflect a roster edit now; the next pull is what confirms it */
+function patchMember(shareId: string, userId: string, patch: Partial<ShareMember>): void {
+  const ws = useWorkshopStore.getState()
+  const roster = ws.members[shareId]
+  if (!roster) return
+  ws.setMembers(
+    shareId,
+    roster.map((m) => (m.userId === userId ? { ...m, ...patch } : m)),
+  )
 }

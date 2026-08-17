@@ -1216,6 +1216,9 @@ export interface VoicePack {
       deleteTitle: string
       deleteBody: (name: string) => string
       deleteYes: string
+      /** the same act as a BUTTON: the title is a question, and a button that
+       *  asks a question reads as a caption rather than a control */
+      deleteButton: string
       contributionTitle: string
       /** contribution figures — hours are shown to one decimal upstream */
       weekH: (h: number) => string
@@ -1228,18 +1231,69 @@ export interface VoicePack {
       codePlaceholder: string
       joinCta: string
       joining: string
+      /**
+       * THE CREW ROOM — the screen where crews are opened, ranked and shut.
+       * The board's CREW button and the shelf's door both land here, so these
+       * strings carry the whole feature rather than a sheet's worth of it.
+       */
+      screenTitle: string
+      screenBlurb: string
+      back: string
+      /** the shelf's door into the room */
+      manageButton: string
+      /** nothing is shared yet — said once, above the ventures */
+      screenEmpty: string
+      /** headings inside one crew's card */
+      privacyTitle: string
+      /** the two door policies, and what each one MEANS in one line */
+      privacyOpen: string
+      privacyVetted: string
+      privacyOpenNote: string
+      privacyVettedNote: string
+      /** the same fact for someone who cannot change it */
+      privacyStanding: (v: { vetted: boolean }) => string
+      waitingTitle: string
+      /** one applicant, waiting on the keeper */
+      applicantLine: (label: string) => string
+      admit: string
+      turnAway: string
+      turnAwayTitle: string
+      turnAwayBody: (label: string) => string
+      turnAwayYes: string
+      /** the ranks, and what each one may do */
+      rankTitle: string
+      rank: { keeper: string; hand: string; guest: string }
+      rankNote: { keeper: string; hand: string; guest: string }
+      /** what rank the reader holds here, in a sentence */
+      myRank: (v: { rank: string }) => string
+      /** shown on a guest's board instead of the tools */
+      guestBoard: string
+      /** applications this device has lodged and is waiting on */
+      appliedTitle: string
+      appliedWaiting: (code: string) => string
+      appliedDeclined: (code: string) => string
+      dismiss: string
       toast: {
         shared: string
         joined: string
+        /** a vetted crew took the code as an application, not an entry */
+        applied: string
         joinUnknown: string
         left: string
         unshared: string
         kicked: string
+        admitted: string
+        turnedAway: string
+        ranked: (v: { label: string; rank: string }) => string
+        doorOpen: string
+        doorVetted: string
         needsSignIn: string
         offline: string
         /** a ?join link arrived while signed out — the code waits */
         linkHeld: string
         demoOff: string
+        /** a guest tried to change something the registry would refuse */
+        guestRefused: string
       }
       /** transport trouble, in the user's words */
       errorLine: (msg: string) => string
@@ -1685,6 +1739,55 @@ export interface VoicePack {
     }
     /** the gear-menu row that runs the whole thing again */
     settingsRerun: string
+    /**
+     * The last stop, on a phone that is still a browser tab: the house can be
+     * an icon. It runs in the walk's own idiom — one card, one line, one way
+     * out — because it IS the walk, one stop longer.
+     */
+    install: {
+      line: string
+      cta: string
+      skip: string
+    }
+  }
+  /**
+   * THE HOME SCREEN, and the small screen.
+   *
+   * Two things the app never said out loud: that it is fuller with a desk in
+   * front of you, and that it can be installed at all. Neither is an apology —
+   * the first states a fact and stops, the second offers a capability. Nothing
+   * here nags: the notice is shown once per device and never returns.
+   */
+  install: {
+    /** the once-per-device word about the small screen */
+    desk: {
+      title: string
+      line: string
+      /** dismiss, and never again on this device */
+      dismiss: string
+      /** …or go straight to the tutorial from the same notice */
+      guide: string
+    }
+    title: string
+    blurb: string
+    /** already an icon — the guide says so and offers nothing */
+    already: string
+    /** Chromium hands the whole thing over in one tap; iOS never does */
+    oneTap: string
+    oneTapNote: string
+    accepted: string
+    /** the browser declined to show its own prompt — the steps still stand */
+    refused: string
+    /** three beats per platform, in the order the hand does them */
+    steps: {
+      ios: [string, string, string]
+      android: [string, string, string]
+      desktop: [string, string, string]
+    }
+    close: string
+    /** the settings row that reopens the tutorial */
+    settingsItem: string
+    settingsBlurb: string
   }
   /**
    * THE `?` MARKS — one line per panel saying what the thing is FOR.
