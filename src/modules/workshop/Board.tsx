@@ -1634,8 +1634,9 @@ function CardFace({
  * under it is a single snap page, so the organisation the headings give the
  * board is exactly what a thumb swipes through. No pan here — paging is the
  * phone's navigation, and dragging a 390 px wall around would only fight it.
- * Zoom stays, because a dense column on a phone is the one thing worth
- * scaling: the trio, or a pinch, both feeding the same `z`.
+ * Scaling stays as a PINCH and nothing else: a dense column is worth shrinking,
+ * and the hand already knows how to ask for that. The zoom trio the desktop
+ * carries is gone from here — see the note where it used to sit.
  */
 function MobileBoard({
   ventureId,
@@ -1738,16 +1739,12 @@ function MobileBoard({
           </button>
         </div>
       )}
-      {/* bottom-right, not top: it is where a thumb already is, and the top of
-          every page belongs to that column's heading */}
-      <div className="absolute bottom-2.5 right-2.5 z-10">
-        <ZoomControls
-          zoom={z}
-          onIn={() => zoomBy(1.15)}
-          onOut={() => zoomBy(1 / 1.15)}
-          onReset={() => setZ(1)}
-        />
-      </div>
+      {/* No zoom trio here. It floated over the bottom of every page — which
+          on a short column is exactly where the "hang one here" target sits —
+          to duplicate something the phone already does two ways: the column
+          scrolls, and a pinch scales it. Three buttons for a gesture the hand
+          already knows is three buttons in the way. The desktop keeps its
+          trio, because there a wheel is the only alternative. */}
       <div
         ref={scroller}
         onScroll={(e) => {
@@ -1873,7 +1870,7 @@ function MobileBoard({
           </div>
         ))}
       </div>
-      {/* the dots move left to make room for the zoom trio on the right */}
+      {/* the pager dots now have the foot of the page to themselves */}
       <div className="pointer-events-none absolute bottom-5 left-5 flex items-center gap-2">
         {groups.map((g, i) => (
           <span
