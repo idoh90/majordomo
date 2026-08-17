@@ -93,9 +93,12 @@ export async function joinShare(code: string, label: string): Promise<JoinResult
   const sb = await client
   const { data, error } = await sb.rpc('join_share', { p_code: code, p_label: label })
   if (error) throw new Error(error.message)
-  const row = (data as Array<{ share_id: string; member_status: string }> | null)?.[0]
+  // `joined_share`, not `share_id` — see the note above join_share in
+  // 0006_crew_roles.sql: an output column named after a real column makes the
+  // function's own ON CONFLICT clause ambiguous and nobody can join at all
+  const row = (data as Array<{ joined_share: string; member_status: string }> | null)?.[0]
   if (!row) throw new Error('join_share returned nothing')
-  return { shareId: row.share_id, status: asStanding(row.member_status) }
+  return { shareId: row.joined_share, status: asStanding(row.member_status) }
 }
 
 /**

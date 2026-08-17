@@ -30,6 +30,12 @@ alter table records enable row level security;
 -- The anon key ships in the browser bundle by design; RLS is the only guard
 -- that matters. auth.uid() comes from the verified JWT, so a client cannot
 -- reach another user's rows by asking nicely.
+--
+-- Dropped first so this file can be re-pasted, which is the only way a
+-- migration is ever applied here. Without it a second paste aborts on this
+-- line — after the table, before the trigger and the push RPC — which is the
+-- half-applied state the whole ritual exists to avoid.
+drop policy if exists "own rows" on records;
 create policy "own rows" on records
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
@@ -58,7 +64,15 @@ create trigger stamp_record_biu before insert or update on records
 -- Realtime is only ever a HINT: the client reacts by scheduling a pull, never
 -- by applying the payload. A socket that was disconnected can't tell you what
 -- you missed; the cursor can.
-alter publication supabase_realtime add table records;
+--
+-- `alter publication ... add table` raises on a table already published, so it
+-- is adopted inside a block that swallows exactly that — the same shape 0004
+-- uses, and for the same reason: a re-paste must be a no-op, not an abort.
+do $$
+begin
+  alter publication supabase_realtime add table records;
+exception when duplicate_object then null;
+end $$;
 
 -- The hot push.
 --

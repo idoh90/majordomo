@@ -9,6 +9,7 @@
     "lint": "eslint src",
     "preview": "vite preview",
     "check:manor": "node scripts/manor-harness.mjs",
+    "check:registry": "node scripts/registry-harness.mjs",
     "bell:probe": "node scripts/bell-probe.mjs"
   },
   "dependencies": {

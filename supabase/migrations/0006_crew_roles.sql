@@ -218,8 +218,16 @@ drop function if exists join_share(text, text);
 -- the row as it FINALLY stands, so someone already on the crew who re-types the
 -- code is told they are on it, and an applicant who types it twice is told they
 -- are still waiting. Nobody is ever demoted by knocking again.
+--
+-- THE OUTPUT COLUMN IS `joined_share`, NOT `share_id`, AND MUST STAY THAT WAY.
+-- Every name in a `returns table (...)` list becomes a plpgsql variable for the
+-- whole body, and `on conflict (share_id, user_id)` takes BARE column names —
+-- there is no `share_members.share_id` form to disambiguate it with. Name the
+-- output `share_id` and every call raises `column reference "share_id" is
+-- ambiguous` at run time, which is to say: nobody can ever join. Renaming it
+-- back to the prettier word breaks the one door this file exists to build.
 create or replace function join_share(p_code text, p_label text)
-returns table (share_id uuid, member_status text)
+returns table (joined_share uuid, member_status text)
 language plpgsql security definer set search_path = public as $$
 declare
   v_id uuid;

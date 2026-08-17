@@ -72,9 +72,20 @@ technical version.
   its blocks, an unfittable template isn't offered, QUICK ADD books on the slot
   its panel showed. Needs `npm run dev` up; exits
   non-zero on failure. `CHROME_PATH` / `MANOR_BASE` override the browser and origin.
+- `npm run check:registry` — the **registry harness** (`scripts/registry-harness.mjs`):
+  stands up a throwaway Postgres, applies every `supabase/migrations/*.sql` in order
+  against a Supabase-shaped fixture (`supabase/tests/prelude.sql`), re-pastes the
+  newest to prove a retry is a no-op, then runs `supabase/verify.sql` (did the schema
+  land IN FULL — the partial-paste check) and `supabase/tests/crew.sql` (two accounts,
+  every rank, every refusal). Needs Postgres BINARIES only — `PG_BIN=…` if they are not
+  on PATH; nothing is left running and it holds no credentials for the hosted project.
+  **Run it after touching any migration.** Its first run found `join_share` raising
+  `column reference "share_id" is ambiguous` on every call — nobody could join a crew
+  at all — in a file that read perfectly and had never been executed.
 - No test runner **for the app at large**; verification is done in the browser. The
-  Manor is the one exception — its contract is numeric, and "looks plausible" is
-  exactly how a cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness
+  Manor and the registry are the two exceptions, and for the same reason: their
+  contracts are numeric and enforceable, and "looks plausible" is exactly how a
+  cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness
   after touching `WeekGrid.tsx` / `ManorScreen.tsx`. Its B1/B2 checks read the
   **brief's own exam clause**, and the brief types itself out on a first visit —
   they press SKIP before every read, so a fresh context does not measure a
@@ -477,7 +488,24 @@ still applies; the old keys are left in place as insurance and never read again.
 A crew is a second namespace beside `records`, never a loosening of it — the
 reasoning is at the top of `supabase/migrations/0004_shares.sql` and still holds.
 `0006_crew_roles.sql` gave that namespace a door policy, a waiting room and ranks.
-Both files are pasted into the SQL editor by hand, IN FULL, like every migration here.
+Both files are pasted into the SQL editor by hand, IN FULL, like every migration
+here — the whole ritual, and the traps in it, is written down in
+**`supabase/APPLY.md`**, which is the thing to read before touching the registry.
+
+- **Migrations go FORWARD only.** Re-pasting a file is the right retry when one
+  might have landed partially, and 0006 restates the crew's entire security model,
+  so "paste 0006 again" is always safe. Re-pasting an EARLIER file after a later one
+  is not: 0004 recreates `is_share_member` without its active check and restores the
+  blanket `for all` write policy 0006 dropped, so it silently turns every guest back
+  into a writer before aborting on `join_share`'s changed return type. Rebuild in
+  order, in one sitting, or re-apply a file **and everything after it**.
+- **`join_share` returns `joined_share`, not `share_id`, and must stay that way.**
+  Every name in a `returns table (...)` list becomes a plpgsql variable for the whole
+  body, and `on conflict (share_id, user_id)` takes bare column names with no
+  qualified form available — so naming the output `share_id` makes every call raise
+  `column reference "share_id" is ambiguous`, which is to say nobody can join at all.
+  `create_share` has the same latent hazard with `code` and gets away with it only
+  because it has no `ON CONFLICT`.
 
 - **THE CREW ROOM (`modules/workshop/CrewScreen.tsx`) is the only sharing surface.**
   It replaced `ShareSheet.tsx`, which is deleted: a sheet could not hold a roster,
