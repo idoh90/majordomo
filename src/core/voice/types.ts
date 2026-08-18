@@ -1268,6 +1268,38 @@ export interface VoicePack {
       myRank: (v: { rank: string }) => string
       /** shown on a guest's board instead of the tools */
       guestBoard: string
+      /**
+       * THE NAME. Chosen, never inferred — it used to be the front half of the
+       * user's email address, handed to every stranger on the crew.
+       */
+      nameTitle: string
+      nameBlurb: string
+      namePlaceholder: string
+      nameSave: string
+      nameChange: string
+      /** what the reader currently appears as, on the crew screen */
+      nameIs: (name: string) => string
+      /**
+       * THE INVITATION — a link OFFERS a crew, it does not enrol you in one.
+       * Every line here has to survive being read by someone who has no idea
+       * what this app is: they tapped a link a friend sent.
+       */
+      invite: {
+        title: string
+        /** what a crew is, and what accepting actually does */
+        blurb: string
+        /** the plain warning: the name below is what the crew will see */
+        seen: string
+        accept: string
+        decline: string
+        /** accepted, and waiting on the registry */
+        working: string
+        /** it went through: joined outright, or lodged with a vetted keeper */
+        joined: string
+        applied: string
+        failed: string
+        close: string
+      }
       /** applications this device has lodged and is waiting on */
       appliedTitle: string
       appliedWaiting: (code: string) => string
@@ -1294,6 +1326,10 @@ export interface VoicePack {
         demoOff: string
         /** a guest tried to change something the registry would refuse */
         guestRefused: string
+        /** no roster name chosen yet — nothing that writes one may proceed */
+        needsName: string
+        /** the name changed, and every crew was told */
+        renamed: string
       }
       /** transport trouble, in the user's words */
       errorLine: (msg: string) => string

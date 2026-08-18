@@ -90,11 +90,23 @@ interface ShellState {
    * lacks the key and the initializer's `false` stands.
    */
   deskNoticeSeen: boolean
+  /**
+   * The name this household appears under on a crew's roster. Empty until the
+   * user says, and the app ASKS rather than assuming — it used to be the front
+   * half of their email address, which is a thing they never offered and
+   * cannot take back once four strangers have read it.
+   *
+   * Device-local, like everything else here. A second device that has not been
+   * told will ask again rather than guess, and answering re-announces the name
+   * to every crew whose code this device holds.
+   */
+  crewName: string
   setSkin: (skin: SkinId) => void
   setWeekStart: (ws: WeekStart) => void
   setOnboarded: (onboarded: boolean) => void
   setPanelTips: (panelTips: boolean) => void
   setDeskNoticeSeen: (seen: boolean) => void
+  setCrewName: (name: string) => void
   setWingOrder: (ids: string[]) => void
   setWingOff: (id: string, off: boolean) => void
 }
@@ -109,6 +121,7 @@ export const useShellStore = create<ShellState>()(
       wingOrder: [],
       wingsOff: [],
       deskNoticeSeen: false,
+      crewName: '',
       setSkin: (skin) => set({ skin: normalizeSkin(skin) }),
       setWeekStart: (ws) => {
         setWeekStartDefault(ws) // keep core/dates in sync before the re-render
@@ -117,6 +130,7 @@ export const useShellStore = create<ShellState>()(
       setOnboarded: (onboarded) => set({ onboarded }),
       setPanelTips: (panelTips) => set({ panelTips }),
       setDeskNoticeSeen: (deskNoticeSeen) => set({ deskNoticeSeen }),
+      setCrewName: (crewName) => set({ crewName: crewName.trim().slice(0, 40) }),
       setWingOrder: (next) => set({ wingOrder: [...next] }),
       setWingOff: (id, off) =>
         set((s) => ({
@@ -135,6 +149,7 @@ export const useShellStore = create<ShellState>()(
         wingOrder: s.wingOrder,
         wingsOff: s.wingsOff,
         deskNoticeSeen: s.deskNoticeSeen,
+        crewName: s.crewName,
       }),
       // v1 blobs may hold a founder-only skin (e.g. 'gotham'); v1/v2 blobs
       // carry a now-dead `ambient` key that this simply doesn't return
@@ -149,6 +164,7 @@ export const useShellStore = create<ShellState>()(
             | 'wingOrder'
             | 'wingsOff'
             | 'deskNoticeSeen'
+            | 'crewName'
           >
         >
         return {
@@ -167,6 +183,9 @@ export const useShellStore = create<ShellState>()(
           // a blob this old belongs to someone already settled in; the note
           // about small screens is for arrivals, so count it as said
           deskNoticeSeen: version < 4 ? true : p.deskNoticeSeen === true,
+          // never inherited from anywhere: a blank name is the app admitting it
+          // does not know what to call you, which is the honest state
+          crewName: typeof p.crewName === 'string' ? p.crewName : '',
         }
       },
       // re-apply the persisted week-start into core/dates once rehydrated

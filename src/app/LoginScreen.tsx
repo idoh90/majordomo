@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuthStore } from '../core/auth/store'
 import { offReason } from '../core/sync/gate'
+import { useShareStore } from '../core/sync/shareStore'
 import { useSyncStore } from '../core/sync/store'
 import { ConfirmDialog } from '../core/ui/ConfirmDialog'
 import { voice } from '../core/voice'
@@ -31,6 +32,8 @@ export function LoginScreen() {
   const error = useAuthStore((s) => s.error)
   const signIn = useAuthStore((s) => s.signIn)
   const signOut = useAuthStore((s) => s.signOut)
+  /** an accepted invitation waiting on a session — the reason this door opened */
+  const held = useShareStore((s) => s.pendingJoin)
 
   if (!open) return null
 
@@ -48,6 +51,22 @@ export function LoginScreen() {
           {voice.sync.title}
         </h1>
         <p className="mt-2 text-sm text-ink-dim">{voice.sync.blurb}</p>
+
+        {/* Someone who accepted an invitation while signed out is here BECAUSE
+            of that, and a sign-in screen that does not say so reads as a wall.
+            It sits under the blurb rather than replacing it: the account is
+            still the account, this is just why it is being asked for now. */}
+        {held && status !== 'signedIn' && (
+          <p
+            className="mt-4 rounded-xl border px-4 py-3 text-sm text-ink"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--color-accent) 40%, transparent)',
+              background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
+            }}
+          >
+            {voice.workshop.crew.toast.linkHeld}
+          </p>
+        )}
 
         <div className="mt-8">
           {shut ? (

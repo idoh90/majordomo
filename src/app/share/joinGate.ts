@@ -1,24 +1,32 @@
-import { useAuthStore } from '../../core/auth/store'
 import { armed } from '../../core/sync/gate'
 import { useShareStore } from '../../core/sync/shareStore'
-import { useAuthUi } from '../authUi'
 
 /**
  * The ?join=CODE door — the first URL param the app honours in production.
  *
- * Called at module scope from main.tsx, beside initSync. The code is stashed
- * into the PERSISTED mailbox before anything else, because redeeming it may
- * require a Google sign-in and `signInWithOAuth` leaves for another origin
- * and comes back to a bare `window.location.origin` — the query does not
- * survive that trip, localStorage does. Then the param is stripped from the
- * address bar so a reload (or a copied URL) does not re-join.
+ * It OFFERS. It does not admit.
  *
- * Signed in already → the share service notices the mailbox on its next
- * cycle. Signed out → the login door opens; the service redeems after the
- * redirect lands. Registry off (demo'd origin, no storage, unconfigured) →
- * the code is dropped on the floor, deliberately: a disarmed device has
- * nowhere to take it, and holding it would promise something that cannot
- * happen.
+ * This used to drop the code straight into `pendingJoin`, which the share
+ * service redeems on its next cycle — so opening a link WAS joining. Whoever
+ * tapped it was on a crew's roster seconds later, having agreed to nothing and
+ * having been told nothing: not whose crew it was, not that a name of theirs
+ * would appear on it, not that the venture's board was about to land on their
+ * shelf. A link in a group chat could enrol a bystander who only wanted to look.
+ *
+ * So the code goes into `invite` instead, and `InviteDoor` shows it and waits.
+ * Accepting is what moves it to `pendingJoin`, and accepting is also where the
+ * name is chosen — see the door.
+ *
+ * Called at module scope from main.tsx, beside initSync. The mailbox is
+ * PERSISTED because accepting may require a Google sign-in, and
+ * `signInWithOAuth` leaves for another origin and comes back to a bare
+ * `window.location.origin` — the query does not survive that trip, localStorage
+ * does. The param is then stripped from the address bar so a reload (or a
+ * copied URL) does not re-offer it.
+ *
+ * Registry off (demo'd origin, no storage, unconfigured) → the code is dropped
+ * on the floor, deliberately: a disarmed device has nowhere to take it, and
+ * holding it would promise something that cannot happen.
  */
 export function initJoinGate(): void {
   const params = new URLSearchParams(window.location.search)
@@ -36,10 +44,13 @@ export function initJoinGate(): void {
 
   if (!armed()) return
 
-  useShareStore.getState().setPendingJoin(code.trim())
+  // An invite already accepted and still in flight wins: someone who said yes,
+  // signed in, and came back must not be asked the same question again by the
+  // very redirect that was carrying their answer.
+  if (useShareStore.getState().pendingJoin) return
 
-  // the door, never a wall: opened only because the user carried an invite
-  if (useAuthStore.getState().status !== 'signedIn') {
-    useAuthUi.getState().setOpen(true)
-  }
+  useShareStore.getState().setInvite(code.trim())
+  // NOTE: the login door is deliberately NOT opened here any more. Being asked
+  // to sign in before being told what for is the wall this house does not put
+  // up; the invitation asks first, and sign-in follows accepting.
 }

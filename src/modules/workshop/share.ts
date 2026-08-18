@@ -1,5 +1,6 @@
 import { useAuthStore } from '../../core/auth/store'
 import { useEventsStore } from '../../core/events/store'
+import { useShellStore } from '../../core/store/shell'
 import { offReason } from '../../core/sync/gate'
 import { noteDeleted } from '../../core/sync/intent'
 import { shareRecordKey } from '../../core/sync/shareIntent'
@@ -7,6 +8,7 @@ import { useShareStore } from '../../core/sync/shareStore'
 import {
   admitMember,
   createShare,
+  joinShare,
   deleteShare,
   setMemberRole,
   setShareVisibility,
@@ -41,9 +43,25 @@ function gate(): string | null {
   return null
 }
 
+/**
+ * The name this household appears under on a roster — CHOSEN, never inferred.
+ *
+ * It used to be `email.split('@')[0]`, which handed the front half of a
+ * private address to every stranger on a crew the moment someone joined. An
+ * email local part is very often a real full name, and it is the half people
+ * guess a whole address from. Nobody offered it and nobody could take it back.
+ *
+ * Empty means the app has not been told yet, and every act that would put a
+ * name on a roster refuses until it has. That is the point: a blank is the
+ * honest state, and a default would only be a guess wearing a better hat.
+ */
 function myLabel(): string {
-  const email = useAuthStore.getState().email
-  return email ? email.split('@')[0] : 'someone'
+  return useShellStore.getState().crewName.trim()
+}
+
+/** the acts that write a name to a roster all pass through here first */
+function named(): string | null {
+  return myLabel() === '' ? voice.workshop.crew.toast.needsName : null
 }
 
 /** whether the crew doors should exist at all on this device */
@@ -108,7 +126,7 @@ export function canWorkCrew(shareId: string): boolean {
  * never happen.
  */
 export async function shareVenture(ventureId: string): Promise<CrewResult> {
-  const refused = gate()
+  const refused = gate() ?? named()
   if (refused) return { ok: false, reason: refused }
 
   let created: { id: string; code: string }
@@ -171,11 +189,37 @@ export async function shareVenture(ventureId: string): Promise<CrewResult> {
  * had to survive an OAuth redirect arrives, so both doors share one path.
  */
 export function joinCrew(code: string): CrewResult {
-  const refused = gate()
+  const refused = gate() ?? named()
   if (refused) return { ok: false, reason: refused }
   useShareStore.getState().setError(null)
   useShareStore.getState().setPendingJoin(code)
   return { ok: true }
+}
+
+/**
+ * Tell every crew this device holds a code for what to call you now.
+ *
+ * `join_share` is the wire for it, which reads oddly and is exactly right: the
+ * function's ON CONFLICT branch updates the label and leaves rank and standing
+ * untouched (0006 proves it — "the keeper re-typing their own code stays
+ * active"). So knocking again with a new name is a rename, and no new SQL, no
+ * new grant and no new policy has to exist for it.
+ *
+ * Best-effort and silent by design. It is called after the name changes, and a
+ * crew that has since been disbanded, or a device that is offline, simply does
+ * not get the message — the next deliberate join carries the new name anyway.
+ */
+export async function announceName(): Promise<void> {
+  const label = myLabel()
+  if (label === '' || gate() !== null) return
+  const { codes } = useShareStore.getState()
+  const mine = new Set(
+    useWorkshopStore.getState().ventures.map((v) => v.shareId).filter(Boolean) as string[],
+  )
+  for (const [shareId, code] of Object.entries(codes)) {
+    if (!mine.has(shareId)) continue
+    await joinShare(code, label).catch(() => {})
+  }
 }
 
 /** Disband (keeper only): the share row goes, everyone keeps a private copy. */

@@ -1,4 +1,5 @@
 import { useAuthStore } from '../../core/auth/store'
+import { useShellStore } from '../../core/store/shell'
 import { applyQuietly as personalApplyQuietly, createEngine } from '../../core/sync/engine'
 import { armed } from '../../core/sync/gate'
 import { shareRecordKey, shareWing } from '../../core/sync/shareIntent'
@@ -206,10 +207,16 @@ async function pullOne(shareId: string): Promise<void> {
 let running = false
 let again = false
 
-/** the display name this account joins rosters under */
+/**
+ * The display name this account joins rosters under — the one the USER chose.
+ *
+ * It used to be `email.split('@')[0]`. That put the front half of a private
+ * address in front of every stranger on the crew, silently, at the moment of
+ * joining. Empty means nothing has been chosen, and step 2 below then declines
+ * to redeem rather than inventing something.
+ */
 function myLabel(): string {
-  const email = useAuthStore.getState().email
-  return email ? email.split('@')[0] : 'someone'
+  return useShellStore.getState().crewName.trim()
 }
 
 /**
@@ -278,7 +285,11 @@ async function cycle(): Promise<void> {
        vetted crew this LODGES rather than joins, and there is nothing to pull
        until the keeper answers. */
     const code = useShareStore.getState().pendingJoin
-    if (code) {
+    // A code with no name behind it waits rather than joining under a guess.
+    // Nothing can reach this state through the UI — both doors ask first — so
+    // it is a backstop, not a path: a blob hand-edited, or a code accepted on
+    // one device and rehydrated on another that has not been told a name.
+    if (code && myLabel() !== '') {
       try {
         const joined = await joinShare(code, myLabel())
         useShareStore.getState().setPendingJoin(null)
@@ -410,9 +421,14 @@ export function startShareService(): void {
       // survive. And even a real sign-out keeps the stashed code: an invite
       // redeemed under the next account to sign in is the intended flow.
       if (prev.status === 'signedIn') {
-        const keep = useShareStore.getState().pendingJoin
+        const st = useShareStore.getState()
+        const keptJoin = st.pendingJoin
+        const keptInvite = st.invite
         useShareStore.getState().reset()
-        if (keep) useShareStore.getState().setPendingJoin(keep)
+        if (keptJoin) useShareStore.getState().setPendingJoin(keptJoin)
+        // an invitation not yet answered survives too: signing out is not the
+        // same as declining, and the offer is the user's to keep
+        if (keptInvite) useShareStore.getState().setInvite(keptInvite)
       }
     }
   })
@@ -447,6 +463,7 @@ export function shareDebug() {
     cursors: st.cursors,
     codes: st.codes,
     visibilities: st.visibilities,
+    invite: st.invite,
     pendingJoin: st.pendingJoin,
     applications: st.applications,
     pendingPull: st.pendingPull,

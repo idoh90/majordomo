@@ -1506,6 +1506,27 @@ export const majordomoPack: VoicePack = {
       },
       myRank: ({ rank }) => `You are a ${rank.toLowerCase()} on this crew.`,
       guestBoard: 'A guest on this crew, sir — the board is yours to read.',
+      nameTitle: 'YOU APPEAR AS',
+      nameBlurb:
+        'The name every crew you join will see beside your hours. Choose it, sir — the house will not invent one for you, and it is not going to use your email address.',
+      namePlaceholder: 'A name',
+      nameSave: 'SET',
+      nameChange: 'CHANGE',
+      nameIs: (name) => `Crews see you as ${name}.`,
+      invite: {
+        title: 'AN INVITATION',
+        blurb:
+          'Someone has opened a venture to you, sir. Accept and its board, its milestones and its hours arrive on your shelf — and yours, on that venture, join the crew’s books.',
+        seen: 'Everyone on the crew will see this name beside your work:',
+        accept: 'ACCEPT',
+        decline: 'NOT NOW',
+        working: 'Presenting you at the door, sir…',
+        joined: 'You are on the crew, sir. The venture is on your shelf.',
+        applied:
+          'This crew asks first, sir. Your application is with the keeper — you will be let in or you will not.',
+        failed: 'No crew answers to that invitation, sir. It may have been withdrawn.',
+        close: 'CLOSE',
+      },
       appliedTitle: 'YOUR APPLICATIONS',
       appliedWaiting: (code) => `${code} — with the keeper.`,
       appliedDeclined: (code) => `${code} — not taken up.`,
@@ -1529,6 +1550,9 @@ export const majordomoPack: VoicePack = {
         linkHeld: 'A crew invitation is waiting, sir. Sign in and it will be honoured.',
         demoOff: 'Crews are off while demo records are loaded, sir.',
         guestRefused: 'A guest may look, sir, and no more.',
+        needsName:
+          'Choose the name crews should see first, sir. The house will not put your email address on a stranger’s screen.',
+        renamed: 'Noted. Every crew has been told.',
       },
       errorLine: (msg) => `The crew registry demurred: ${msg}`,
     },

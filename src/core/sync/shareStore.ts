@@ -40,7 +40,21 @@ interface ShareBookkeeping {
   dirty: Record<RecordKey, number>
   /** key → when this device was TOLD to delete it (never inferred) */
   tombstones: Record<RecordKey, number>
-  /** a join code waiting for sign-in + network — survives the OAuth redirect */
+  /**
+   * A code that arrived on a `?join=` link and has NOT been accepted yet.
+   *
+   * The distinction from `pendingJoin` is the whole point: this one is an
+   * OFFER, and the app shows it and waits. Following a link used to put the
+   * code straight into `pendingJoin`, which the service redeems on its next
+   * cycle — so opening a link was joining, before the person had agreed to
+   * anything or been told what agreeing meant.
+   *
+   * Persisted for the same reason `pendingJoin` is: accepting may need a
+   * Google sign-in, and that leaves for another origin and returns to a fresh
+   * page load which memory does not survive.
+   */
+  invite: string | null
+  /** a join code ACCEPTED and waiting for sign-in + network — survives the redirect */
   pendingJoin: string | null
   /**
    * Crews this device has APPLIED to and is waiting on. A vetted crew tells
@@ -72,6 +86,8 @@ interface ShareBookkeeping {
   setApplication: (shareId: string, app: CrewApplication | null) => void
   /** a share this device no longer belongs to: its queue and cursor go */
   dropShare: (shareId: string) => void
+  /** an invitation offered, accepted (moved to pendingJoin) or waved off */
+  setInvite: (code: string | null) => void
   setPendingJoin: (code: string | null) => void
   requestPull: (shareId: string) => void
   clearPull: (shareId: string) => void
@@ -109,6 +125,7 @@ export const useShareStore = create<ShareBookkeeping>()(
       visibilities: {},
       dirty: {},
       tombstones: {},
+      invite: null,
       pendingJoin: null,
       applications: {},
       pendingPull: [],
@@ -189,6 +206,7 @@ export const useShareStore = create<ShareBookkeeping>()(
           }
         }),
 
+      setInvite: (invite) => set({ invite }),
       setPendingJoin: (pendingJoin) => set({ pendingJoin }),
       requestPull: (shareId) =>
         set((s) =>
@@ -207,6 +225,7 @@ export const useShareStore = create<ShareBookkeeping>()(
           visibilities: {},
           dirty: {},
           tombstones: {},
+          invite: null,
           pendingJoin: null,
           applications: {},
           pendingPull: [],
@@ -225,6 +244,7 @@ export const useShareStore = create<ShareBookkeeping>()(
         visibilities: s.visibilities,
         dirty: s.dirty,
         tombstones: s.tombstones,
+        invite: s.invite,
         pendingJoin: s.pendingJoin,
         applications: s.applications,
         pendingPull: s.pendingPull,

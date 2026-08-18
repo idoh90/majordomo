@@ -19,6 +19,7 @@ import { useAuthUi } from './authUi'
 import { offReason } from '../core/sync/gate'
 import { TabBar } from './TabBar'
 import { DeskNotice } from './install/DeskNotice'
+import { InviteDoor } from './share/InviteDoor'
 import { Onboarding } from './onboarding/Onboarding'
 
 export default function App() {
@@ -117,6 +118,9 @@ export default function App() {
 
       {/* the first-time setup, the same way: null until a stage is running */}
       <Onboarding />
+
+      {/* a ?join= link OFFERS a crew — nothing is joined until this is answered */}
+      <InviteDoor />
     </>
   )
 }

@@ -12,6 +12,7 @@ import { editCode, formatCode, CODE_LEN } from './joinCode'
 import { memberContribution } from './lib'
 import {
   admitApplicant,
+  announceName,
   crewRole,
   disbandCrew,
   joinCrew,
@@ -85,12 +86,100 @@ export function CrewScreen({
         )}
       </section>
 
+      <NamePanel butler={butler} />
       <JoinPanel butler={butler} />
 
       {ordered.map((v) => (
         <VenturePanel key={v.id} venture={v} butler={butler} onLeft={onBack} />
       ))}
     </div>
+  )
+}
+
+/* ----------------------------------------------------------------- the name */
+
+/**
+ * What the crews call you.
+ *
+ * It used to be the front half of your email address, taken without asking and
+ * shown to everyone on every crew you touched. Now it is a question, and it
+ * sits at the top of this room because it governs everything under it: the two
+ * acts below both refuse until it has an answer.
+ *
+ * Changing it re-announces to every crew whose code this device holds, so the
+ * old name does not linger on a roster somebody is still reading.
+ */
+function NamePanel({ butler }: { butler: (msg: string) => void }) {
+  const c = voice.workshop.crew
+  const crewName = useShellStore((s) => s.crewName)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(crewName)
+
+  const open = editing || crewName === ''
+
+  const save = () => {
+    const chosen = draft.trim()
+    if (!chosen) return
+    useShellStore.getState().setCrewName(chosen)
+    setEditing(false)
+    butler(c.toast.renamed)
+    void announceName()
+  }
+
+  return (
+    <section
+      className="panel px-5 py-5 sm:px-6"
+      style={
+        crewName === ''
+          ? { borderColor: 'color-mix(in srgb, var(--color-accent) 40%, transparent)' }
+          : undefined
+      }
+    >
+      <SectionLabel>{c.nameTitle}</SectionLabel>
+      {open ? (
+        <>
+          <p className="mt-2 max-w-[62ch] text-sm text-ink-dim">{c.nameBlurb}</p>
+          <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
+            <input
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') save()
+              }}
+              placeholder={c.namePlaceholder}
+              maxLength={40}
+              autoCorrect="off"
+              spellCheck={false}
+              aria-label={c.nameTitle}
+              className="w-full rounded-xl border border-line bg-panel-2 px-4 py-3 text-[15px] outline-none placeholder:text-ink-faint focus:border-accent sm:flex-1"
+            />
+            <button
+              type="button"
+              disabled={!draft.trim()}
+              onClick={save}
+              className="btn-cta px-8 py-3 text-sm disabled:opacity-40 sm:w-auto"
+            >
+              {c.nameSave}
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-ink-dim">{c.nameIs(crewName)}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(crewName)
+              setEditing(true)
+            }}
+            className="ml-auto font-display text-[9.5px] font-semibold tracking-[0.14em] text-ink-faint transition-colors hover:text-ink"
+          >
+            {c.nameChange}
+          </button>
+        </div>
+      )}
+    </section>
   )
 }
 

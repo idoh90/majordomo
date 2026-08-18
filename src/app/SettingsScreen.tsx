@@ -21,6 +21,7 @@ import { useWorkoutStore } from '../modules/training/store'
 import type { Workout } from '../modules/training/types'
 import { useAuthUi } from './authUi'
 import { nudgeWing, useWings } from './wings'
+import { announceName } from '../modules/workshop/share'
 import { InstallGuide } from './install/InstallGuide'
 import { useInstall } from './install/install'
 import { entryStage, useOnboarding } from './onboarding/store'
@@ -52,6 +53,8 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
   const [confirmClear, setConfirmClear] = useState(false)
   const [copied, setCopied] = useState(false)
   const [installOpen, setInstallOpen] = useState(false)
+  const [crewNameOpen, setCrewNameOpen] = useState(false)
+  const crewName = useShellStore((s) => s.crewName)
 
   const authStatus = useAuthStore((s) => s.status)
   const registryShut = offReason()
@@ -62,14 +65,15 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
   // otherwise one key would dismiss the sheet AND the page under it
   useEffect(() => {
     if (!open) return
-    const busy = profileOpen || importOpen || estateOpen || confirmClear || installOpen
+    const busy =
+      profileOpen || importOpen || estateOpen || confirmClear || installOpen || crewNameOpen
     if (busy) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose, profileOpen, importOpen, estateOpen, confirmClear, installOpen])
+  }, [open, onClose, profileOpen, importOpen, estateOpen, confirmClear, installOpen, crewNameOpen])
 
   if (!open) return null
 
@@ -173,6 +177,17 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
                     useAuthUi.getState().setOpen(true)
                   }}
                 />
+                <Divider />
+                {/* what strangers on a crew see. It is here and not only in the
+                    Workshop because it is a fact about the PERSON, and someone
+                    who wants to change it will look for it in settings. */}
+                <Row
+                  label={voice.workshop.crew.nameTitle}
+                  blurb={
+                    crewName ? voice.workshop.crew.nameIs(crewName) : voice.workshop.crew.nameBlurb
+                  }
+                  onClick={() => setCrewNameOpen(true)}
+                />
               </Section>
             )}
 
@@ -224,6 +239,7 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
       <ImportSheet open={importOpen} onClose={() => setImportOpen(false)} onImport={replaceAll} />
       <EstateImportSheet open={estateOpen} onClose={() => setEstateOpen(false)} />
       <InstallGuide open={installOpen} onClose={() => setInstallOpen(false)} />
+      <CrewNameSheet open={crewNameOpen} onClose={() => setCrewNameOpen(false)} />
 
       <ConfirmDialog
         open={confirmClear}
@@ -242,6 +258,62 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
         }}
       />
     </>
+  )
+}
+
+/**
+ * THE NAME CREWS SEE.
+ *
+ * Small sheet, one field, and the only reason it is worth a sheet at all: the
+ * app used to answer this question by itself, with the front half of the user's
+ * email address, and hand the answer to every stranger on the crew. Saving
+ * re-announces to every crew this device holds a code for, so a name changed
+ * here does not leave the old one sitting on somebody else's roster.
+ */
+function CrewNameSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const c = voice.workshop.crew
+  const crewName = useShellStore((s) => s.crewName)
+  const [draft, setDraft] = useState(crewName)
+
+  useEffect(() => {
+    if (open) setDraft(useShellStore.getState().crewName)
+  }, [open])
+
+  const save = () => {
+    const chosen = draft.trim()
+    if (!chosen) return
+    useShellStore.getState().setCrewName(chosen)
+    void announceName()
+    onClose()
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <h2 className="card-title">{c.nameTitle}</h2>
+      <p className="mt-3 text-sm leading-relaxed text-ink-dim">{c.nameBlurb}</p>
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') save()
+        }}
+        placeholder={c.namePlaceholder}
+        maxLength={40}
+        autoCorrect="off"
+        spellCheck={false}
+        aria-label={c.nameTitle}
+        className="mt-4 w-full rounded-xl border border-line bg-panel-2 px-4 py-3 text-[15px] outline-none placeholder:text-ink-faint focus:border-accent"
+      />
+      <button
+        type="button"
+        disabled={!draft.trim()}
+        onClick={save}
+        className="btn-cta mt-4 w-full py-3 text-sm disabled:opacity-40"
+      >
+        {c.nameSave}
+      </button>
+    </Sheet>
   )
 }
 

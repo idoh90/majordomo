@@ -539,6 +539,22 @@ here — the whole ritual, and the traps in it, is written down in
 - **The share row is read on EVERY pull now**, not just the first: no realtime channel
   watches `shares`, so a crew shut to applications would otherwise go on reading
   "open" on every device but the keeper's.
+- **A `?join=` link OFFERS a crew; it does not enrol you in one.** The code lands
+  in `useShareStore.invite` (persisted, un-accepted) and `app/share/InviteDoor.tsx`
+  shows it; only ACCEPT moves it to `pendingJoin`, which is what the service
+  redeems. It used to go straight to `pendingJoin`, so tapping a link forwarded
+  into a group chat put a bystander on a roster before they had agreed to
+  anything. Accepting while signed out SHUTS the door and opens the sign-in
+  screen — both are z-50, so a sheet left standing would cover the thing it just
+  sent you to — and the login screen reads the held code and says why it opened.
+- **The roster name is CHOSEN, never inferred** (`crewName` in the shell store,
+  a defaulted key so no version bump). It was `email.split('@')[0]`, which handed
+  the front half of a private address to every stranger on the crew. Empty is the
+  honest state: `shareVenture` and `joinCrew` both refuse until it has an answer,
+  and the invitation asks for it at the moment of introduction. Changing it calls
+  `announceName()`, which re-knocks on every crew whose code this device holds —
+  `join_share`'s ON CONFLICT branch updates the label and leaves rank and standing
+  alone, so a rename needs no new SQL, grant or policy.
 - **The join CODE has two forms** (`modules/workshop/joinCode.ts`): canonical
   (8 chars, no separators — what the registry stores) and display (`XXXX-XXXX` — what
   a person reads and types). The field dashes as it fills, and `editCode` exists for
