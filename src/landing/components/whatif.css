@@ -1,0 +1,89 @@
+/* ---------------------------------------------------------------------------
+   The ghost drag, on a 4-second loop. Transform and opacity only.
+
+   Beat map:
+     0–15%   the block sits where the week put it (06:00 Wednesday)
+     15–35%  it drags across to Thursday afternoon; a dashed ghost holds its
+             old place, because a what-if you cannot undo is not a what-if
+     35–85%  the difference is legible: hours gained, sleep lost, training kept
+     85–100% discarded, as if nothing happened — and around again
+
+   The block's authored position is the LANDED one, so the still frame (and
+   therefore reduced motion) shows the answer rather than the question.
+-------------------------------------------------------------------------- */
+
+.wi-col {
+  background: repeating-linear-gradient(
+    180deg,
+    rgb(30 39 57 / 0.55) 0 1px,
+    transparent 1px 45px
+  );
+}
+
+.wi-block {
+  /* from Wednesday 06:00 (one column left, and up the grid) to where it is
+     authored: Thursday 15:00 */
+  --dx: calc(-100% - 8px);
+  --dy: -67.5px;
+  animation: wi-drag 4s cubic-bezier(0.3, 0.9, 0.35, 1) infinite;
+}
+@keyframes wi-drag {
+  0%,
+  15% {
+    transform: translate3d(var(--dx), var(--dy), 0);
+  }
+  35%,
+  85% {
+    transform: translate3d(0, 0, 0);
+  }
+  /* discarded — it goes home, and the estate forgets it happened */
+  100% {
+    transform: translate3d(var(--dx), var(--dy), 0);
+  }
+}
+
+.wi-ghost {
+  opacity: 0;
+  animation: wi-ghost 4s linear infinite;
+}
+@keyframes wi-ghost {
+  0%,
+  14% {
+    opacity: 0;
+  }
+  20%,
+  85% {
+    opacity: 1;
+  }
+  92%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.wi-diff {
+  animation: wi-diff 4s linear infinite;
+}
+@keyframes wi-diff {
+  0%,
+  28% {
+    opacity: 0.25;
+  }
+  38%,
+  88% {
+    opacity: 1;
+  }
+  96%,
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wi-block,
+  .wi-ghost,
+  .wi-diff {
+    animation: none !important;
+    opacity: 1;
+  }
+}

@@ -1,0 +1,242 @@
+/* ---------------------------------------------------------------------------
+   The hero demo.
+
+   Every rule here animates transform or opacity and nothing else — no width,
+   no height, no top, no margin. That is not a stylistic preference: the whole
+   sequence has to hold 60fps on a mid-tier Android under a 6× CPU throttle,
+   and a layout property in a loop is how that stops being true.
+
+   The final frame (the butler stopped over Wednesday, the week in order) is
+   the good frame. Reduced-motion visitors are served exactly it, with the
+   timeline never started.
+--------------------------------------------------------------------------- */
+
+.dw {
+  /* one hour, in pixels — the only number the whole grid is built from */
+  --pxh: 13px;
+}
+@media (min-width: 768px) {
+  .dw {
+    --pxh: 16px;
+  }
+}
+
+.dw-grid {
+  height: calc(var(--pxh) * 24);
+}
+
+/* hour rules every six hours — the seamed week, faint enough to stay behind */
+.dw-col {
+  background: repeating-linear-gradient(
+    180deg,
+    rgb(30 39 57 / 0.6) 0 1px,
+    transparent 1px calc(var(--pxh) * 6)
+  );
+}
+
+/* the column he is standing over lifts, so the line he is speaking and the day
+   it is about are unmistakably the same thing. Opacity on an overlay, not a
+   background swap, so it fades rather than blinks. */
+.dw-col::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: rgb(230 235 242 / 0.035);
+  opacity: 0;
+  transition: opacity 260ms ease-out;
+}
+.dw-col[data-active]::after {
+  opacity: 1;
+}
+.dw-head {
+  transition: color 260ms ease-out;
+}
+.dw-head[data-active] {
+  color: var(--color-ink);
+}
+/* nothing is "current" while the week is still in pieces */
+.dw[data-beat='chaos'] .dw-col::after,
+.dw[data-beat='snap'] .dw-col::after,
+.dw[data-beat='reset'] .dw-col::after {
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------------- blocks */
+.dw-block {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition:
+    transform 320ms cubic-bezier(0.22, 1.4, 0.36, 1),
+    opacity 320ms ease-out;
+}
+@media (min-width: 768px) {
+  .dw-block {
+    left: 4px;
+    right: 4px;
+  }
+}
+
+/* coffee, lunch, the commute: present so the day is continuous, quiet so the
+   commitments still carry it. A thinner accent edge, because a 3px rule on a
+   one-hour block is most of the block. */
+.dw-minor {
+  border-left-width: 2px;
+  display: flex;
+  align-items: center;
+}
+
+/* chaos and reset: the week as every other calendar leaves it */
+.dw[data-beat='chaos'] .dw-block,
+.dw[data-beat='reset'] .dw-block {
+  transform: translate3d(var(--sx), var(--sy), 0) rotate(var(--sr));
+  opacity: 0.5;
+}
+
+/* The snap: each block waits its turn, then springs home. 65ms apart, not the
+   storyboard's 350 — with forty commitments a 350ms stagger runs fourteen
+   seconds and the butler speaks over furniture still moving. The window this
+   has to finish inside is SNAP_MS in week.ts; the two numbers move together or
+   the sequence overruns itself. */
+.dw[data-beat='snap'] .dw-block {
+  transition-delay: calc(var(--i) * 65ms);
+}
+
+/* the drift back is one movement, not forty — no stagger, and slower, so the
+   loop reads as the week coming apart rather than a second performance */
+.dw[data-beat='reset'] .dw-block {
+  transition:
+    transform 1200ms cubic-bezier(0.4, 0, 0.6, 1),
+    opacity 1200ms ease-in;
+}
+
+/* Idle jitter while scattered — the misalignment is restless, not frozen.
+   Runs on an inner wrapper so it composes with the block's own transform, and
+   only on real commitments: forty simultaneous animations is more than a
+   mid-range phone should composite for the sake of a lunch break. */
+.dw-jitter {
+  height: 100%;
+}
+.dw[data-beat='chaos'] .dw-jitter {
+  animation: dw-drift 2.6s ease-in-out infinite alternate;
+  /* a negative delay per block starts each at a different point in the same
+     cycle, so they drift out of step instead of pulsing like one object */
+  animation-delay: calc(var(--i) * -310ms);
+}
+@keyframes dw-drift {
+  from {
+    transform: translate3d(-1.5px, -2px, 0);
+  }
+  to {
+    transform: translate3d(2px, 1.5px, 0);
+  }
+}
+
+/* ------------------------------------------------------------------ the now
+   line. It breathes only once the week is at rest — a pulse over a scattered
+   grid would read as an error state. */
+.dw-now {
+  border-top: 1px solid color-mix(in srgb, var(--color-danger) 60%, transparent);
+}
+.dw[data-beat='tour'] .dw-now {
+  animation: dw-breathe 3.6s ease-in-out infinite;
+}
+@keyframes dw-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ------------------------------------------------------------- the butler
+   He walks the week: one transform per stop, on a rail whose height is fixed,
+   so the calendar under him never moves. */
+.dw-chip {
+  --tx: 0px;
+  --px: 50%;
+  transform: translate3d(var(--tx), 0, 0);
+  box-shadow:
+    0 8px 28px rgb(0 0 0 / 0.5),
+    0 0 18px color-mix(in srgb, var(--color-w-watch) 14%, transparent);
+  transition:
+    transform 520ms cubic-bezier(0.32, 0.72, 0.24, 1),
+    opacity 300ms ease-out;
+}
+.dw[data-beat='chaos'] .dw-chip,
+.dw[data-beat='snap'] .dw-chip,
+.dw[data-beat='reset'] .dw-chip {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* the nib under him, pointing at the column he is standing over. It tracks the
+   real column centre even when the chip itself has run out of room to move —
+   which is what happens on a phone, where he is wider than a day. */
+.dw-nib {
+  position: absolute;
+  bottom: -5px;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  transform: translate3d(var(--px), 0, 0) rotate(45deg);
+  background: var(--color-panel-2);
+  border-right: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+  transition: transform 520ms cubic-bezier(0.32, 0.72, 0.24, 1);
+}
+
+/* He types. One frame with data-typing="0" between stops resets every letter,
+   so each day's line arrives rather than swapping in whole. */
+.dw-word {
+  display: inline-block;
+  white-space: pre;
+}
+.dw-char {
+  transition: opacity 90ms linear;
+  transition-delay: calc(var(--c) * 12ms);
+}
+.dw[data-typing='0'] .dw-char {
+  opacity: 0;
+  transition-duration: 0ms;
+  transition-delay: 0ms;
+}
+
+/* the focused block's glow arrives with the order, never before it */
+.dw-live {
+  transition: box-shadow 400ms ease-out;
+}
+.dw[data-beat='chaos'] .dw-live,
+.dw[data-beat='snap'] .dw-live,
+.dw[data-beat='reset'] .dw-live {
+  box-shadow: none;
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion: the demo is frozen at the ordered frame, with the butler
+   mid-sentence over Wednesday. The component never starts its timeline in that
+   case, so this is belt and braces for the transitions themselves.
+-------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .dw-block,
+  .dw-chip,
+  .dw-nib,
+  .dw-char,
+  .dw-live,
+  .dw-col::after,
+  .dw-head {
+    transition: none !important;
+    transition-delay: 0ms !important;
+  }
+  .dw-jitter,
+  .dw-now {
+    animation: none !important;
+  }
+}

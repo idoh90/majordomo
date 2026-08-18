@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.api.json && vite build",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.api.json && vite build && node scripts/prerender.mjs",
     "lint": "eslint src",
     "preview": "vite preview",
+    "audit": "node scripts/audit.mjs",
     "check:manor": "node scripts/manor-harness.mjs",
     "bell:probe": "node scripts/bell-probe.mjs"
   },
@@ -22,6 +23,7 @@
     "@fontsource/saira": "^5.2.11",
     "@fontsource/source-sans-3": "^5.2.9",
     "@supabase/supabase-js": "^2.110.9",
+    "@vercel/analytics": "^2.0.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zustand": "^5.0.5"
@@ -34,6 +36,7 @@
     "@typescript-eslint/parser": "^8.63.0",
     "@vitejs/plugin-react": "^5.0.0",
     "eslint": "^10.7.0",
+    "lighthouse": "^13.4.1",
     "playwright-core": "^1.62.0",
     "tailwindcss": "^4.1.10",
     "typescript": "^5.8.0",
