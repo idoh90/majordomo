@@ -31,6 +31,18 @@ export interface Venture {
    * The share-space copy is authoritative for name/status/goalH/shippedAt only.
    */
   shareId?: string
+  /**
+   * The crew this venture USED to belong to, kept when it goes private again
+   * (left, removed, disbanded). Local only — never part of the share payload.
+   *
+   * It exists to tell a REJOIN from an ANNEXATION, which are otherwise the same
+   * event: a crew pushing a venture record whose id matches something already
+   * on this shelf. Re-adopting is allowed only by the crew the venture came
+   * from; any other crew claiming that id is refused. Without this, a crew
+   * could take over a venture it never contained — rename it, receive every
+   * edit, and post its own milestones onto the owner's calendar.
+   */
+  formerShareId?: string
 }
 
 /** `title` is the organising card: it heads a column and owns the cards

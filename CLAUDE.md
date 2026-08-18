@@ -82,10 +82,18 @@ technical version.
   **Run it after touching any migration.** Its first run found `join_share` raising
   `column reference "share_id" is ambiguous` on every call — nobody could join a crew
   at all — in a file that read perfectly and had never been executed.
+- `npm run check:share` — the **share-fold harness** (`scripts/share-fold-harness.mjs`):
+  drives the real crew fold in a real page with FORGED records — a record's kind,
+  id and payload are all whatever the pusher says they are — and asserts that a
+  crew can touch only what it owns, while everything it legitimately may do still
+  works. Needs `npm run dev` up. **Run it after touching `shareSource.ts` or
+  `core/sync/merge.ts`.** Against the pre-fix fold it scores 6/19: a crew could
+  annex a venture it had never contained and post milestones onto the owner's
+  calendar, and nothing about reading the code showed it.
 - No test runner **for the app at large**; verification is done in the browser. The
-  Manor and the registry are the two exceptions, and for the same reason: their
-  contracts are numeric and enforceable, and "looks plausible" is exactly how a
-  cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness
+  Manor, the registry and the share fold are the three exceptions, and for the same reason: their
+  contracts are numeric or adversarial and therefore enforceable, and "looks
+  plausible" is exactly how a cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness
   after touching `WeekGrid.tsx` / `ManorScreen.tsx`. Its B1/B2 checks read the
   **brief's own exam clause**, and the brief types itself out on a first visit —
   they press SKIP before every read, so a fresh context does not measure a
@@ -555,6 +563,29 @@ here — the whole ritual, and the traps in it, is written down in
   `announceName()`, which re-knocks on every crew whose code this device holds —
   `join_share`'s ON CONFLICT branch updates the label and leaves rank and standing
   alone, so a rename needs no new SQL, grant or policy.
+- **AN INCOMING RECORD IS NEVER TRUSTED TO BELONG WHERE IT CLAIMS.** The fold
+  (`shareSource.apply`) matched by id alone, and a record's id is whatever the
+  pushing client says it is — so any crew could name a venture it had never
+  contained (a private one, or another crew's), have `shareId` force-set to
+  itself, then rename it, receive every later edit, hang cards on it, strike
+  them off, and post milestones whose titles became chips on the owner's own
+  calendar. Three rules close it, and `npm run check:share` holds them: a
+  venture record is folded only if `heldBy` vouches for it; a card, thread,
+  milestone or ledger entry is folded only if the venture it names is one this
+  share holds (a tombstone is judged on the LOCAL record it would strike, since
+  it carries no payload to read); and a new venture is built field by field
+  from the redacted face, never spread from the payload — spreading let a crew
+  set `archived`, `order` or anything else a `Venture` has.
+- **`formerShareId` is what tells a REJOIN from an ANNEXATION.** Both look
+  identical on the wire — a crew pushing a venture whose id is already on this
+  shelf — so `adoptPrivateCopy` notes which crew a venture came from, and only
+  that crew may re-adopt it.
+- **The RECORD's id is the authority, never the payload's** (`identify` in
+  `core/sync/merge.ts`). A payload calling itself something else used to be
+  stored under the envelope's key while carrying a stranger's id — two rows with
+  one identity, and every `find(x => x.id === …)` reaching whichever it met
+  first. The copy is made only when the two disagree, so the honest path keeps
+  payload identity (the engine's hash cache is keyed on it).
 - **The join CODE has two forms** (`modules/workshop/joinCode.ts`): canonical
   (8 chars, no separators — what the registry stores) and display (`XXXX-XXXX` — what
   a person reads and types). The field dashes as it fills, and `editCode` exists for

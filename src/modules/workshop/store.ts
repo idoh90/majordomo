@@ -530,7 +530,12 @@ export const useWorkshopStore = create<WorkshopState>()(
       adoptPrivateCopy: (shareId) =>
         set((s) => ({
           ventures: s.ventures.map((v) =>
-            v.shareId === shareId ? { ...v, shareId: undefined } : v,
+            // `formerShareId` remembers where it came from. That is what lets a
+            // later rejoin re-adopt it while a DIFFERENT crew claiming the same
+            // id is refused — see the ownership check in shareSource.apply.
+            v.shareId === shareId
+              ? { ...v, shareId: undefined, formerShareId: shareId }
+              : v,
           ),
           members: Object.fromEntries(
             Object.entries(s.members).filter(([k]) => k !== shareId),
