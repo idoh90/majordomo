@@ -1470,6 +1470,9 @@ export interface VoicePack {
     weekMon: string
     /** guidance */
     rerunBlurb: string
+    /** the way out to the landing page, and back in again */
+    frontDoorLabel: string
+    frontDoorBlurb: string
     /** the estate backup pair */
     exportBlurb: string
     /** the Grounds' own rows */

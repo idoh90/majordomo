@@ -2024,6 +2024,9 @@ export const majordomoPack: VoicePack = {
     weekSun: 'Sunday',
     weekMon: 'Monday',
     rerunBlurb: 'Run the intro and the setup questions again, from the start.',
+    frontDoorLabel: 'The front door',
+    frontDoorBlurb:
+      'The page the house shows a stranger. Your records stay as they are, and the button on it brings you back.',
     exportBlurb: 'One file with everything in it. Use it to move to another device.',
     profileLabel: 'Profile & nutrition',
     profileBlurb: 'Your body stats, and the numbers your food targets are worked out from.',

@@ -59,6 +59,13 @@ export const voice = {
     /* The butler's first appearance, kept from the form he used to run. */
     busy: 'One moment.',
     error: 'The line is down. Try once more, sir.',
+    /* The same door, opened from the inside. A resident who followed the app's
+       link back to this page is not being sold anything and has nothing to set
+       up, so the button says where it goes and the line under it says what it
+       will not touch. Swapped in after hydration (see GetStarted.tsx) — the
+       prerendered markup cannot know who is reading it. */
+    residentButton: 'BACK TO THE ESTATE',
+    residentFineprint: 'Your records are where you left them. Nothing here has moved.',
   },
 
   demo: {

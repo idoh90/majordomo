@@ -657,6 +657,35 @@ ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
 - **Entrance animations** start from a visible state on purpose (see comment in
   `core/ui/index.css`) — a frozen animation must never hide content.
 
+## The front door — `?landing` (production, NOT a dev flag)
+
+One document serves both the landing page and the app; `public/boot-gate.js` decides
+before first paint which one a browser sees, and `src/main.tsx` loads the matching
+chunk. **`?landing` is that decision, overridden by hand** — the front door's own
+address. Settings → HELP & TIPS → *The front door* navigates to it
+(`app/frontDoor.ts`), and the landing's CTA comes back the other way.
+
+- **Three files must agree** on who is at the door: the boot gate (which shows or
+  hides the prerendered markup), `main.tsx` (which picks the chunk), and the CTA
+  (which is the way back in). The two questions themselves live in ONE place —
+  `src/landing/arrival.ts` — and the boot gate restates them in ES5 because the CSP
+  forbids an inline script. Change one, change the gate.
+- **It navigates rather than swapping the root in place**, which is the reverse of
+  `landing/enterApp.ts`. `bootApp()` is not re-entrant — it registers the service
+  worker, opens the registry, starts sync and takes the root — so a round trip
+  inside one document would run all of it twice. A fresh document costs a frame and
+  the shell is precached, so this works offline.
+- **`enterApp()` strips the param** before booting. Left standing, the next reload
+  would walk the user straight back out of his own app — the same reasoning as the
+  `?join` gate.
+- **A resident's revisit is not counted.** `mountLanding({ revisit })` skips
+  `startAnalytics()` when the browser already holds an estate: the landing's numbers
+  are about strangers, and the owner sightseeing would quietly inflate them.
+- **The CTA's copy changes for a resident, in an EFFECT and never during render.**
+  The page is prerendered and hydrated; build-time markup cannot know whose browser
+  it lands in, so deciding that copy on the first render mismatches hydration on
+  every visit that has an estate.
+
 ## Dev-only URL params (guarded by `import.meta.env.DEV`)
 
 The app opens on the **menu**. `?console=<id>` (e.g. `?console=capital`) opens any

@@ -8,7 +8,7 @@ let root: Root | null = null
 /* Hydrates the prerendered document — the headline is on screen before this
    file is even fetched. Under `vite dev` the root is empty and it mounts
    cold. */
-export function mountLanding() {
+export function mountLanding({ revisit = false }: { revisit?: boolean } = {}) {
   const el = document.getElementById('root')!
   const tree = (
     <StrictMode>
@@ -21,7 +21,11 @@ export function mountLanding() {
     root = createRoot(el)
     root.render(tree)
   }
-  startAnalytics()
+  /* `revisit` is the resident who came back through the app's own link. The
+     analytics here count visitors and referrers so the page can be judged on
+     strangers; counting the owner's own sightseeing would quietly inflate the
+     one number the landing exists to move. */
+  if (!revisit) startAnalytics()
 }
 
 /* Called by enterApp() once the app chunk is ready to take the root. */

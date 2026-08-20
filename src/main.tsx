@@ -13,31 +13,23 @@ import './landing/components/rule.css'
 import './landing/components/whatif.css'
 import './landing/demo/demo.css'
 
-/* One question, answered synchronously before anything downloads: is there an
-   estate in this browser? Must agree with public/boot-gate.js, which already
-   hid the landing markup on the same evidence. `majordomo*` catches the shell
-   and every persisted store; `sb-` is the Supabase session of a signed-in
-   user whose local stores were cleared. */
-function hasEstate(): boolean {
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i)
-      if (k && (k.startsWith('majordomo') || k.startsWith('sb-'))) return true
-    }
-  } catch {
-    /* storage blocked (private mode): the landing shows, and the app's own
-       storageAvailable() messaging takes over past the CTA */
-  }
-  return false
-}
+import { hasEstate, wantsLanding } from './landing/arrival'
 
-/* DEV escape hatch: ?landing forces the landing even with an estate present,
-   so the page can be worked on without wiping localStorage. */
-const forceLanding =
-  import.meta.env.DEV && new URLSearchParams(window.location.search).has('landing')
+/* Two questions, answered synchronously before anything downloads: is there an
+   estate in this browser, and did the URL ask for the landing anyway? Both live
+   in landing/arrival.ts, and both must agree with public/boot-gate.js, which
+   has already shown or hidden the prerendered markup on the same evidence.
 
-if (hasEstate() && !forceLanding) {
+   `?landing` is the front door's own address — the app links back to it from
+   the settings screen, and it is how the page gets worked on without wiping
+   localStorage. */
+const estate = hasEstate()
+
+if (estate && !wantsLanding()) {
   void import('./app/boot').then((m) => m.bootApp())
 } else {
-  void import('./landing/mount').then((m) => m.mountLanding())
+  /* A resident who asked for the landing is taking another look at a page
+     written for strangers, and the page's own numbers are about strangers —
+     so his visit is shown to him and counted for nobody. */
+  void import('./landing/mount').then((m) => m.mountLanding({ revisit: estate }))
 }
