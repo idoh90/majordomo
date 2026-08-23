@@ -576,6 +576,28 @@ here — the whole ritual, and the traps in it, is written down in
   it carries no payload to read); and a new venture is built field by field
   from the redacted face, never spread from the payload — spreading let a crew
   set `archived`, `order` or anything else a `Venture` has.
+- **OWNERSHIP IS ONLY HALF THE QUESTION — the other half is SHAPE.** `heldBy`/
+  `held` decide whether a crew may speak for a record; `wellFormed` decides
+  whether the record makes sense. A crewmate pushing a properly-addressed
+  milestone whose day read `"💀"` passed every ownership check there was, and
+  that string reached `dayKeyToDate(…).toISOString()` inside the marker heal
+  pass — which the Manor mounts on EVERY boot, wing open or not. One record and
+  the app stopped opening at all: the recovery screen on every reload, with the
+  offending record sitting in localStorage. A string where hours belong did the
+  quieter version — `t += en.h` concatenates, and every hours figure became text
+  until the first `.toFixed(1)` threw. The gate is an allow-list per kind
+  checking exactly the fields something downstream relies on; a record that
+  fails is dropped WHOLE, never repaired. Every field it requires is written
+  unconditionally by the store's own creators, so it cannot reject anything the
+  app itself produced — and `npm run check:share` holds both halves of that.
+- **`dayKeyToDate` lives in `core/dates.ts` beside its inverse and returns
+  `Date | null`.** The loose version (`key.split('-').map(Number)` into
+  `new Date(y, m-1, d)`) turned any string into an Invalid Date and threw at the
+  first `.toISOString()`. It refuses rolled-over keys too — `2026-02-31` is not a
+  day, and JS would hand back the 3rd of March. Both wings' local copies are
+  gone. This is the SECOND layer: the fold stops a crew putting a bad day in the
+  store, and this stops a bad day from any other source (a corrupt import, an
+  older build) taking the app down.
 - **`formerShareId` is what tells a REJOIN from an ANNEXATION.** Both look
   identical on the wire — a crew pushing a venture whose id is already on this
   shelf — so `adoptPrivateCopy` notes which crew a venture came from, and only

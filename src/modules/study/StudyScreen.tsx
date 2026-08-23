@@ -245,7 +245,9 @@ function Dossier({
     if (due < todayKey) return [voice.study.due.overdue, 'var(--color-danger)']
     if (due === todayKey) return [voice.study.due.today, 'var(--color-ember)']
     if (due === tomorrowKey) return [voice.study.due.tomorrow, 'var(--color-ink-dim)']
-    return [voice.study.due.on(fdate(dayKeyToDate(due))), 'var(--color-ink-dim)']
+    const dueDay = dayKeyToDate(due)
+    if (!dueDay) return [voice.study.due.noDay, 'var(--color-ink-dim)']
+    return [voice.study.due.on(fdate(dueDay)), 'var(--color-ink-dim)']
   }
 
   const hwRows = [...homework].sort(

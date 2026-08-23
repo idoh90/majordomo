@@ -886,6 +886,8 @@ export interface VoicePack {
       today: string
       tomorrow: string
       on: (day: string) => string
+      /** a stored day that cannot be read back — see workshop.badDay */
+      noDay: string
     }
     sheet: {
       subject: string
@@ -1176,6 +1178,10 @@ export interface VoicePack {
     markerMs: (title: string) => string
     /** Manor marker-chip title for a delivery — carries the promised hour */
     markerDue: (title: string, time: string) => string
+    /** a milestone whose stored day cannot be read back — unreachable now that
+     *  the fold refuses malformed records, but a blob corrupted some other way
+     *  must still render as something honest rather than "undefined NaN" */
+    badDay: string
     archiveTitle: string
     archiveBody: (name: string) => string
     archiveYes: string

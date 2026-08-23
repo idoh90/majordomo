@@ -1,4 +1,11 @@
-import { addDays, localDayKey, startOfLocalDay, startOfWeek, type WeekStart } from '../../core/dates'
+import {
+  addDays,
+  dayKeyToDate,
+  localDayKey,
+  startOfLocalDay,
+  startOfWeek,
+  type WeekStart,
+} from '../../core/dates'
 import { hoursOf } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
@@ -26,14 +33,18 @@ export function sessionsOf(events: CalendarEvent[]): CalendarEvent[] {
 /* ------------------------------------------------------------- local days */
 
 /** parse a local day key (YYYY-MM-DD) as local midnight — never `new Date(key)` (UTC shift) */
-export function dayKeyToDate(key: string): Date {
-  const [y, m, d] = key.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
+// the strict parser lives in core beside its inverse; re-exported so the wing's
+// own callers keep importing it from here. The Study's records are personal, so
+// nobody else can push a malformed day into them — but the same throw, from the
+// same line, would come from a blob corrupted any other way, and the recovery
+// screen is no place to learn that.
+export { dayKeyToDate }
 
 /** whole local days from today to `key` (negative = past) */
 export function daysUntil(key: string, now: number): number {
-  const ms = dayKeyToDate(key).getTime() - startOfLocalDay(new Date(now)).getTime()
+  const day = dayKeyToDate(key)
+  if (!day) return 0
+  const ms = day.getTime() - startOfLocalDay(new Date(now)).getTime()
   return Math.round(ms / 86_400_000)
 }
 
@@ -176,7 +187,11 @@ export function bookedHoursBeforeExam(
   events: CalendarEvent[],
   now: number,
 ): number {
-  const endOfExamDay = dayKeyToDate(exam.on).getTime() + 86_400_000
+  const examDay = dayKeyToDate(exam.on)
+  // an unreadable exam day books nothing rather than everything: the filter
+  // below is a window, and NaN would let every session through it
+  if (!examDay) return 0
+  const endOfExamDay = examDay.getTime() + 86_400_000
   return sessionsOf(events)
     .filter((e) => {
       if (subjectOfEvent(e) !== exam.subjectId) return false
@@ -221,7 +236,13 @@ export function syncMarker(ref: string, dayKey: string | null, title: string): v
     if (existing) store.deleteEvent(existing.id)
     return
   }
-  const iso = dayKeyToDate(dayKey).toISOString()
+  const day = dayKeyToDate(dayKey)
+  // a day that cannot be read is not a day to put on the calendar
+  if (!day) {
+    if (existing) store.deleteEvent(existing.id)
+    return
+  }
+  const iso = day.toISOString()
   if (!existing) {
     store.addEvent({ source: 'study', sourceRef: ref, kind: 'marker', title, start: iso, end: iso, allDay: true })
   } else if (existing.start !== iso || existing.title !== title) {

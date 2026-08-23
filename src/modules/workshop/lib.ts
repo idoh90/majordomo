@@ -1,4 +1,11 @@
-import { addDays, localDayKey, startOfLocalDay, startOfWeek, type WeekStart } from '../../core/dates'
+import {
+  addDays,
+  dayKeyToDate,
+  localDayKey,
+  startOfLocalDay,
+  startOfWeek,
+  type WeekStart,
+} from '../../core/dates'
 import { hoursOf } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
@@ -27,14 +34,19 @@ export function sessionsOf(events: CalendarEvent[]): CalendarEvent[] {
 /* ------------------------------------------------------------- local days */
 
 /** parse a local day key (YYYY-MM-DD) as local midnight — never `new Date(key)` (UTC shift) */
-export function dayKeyToDate(key: string): Date {
-  const [y, m, d] = key.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
+// dayKeyToDate now lives in core beside its inverse, and is STRICT — it returns
+// null for anything that is not a real day. Re-exported so the wing's own
+// callers (and the Board) keep importing it from here.
+export { dayKeyToDate }
 
 /** whole local days from today to `key` (negative = past) */
 export function daysUntil(key: string, now: number): number {
-  const ms = dayKeyToDate(key).getTime() - startOfLocalDay(new Date(now)).getTime()
+  const day = dayKeyToDate(key)
+  // an unreadable key reads as today rather than as NaN days. Nothing a crew
+  // pushes can reach this any more (the fold refuses malformed records), so
+  // this is the floor for a blob corrupted some other way, not a live path.
+  if (!day) return 0
+  const ms = day.getTime() - startOfLocalDay(new Date(now)).getTime()
   return Math.round(ms / 86_400_000)
 }
 
@@ -71,7 +83,12 @@ export function entryHoursBetween(
   let t = 0
   for (const en of Object.values(entries)) {
     if (en.ventureId !== ventureId) continue
+    // `h` arrives from another member's device. A STRING here turns `t += en.h`
+    // into concatenation, and the number every hours figure is built on quietly
+    // becomes text — until the first `.toFixed(1)` on the shelf, which throws.
+    if (typeof en.h !== 'number' || !Number.isFinite(en.h)) continue
     const at = new Date(en.at).getTime()
+    if (Number.isNaN(at)) continue
     if (s !== undefined && at < s) continue
     if (e !== undefined && at >= e) continue
     t += en.h
@@ -260,11 +277,20 @@ export function daysSinceTouched(
 ): number | null {
   let last: string | null = null
   if (venture.shareId && entries) {
-    // the ledger records starts; a session's end is its start plus its hours
+    // the ledger records starts; a session's end is its start plus its hours.
+    // Both numbers come from ANOTHER MEMBER'S device — a crew's ledger entry is
+    // an opaque payload chosen by whoever pushed it — so an unreadable start or
+    // a non-finite duration is skipped rather than fed to `new Date(NaN)`,
+    // whose `.toISOString()` throws and takes the whole shelf render with it.
     for (const en of Object.values(entries)) {
-      if (en.ventureId !== venture.id || en.h <= 0) continue
-      const end = new Date(new Date(en.at).getTime() + en.h * 3_600_000).toISOString()
-      if (!last || end > last) last = end
+      if (en.ventureId !== venture.id) continue
+      if (typeof en.h !== 'number' || !Number.isFinite(en.h) || en.h <= 0) continue
+      const started = new Date(en.at).getTime()
+      if (Number.isNaN(started)) continue
+      const end = new Date(started + en.h * 3_600_000)
+      if (Number.isNaN(end.getTime())) continue
+      const iso = end.toISOString()
+      if (!last || iso > last) last = iso
     }
   } else {
     for (const e of sessionsOf(events)) {
@@ -476,7 +502,15 @@ export function syncMarker(ref: string, dayKey: string | null, title: string): v
     if (existing) store.deleteEvent(existing.id)
     return
   }
-  const iso = dayKeyToDate(dayKey).toISOString()
+  const day = dayKeyToDate(dayKey)
+  // A day that cannot be read is not a day to put on the calendar. Taking the
+  // chip down is both the safe answer and the right one — and it is the line
+  // that used to throw, from inside a heal pass the Manor runs on every boot.
+  if (!day) {
+    if (existing) store.deleteEvent(existing.id)
+    return
+  }
+  const iso = day.toISOString()
   if (!existing) {
     store.addEvent({ source: 'workshop', sourceRef: ref, kind: 'marker', title, start: iso, end: iso, allDay: true })
   } else if (existing.start !== iso || existing.title !== title) {

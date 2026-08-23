@@ -17,7 +17,7 @@
  * you kept the ids needed to do it. None of that is visible by reading the
  * code, which is precisely why it survived: every line looked reasonable.
  *
- * Run against the PRE-FIX fold this scores 6/19.
+ * Run against the fold as it stood before the ownership gate, this scores 6/19.
  *
  * Usage — needs the dev server up:
  *   npm run dev &
@@ -153,7 +153,55 @@ const venturePayload = (id, name) => ({
       `titles=${dupes.map((c) => c.title).join(',')}`)
 }
 
-/* ============================ 8. the LEGITIMATE paths still work ========== */
+/* ====== 8. MALFORMED records: right owner, wrong shape ===================
+ * The ownership gate admits these — the crew genuinely holds v-crew1 — so the
+ * only thing standing between them and the store is the shape gate. Each one
+ * used to reach a reader that throws. */
+{
+  const st = await fold(S1, [
+    // the app-bricker: this day key reached dayKeyToDate(...).toISOString()
+    // inside the heal pass the Manor runs on EVERY boot
+    rec('milestone', 'm-bad-day', { id: 'm-bad-day', ventureId: 'v-crew1', title: 'x', on: '\u{1F480}', done: false, countFrom: '2026-01-01T00:00:00.000Z' }),
+    rec('milestone', 'm-rolled', { id: 'm-rolled', ventureId: 'v-crew1', title: 'x', on: '2026-02-31', done: false, countFrom: '2026-01-01T00:00:00.000Z' }),
+    // a STRING where hours belong: `t += en.h` concatenates, and the first
+    // .toFixed(1) on the shelf throws
+    rec('work', 'w-str', { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: '999999', by: 'm' }),
+    rec('work', 'w-nan', { ventureId: 'v-crew1', at: 'not-a-date', h: 3, by: 'm' }),
+    rec('card', 'c-badtype', { id: 'c-badtype', ventureId: 'v-crew1', type: 'iframe', title: 'x', col: 0, row: 0, createdAt: '2026-01-01T00:00:00.000Z' }),
+    rec('card', 'c-badnum', { id: 'c-badnum', ventureId: 'v-crew1', type: 'note', title: 'x', col: 'zero', row: 0, createdAt: '2026-01-01T00:00:00.000Z' }),
+    rec('venture', 'v-badstatus', { id: 'v-badstatus', name: 'x', status: 'pwned', goalH: 0, createdAt: '2026-01-01T00:00:00.000Z' }),
+    rec('venture', 'v-badgoal', { id: 'v-badgoal', name: 'x', status: 'building', goalH: 'lots', createdAt: '2026-01-01T00:00:00.000Z' }),
+    rec('nonsense', 'n-1', { id: 'n-1', ventureId: 'v-crew1' }),
+  ])
+  say(!st.milestones.some((m) => m.id === 'm-bad-day'), 'an unreadable day key is refused')
+  say(!st.milestones.some((m) => m.id === 'm-rolled'), 'and so is a day that does not exist')
+  say(!st.work.some((w) => w.k === 'w-str'), 'hours that are not a number are refused')
+  say(!st.work.some((w) => w.k === 'w-nan'), 'and so is an unreadable start')
+  say(!st.cards.some((c) => c.id === 'c-badtype'), 'a card type the app has no reader for is refused')
+  say(!st.cards.some((c) => c.id === 'c-badnum'), 'and a card whose position is not a number')
+  say(!st.ventures.some((v) => v.id === 'v-badstatus'), 'an invented venture status is refused')
+  say(!st.ventures.some((v) => v.id === 'v-badgoal'), 'and a goal that is not a number')
+  say(st.markers.length === 0, 'none of it reaches the calendar', `markers=${JSON.stringify(st.markers)}`)
+}
+
+/* ====== 9. …and the app still opens afterwards ========================== */
+{
+  const bricked = await p.evaluate(() => {
+    // the heal pass is what the Manor runs on boot; if a malformed record had
+    // landed, this is the line that used to throw
+    try {
+      window.__workshop.getState()
+      const w = window.__workshop.getState()
+      window.__shareFold('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+      return null
+    } catch (e) {
+      return String(e)
+    }
+  })
+  say(bricked === null, 'the store is still readable after the assault', bricked ?? '')
+}
+
+/* ============================ 10. the LEGITIMATE paths still work ========= */
 {
   // the crew I am in may speak for its own venture, and hang things on it
   const st = await fold(S1, [
@@ -165,6 +213,26 @@ const venturePayload = (id, name) => ({
   say(v.name === 'Crew One Renamed', 'my own crew still renames its venture', `name=${v.name}`)
   say(st.cards.some((c) => c.id === 'c-ok'), 'and still hangs cards on it')
   say(st.milestones.some((m) => m.id === 'm-ok'), 'and still posts milestones')
+  say(st.markers.some((t) => /Ship it/.test(t)), 'whose chip does reach the calendar', `markers=${JSON.stringify(st.markers)}`)
+}
+{
+  // every kind, in its fullest legitimate form — the gate must pass all of it.
+  // This is the half of the harness that stops a stricter gate silently eating
+  // a crewmate's real work.
+  const st = await fold(S1, [
+    rec('thread', 't-ok', { id: 't-ok', ventureId: 'v-crew1', from: 'c-ok', to: 'c-keep' }),
+    rec('work', 'w-ok', { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 2.5, by: 'dana' }),
+    rec('card', 'c-full', { id: 'c-full', ventureId: 'v-crew1', type: 'task', title: 'Full', body: 'b', url: 'https://example.com', done: true, doneBy: 'dana', dueAt: '2026-03-01T18:00:00.000Z', parentId: 'c-ok', col: 1, row: 2, fx: 12.5, fy: 40, createdAt: '2026-01-01T00:00:00.000Z' }),
+    rec('card', 'c-bare', { id: 'c-bare', ventureId: 'v-crew1', type: 'note', title: 'Bare', col: 0, row: 0, createdAt: '2026-01-01T00:00:00.000Z' }),
+    rec('milestone', 'm-full', { id: 'm-full', ventureId: 'v-crew1', title: 'Full', on: '2026-04-01', done: true, doneAt: '2026-03-30T00:00:00.000Z', countFrom: '2026-01-01T00:00:00.000Z' }),
+    rec('venture', 'v-crew1', { id: 'v-crew1', name: 'Crew One Renamed', status: 'shipped', goalH: 4, shippedAt: '2026-03-01T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z' }),
+  ])
+  say(st.cards.some((c) => c.id === 'c-full'), 'a fully-populated card is accepted')
+  say(st.cards.some((c) => c.id === 'c-bare'), 'and one with every optional field absent')
+  say(st.milestones.some((m) => m.id === 'm-full'), 'a completed milestone is accepted')
+  say(st.work.some((w) => w.k === 'w-ok' && w.h === 2.5), 'a ledger entry is accepted')
+  say(st.ventures.find((v) => v.id === 'v-crew1')?.name === 'Crew One Renamed',
+      'and a shipped venture face is accepted')
 }
 {
   // a venture arriving from a crew I have just joined is created

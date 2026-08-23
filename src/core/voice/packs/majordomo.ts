@@ -1014,6 +1014,7 @@ export const majordomoPack: VoicePack = {
       today: 'due today',
       tomorrow: 'due tomorrow',
       on: (day) => `due ${day}`,
+      noDay: 'no date',
     },
     sheet: {
       subject: 'SUBJECT',
@@ -1425,6 +1426,7 @@ export const majordomoPack: VoicePack = {
     },
     markerMs: (title) => title,
     markerDue: (title, time) => `${title} · ${time}`,
+    badDay: 'NO DATE',
     archiveTitle: 'Archive this venture?',
     archiveBody: (name) => `${name} keeps its hours and its board. It just leaves the shelf.`,
     archiveYes: 'Archive',

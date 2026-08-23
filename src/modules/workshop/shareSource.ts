@@ -1,3 +1,4 @@
+import { isDayKey } from '../../core/dates'
 import { mergeList, mergeMap } from '../../core/sync/merge'
 import { noteDeleted } from '../../core/sync/intent'
 import { shareWing } from '../../core/sync/shareIntent'
@@ -39,6 +40,91 @@ const rec = (wing: string, kind: string, id: string, payload: unknown): SyncReco
 const of = (records: IncomingRecord[], kind: string) => records.filter((r) => r.kind === kind)
 
 const byOrder = (a: { order: number }, b: { order: number }) => a.order - b.order
+
+/* ------------------------------------------------------------- the shape gate
+ *
+ * OWNERSHIP is only half the question. `heldBy`/`held` decide WHETHER a crew may
+ * speak for a record; nothing there says the record makes SENSE. A crewmate
+ * pushing a perfectly well-addressed milestone whose day reads `"\u{1F480}"` was
+ * inside its rights by every check we had — and that string reached
+ * `dayKeyToDate(...).toISOString()` inside the marker heal pass, which the Manor
+ * mounts on every boot. One record, and the app stopped opening: the recovery
+ * screen on every reload, with the offending record sitting in localStorage.
+ * A string where a number belongs did the same quieter damage — `t += en.h`
+ * turned every hours figure into text until the first `.toFixed(1)` threw.
+ *
+ * So a record must also be the SHAPE the readers were written against. This is
+ * an allow-list per kind, checking exactly the fields something downstream
+ * relies on, and a record that fails is dropped whole rather than repaired:
+ * half a record is not a record, an honest peer will push a correct one, and a
+ * hostile peer gets nothing.
+ *
+ * Every field below is written unconditionally by the store's own creators, so
+ * this cannot reject anything the app itself produced — which is the property
+ * that matters, since dropping a crewmate's real work would be its own bug.
+ */
+
+const str = (v: unknown): v is string => typeof v === 'string'
+const bool = (v: unknown): v is boolean => typeof v === 'boolean'
+const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+/** an instant `new Date()` can actually read — every ISO field is one */
+const iso = (v: unknown): boolean => str(v) && !Number.isNaN(new Date(v).getTime())
+const opt = (v: unknown, ok: (x: unknown) => boolean): boolean => v === undefined || ok(v)
+
+const STATUSES = new Set<string>(['spark', 'building', 'shipped', 'shelved'])
+const CARD_TYPES = new Set<string>(['title', 'note', 'task', 'link'])
+
+const SHAPES: Record<string, (p: Record<string, unknown>) => boolean> = {
+  venture: (p) =>
+    str(p.name) &&
+    str(p.status) &&
+    STATUSES.has(p.status) &&
+    num(p.goalH) &&
+    p.goalH >= 0 &&
+    iso(p.createdAt) &&
+    opt(p.shippedAt, iso),
+  card: (p) =>
+    str(p.ventureId) &&
+    str(p.type) &&
+    CARD_TYPES.has(p.type) &&
+    str(p.title) &&
+    num(p.col) &&
+    num(p.row) &&
+    iso(p.createdAt) &&
+    opt(p.body, str) &&
+    opt(p.url, str) &&
+    opt(p.done, bool) &&
+    opt(p.doneBy, str) &&
+    opt(p.dueAt, iso) &&
+    opt(p.parentId, str) &&
+    opt(p.fx, num) &&
+    opt(p.fy, num),
+  thread: (p) => str(p.ventureId) && str(p.from) && str(p.to),
+  milestone: (p) =>
+    str(p.ventureId) &&
+    str(p.title) &&
+    // the one that bricked the app: a day key must be a day this app can read
+    isDayKey(p.on) &&
+    bool(p.done) &&
+    iso(p.countFrom) &&
+    opt(p.doneAt, iso),
+  work: (p) => str(p.ventureId) && iso(p.at) && num(p.h) && p.h >= 0 && str(p.by),
+}
+
+/**
+ * Drop anything malformed before ownership is even considered. A TOMBSTONE
+ * carries no payload to inspect and is judged on ownership alone; an unknown
+ * kind is dropped, because a reader for it does not exist here.
+ */
+function wellFormed(records: IncomingRecord[]): IncomingRecord[] {
+  return records.filter((r) => {
+    if (r.deleted) return true
+    const shape = SHAPES[r.kind]
+    if (!shape) return false
+    const p = r.payload
+    return p !== null && typeof p === 'object' && shape(p as Record<string, unknown>)
+  })
+}
 
 /**
  * May THIS crew speak for a venture already on the shelf?
@@ -119,7 +205,10 @@ export function shareSource(shareId: string): SyncSource {
       ]
     },
     subscribe: (onChange) => useWorkshopStore.subscribe(onChange),
-    apply: (records) => {
+    apply: (raw) => {
+      // shape first, then ownership: a record that is not the shape its readers
+      // were written against never gets as far as being asked whose it is
+      const records = wellFormed(raw)
       useWorkshopStore.setState((s) => {
         let ventures = s.ventures
         const incoming = of(records, 'venture')

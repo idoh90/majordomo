@@ -2667,7 +2667,11 @@ function MilestonesSheet({
                   color: !m.done && days < 0 ? 'var(--color-danger)' : 'var(--color-ink-dim)',
                 }}
               >
-                {fdate(dayKeyToDate(m.on))}
+                {/* an unreadable day is shown as one rather than as "undefined NaN" */}
+                {(() => {
+                  const day = dayKeyToDate(m.on)
+                  return day ? fdate(day) : voice.workshop.badDay
+                })()}
                 {!m.done && ` · ${voice.workshop.countdown(days)}`}
               </span>
               {!readOnly && (

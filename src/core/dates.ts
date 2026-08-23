@@ -9,6 +9,40 @@ export function localDayKey(input: string | Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 }
 
+/**
+ * A day key back to a Date — the inverse of `localDayKey`, and STRICT.
+ *
+ * It lives here beside its inverse, and it returns null rather than an Invalid
+ * Date, because a day key is not always something this app wrote. Milestones
+ * carry one, and a milestone can arrive from a crew: the payload is opaque
+ * jsonb chosen by whoever pushed it. The loose version — `key.split('-').map(Number)`
+ * straight into `new Date(y, m-1, d)` — turned any non-date string into an
+ * Invalid Date, and the first `.toISOString()` downstream threw. That throw
+ * happened inside the marker heal pass, which the Manor mounts on every boot,
+ * so one pushed record stopped the app opening at all, on every reload, with
+ * the bad record sitting in localStorage.
+ *
+ * Rolled-over keys are refused too: `2026-02-31` is not a day, and JS would
+ * silently hand back the 3rd of March.
+ */
+const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/
+
+export function dayKeyToDate(key: string): Date | null {
+  const m = typeof key === 'string' ? DAY_KEY.exec(key) : null
+  if (!m) return null
+  const y = Number(m[1])
+  const mo = Number(m[2])
+  const d = Number(m[3])
+  const date = new Date(y, mo - 1, d)
+  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) return null
+  return date
+}
+
+/** whether a string is a day key this app can read back */
+export function isDayKey(key: unknown): key is string {
+  return typeof key === 'string' && dayKeyToDate(key) !== null
+}
+
 export function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
