@@ -119,23 +119,34 @@ async function drainShare(shareId: string): Promise<void> {
 
 /* ------------------------------------------------------------------ pull */
 
+/** how many of this crew's records this device is currently holding */
+function localCount(shareId: string): number {
+  const prefix = `${shareWing(shareId)}/`
+  return shareEngine
+    .allRecords()
+    .filter((r) => recordKey(r.wing, r.kind, r.id).startsWith(prefix)).length
+}
+
 async function pullOne(shareId: string): Promise<void> {
   const st = useShareStore.getState()
   const since = st.cursors[shareId] ?? null
 
-  // the repair signal, per crew: more live records there than here means this
-  // device lost some (or never had them) — pull from the beginning
-  let fromScratch = since === null
-  if (!fromScratch) {
-    const remote = await countShareRecords(shareId)
-    if (remote !== null) {
-      const prefix = `${shareWing(shareId)}/`
-      const local = shareEngine
-        .allRecords()
-        .filter((r) => recordKey(r.wing, r.kind, r.id).startsWith(prefix)).length
-      if (remote > local) fromScratch = true
-    }
-  }
+  /**
+   * The repair signal, per crew: more live records there than here means this
+   * device lost some (or never had them) — pull from the beginning.
+   *
+   * `unkept` is what keeps that sentence true. The fold refuses records — as
+   * malformed, as not this crew's to speak for, or of a kind this build does
+   * not know — so a healthy device legitimately holds FEWER rows than the crew
+   * has. Compared naively, one junk record pushed by a crewmate put this device
+   * into a full re-pull of the entire crew on every cycle, for good, silently.
+   * Subtracting the shortfall measured at the last full pull restores the
+   * meaning: a row genuinely lost still widens the gap, and still repairs.
+   */
+  const remote = await countShareRecords(shareId)
+  const unkept = st.unkept[shareId] ?? 0
+  const fromScratch =
+    since === null || (remote !== null && remote - localCount(shareId) > unkept)
 
   const { rows, cursor } = await pullShare(shareId, fromScratch ? null : since)
 
@@ -165,6 +176,13 @@ async function pullOne(shareId: string): Promise<void> {
 
   // the fold may have created (or buried) this crew's venture — re-key sources
   ensureSources()
+
+  // A full pull saw everything the crew holds, so what is missing afterwards is
+  // exactly what this device declines to keep. Re-measured here and nowhere
+  // else: an incremental pull has no idea what it did not ask for.
+  if (fromScratch && remote !== null) {
+    useShareStore.getState().setUnkept(shareId, remote - localCount(shareId))
+  }
 
   // the venture was deleted FOR the crew and nothing of ours remains under
   // this share: leave the roster quietly and forget the bookkeeping
@@ -463,6 +481,7 @@ export function shareDebug() {
     cursors: st.cursors,
     codes: st.codes,
     visibilities: st.visibilities,
+    unkept: st.unkept,
     invite: st.invite,
     pendingJoin: st.pendingJoin,
     applications: st.applications,

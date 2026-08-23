@@ -36,6 +36,20 @@ interface ShareBookkeeping {
   owners: Record<string, string>
   /** per-share door policy, cached with the code so the sheet reads offline */
   visibilities: Record<string, CrewVisibility>
+  /**
+   * Per share: how many of the crew's rows this device legitimately does NOT
+   * keep — refused as malformed, refused as not this crew's to speak for, or
+   * of a record kind this build has never heard of.
+   *
+   * The repair signal ("more rows there than here means I lost some") assumed
+   * the two counts should match. Once the fold started refusing records that
+   * assumption became false, and the signal fired on EVERY cycle forever: one
+   * junk record pushed by a crewmate, and the device re-pulled the entire crew
+   * for good. The same would happen to any older build the day a new record
+   * kind ships. Subtracting the known shortfall makes the signal mean what it
+   * says again — and a genuinely lost row still widens the gap and still repairs.
+   */
+  unkept: Record<string, number>
   /** key → when this device noticed the change */
   dirty: Record<RecordKey, number>
   /** key → when this device was TOLD to delete it (never inferred) */
@@ -82,6 +96,8 @@ interface ShareBookkeeping {
   setCode: (shareId: string, code: string, ownerId?: string, visibility?: CrewVisibility) => void
   /** the keeper changed the door policy — reflected now, confirmed on the pull */
   setVisibility: (shareId: string, visibility: CrewVisibility) => void
+  /** measured after a full pull: the crew's rows this device does not keep */
+  setUnkept: (shareId: string, n: number) => void
   /** an application lodged, flagged as refused, or cleared away */
   setApplication: (shareId: string, app: CrewApplication | null) => void
   /** a share this device no longer belongs to: its queue and cursor go */
@@ -123,6 +139,7 @@ export const useShareStore = create<ShareBookkeeping>()(
       codes: {},
       owners: {},
       visibilities: {},
+      unkept: {},
       dirty: {},
       tombstones: {},
       invite: null,
@@ -170,6 +187,11 @@ export const useShareStore = create<ShareBookkeeping>()(
       setVisibility: (shareId, visibility) =>
         set((s) => ({ visibilities: { ...s.visibilities, [shareId]: visibility } })),
 
+      setUnkept: (shareId, n) =>
+        set((s) =>
+          s.unkept[shareId] === n ? s : { unkept: { ...s.unkept, [shareId]: Math.max(0, n) } },
+        ),
+
       setApplication: (shareId, app) =>
         set((s) => {
           if (app === null) {
@@ -192,6 +214,8 @@ export const useShareStore = create<ShareBookkeeping>()(
           delete owners[shareId]
           const visibilities = { ...s.visibilities }
           delete visibilities[shareId]
+          const unkept = { ...s.unkept }
+          delete unkept[shareId]
           const applications = { ...s.applications }
           delete applications[shareId]
           return {
@@ -199,6 +223,7 @@ export const useShareStore = create<ShareBookkeeping>()(
             codes,
             owners,
             visibilities,
+            unkept,
             applications,
             dirty: withoutPrefix(s.dirty, prefix),
             tombstones: withoutPrefix(s.tombstones, prefix),
@@ -223,6 +248,7 @@ export const useShareStore = create<ShareBookkeeping>()(
           codes: {},
           owners: {},
           visibilities: {},
+          unkept: {},
           dirty: {},
           tombstones: {},
           invite: null,
@@ -242,6 +268,7 @@ export const useShareStore = create<ShareBookkeeping>()(
         codes: s.codes,
         owners: s.owners,
         visibilities: s.visibilities,
+        unkept: s.unkept,
         dirty: s.dirty,
         tombstones: s.tombstones,
         invite: s.invite,
