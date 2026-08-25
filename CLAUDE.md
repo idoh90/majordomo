@@ -72,6 +72,28 @@ technical version.
   its blocks, an unfittable template isn't offered, QUICK ADD books on the slot
   its panel showed. Needs `npm run dev` up; exits
   non-zero on failure. `CHROME_PATH` / `MANOR_BASE` override the browser and origin.
+- `npm run shots` — the **ad-shot harness** (`scripts/ad-shots.mjs`, output in
+  `ads/screenshots/` — gitignored, regenerate on demand): drives a real headless
+  Chromium against the `?demo` fixture and saves raw marketing PNGs — no paint, no
+  upscale, no restyle. `npm run shots -- --list` prints the AD FRAMES sheet
+  (`desktop-week-full`, `desktop-week-packed-day`, `mobile-week-packed-day`,
+  `mobile-week-today`); `-- --all` shoots every frame. Always Midnight skin, THE
+  MANOR in week view, committed (never touches WHAT-IF), fixture data only, mouse
+  parked off-canvas so no cursor lands in the PNG. THE PACKED DAY is Wednesday
+  (fixture column index 2 — fixed by `?demo`'s seed in `core/events/store.ts`, not
+  by whatever day this runs on): it carries the tail of Tuesday's 19:00→08:00 Night
+  Watch, Sleep pencilled right after, a training block and a study block — the one
+  day dense enough to sell "a calendar that survives a brutal week." Desktop crops
+  are computed from live layout (grid + sidebar bounding boxes), never hand-tuned
+  pixel constants, and deliberately crop the sidebar out of `desktop-week-*` — it's
+  the one place ₪ figures show on this screen. **Never pass `{ fullPage: true }` on
+  a mobile context** — Playwright's full-page capture resizes the viewport mid-shot,
+  and that resize races the mobile week's column math into reading `.day` off an
+  undefined column, tripping the app's storage-shape guard ("The estate did not
+  open") even though the stored records are fine. `mobile-week-packed-day` gets the
+  same effect safely: it scrolls the ordinary page to the block range worth showing,
+  then shoots the fixed viewport. Needs `npm run dev` up; `CHROME_PATH` / `MANOR_BASE`
+  override the browser and origin, same as the Manor harness.
 - No test runner **for the app at large**; verification is done in the browser. The
   Manor is the one exception — its contract is numeric, and "looks plausible" is
   exactly how a cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness

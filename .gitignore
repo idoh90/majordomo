@@ -9,3 +9,6 @@ dist
 # agent scratch: throwaway worktrees and design-hook cache, not project state
 .claude/worktrees
 .impeccable
+
+# ad-shots.mjs output — regenerate on demand, don't bloat the repo with PNGs
+ads/screenshots/*.png

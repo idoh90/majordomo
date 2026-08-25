@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "audit": "node scripts/audit.mjs",
     "check:manor": "node scripts/manor-harness.mjs",
-    "bell:probe": "node scripts/bell-probe.mjs"
+    "bell:probe": "node scripts/bell-probe.mjs",
+    "shots": "node scripts/ad-shots.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
