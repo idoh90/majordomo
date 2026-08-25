@@ -150,7 +150,12 @@ future-only regeneration) · ~~the Study wing~~ **in build** (spec:
 `majordomo-study-spec.md`, milestones S1–S3, jumped the queue ahead of M7/M8
 after its design session) · onboarding flow · weekly report
 card · Supabase swap behind the events action surface · PWA push briefings
-(shift-aware timing) · Hebrew/persona voice packs · landing page + waitlist.
+(shift-aware timing) · Hebrew/persona voice packs · ~~landing page +
+waitlist~~ **shipped** (the landing moved onto the apex; the waitlist gave way
+to one brass button) · the payments milestone — P0 pricing page on the landing
+(launch week, nothing purchasable), then P1 Paddle wiring (checkout, webhook →
+`bell_grants.tier`, a tier read at sign-in), opening together with the Bell's
+B6 rope line; decisions and rail research live in playbook §7 + Appendix C.
 
 ## §V · Verification ritual
 

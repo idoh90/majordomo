@@ -115,8 +115,13 @@ these remain undecided and must not be presented as settled:
 - how many events a plan must touch before it is staged in the what-if sandbox
   instead of applied directly (proposed: three);
 - how much of the Ledger it may read or write, if any;
-- tier, price, trial length and free-tier allowance;
+- trial length (the spec proposes 14 days, no card — adopted provisionally,
+  not yet a live offer);
 - whether it requires sign-in (proposed: yes, for metering).
+
+Tier, price and the free-tier allowance are no longer open: decided August
+2026 in playbook §7 (bundled into Full Staff; free taste of 10 messages a
+month) — decided on paper, still not a live offer.
 
 **Not built, and not to be described as existing:** onboarding or first-run flow ·
 external calendar sync · payments or any paid tier · push notifications and the
@@ -164,7 +169,11 @@ calendar, never a replacement for it.
 **Absent — future work must not fabricate these:** testimonials, customer quotes,
 a beta cohort, retention or activation numbers, user counts, revenue, press,
 awards, app-store ratings, integrations, or any claim that other people use this.
-Prices and tiers in the strategy docs are proposals, not live offers.
+Prices and tiers are decided on paper (playbook §7, August 2026: the free Manor ·
+Full Staff at $6.99/mo or $59/yr · a 500-seat founders' lifetime at $129, sold
+through Paddle as merchant of record) — but nothing is purchasable, no checkout
+exists, and payments must not be described as existing until the rope line and
+the pricing page go live.
 
 ## Product Principles
 

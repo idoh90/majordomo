@@ -141,7 +141,7 @@ A subscription app is a retention machine with a UI. The loop:
 | Measure D7/D30 | The go/no-go data | |
 
 ### LATER (2027, gated on beta retention)
-Payments (Stripe) + free/premium split → public launch → AI layer → Capacitor wrap + app stores → persona packs → the Study wing (conveniently: you'll be a student, dogfooding again) → Apple/Outlook sync → light mode → ads only after LTV is known → B2B exploration (§8.3).
+Payments (Paddle — decisions in §7, rail research in Appendix C) + free/premium split → public launch → AI layer → Capacitor wrap + app stores → persona packs → the Study wing (conveniently: you'll be a student, dogfooding again) → Apple/Outlook sync → light mode → ads only after LTV is known → B2B exploration (§8.3).
 
 ---
 
@@ -172,15 +172,19 @@ Target 50–150 users. Entry survey (occupation, shift pattern, current tools). 
 
 ## §7 · Monetization
 
-**Model: freemium subscription.**
-- **Free — "The Manor":** full calendar, drag-and-drop, one Wing, one theme preset, local reminders. Genuinely useful forever — free users are your marketing.
-- **Premium — "Full Staff" (~$6.99/mo or $59/yr):** all Wings, what-if mode, shift-aware AI briefings, calendar sync, all presets + customization, report cards, priority support. Price sits deliberately under Motion/Akiflow ($19–34/mo) and above throwaway utilities: "serious tool, sane price."
-- **Founders' offer at launch:** lifetime for ~$129, capped (e.g., 500). Cash now + evangelists forever.
-- **Publishing path:** web-first with Stripe (~97% of revenue kept), installable PWA → Capacitor wrap into App Store/Play once demand justifies the 15–30% platform tax — consumer discovery eventually requires store presence, but not on day one.
+**Model: freemium subscription — two tiers, nothing else.** *(Decided 25 Aug 2026, together with the boundary, the launch sequencing and the payment rail below. The founders' offer is a purchase option of Full Staff, not a third tier.)*
 
-**Pricing-page copy draft:**
-> **The Manor** — Free. Your calendar, your Watch, your rules. *"A gentleman's essentials, sir."*
-> **Full Staff** — $59/year. Every Wing. The what-if engine. A briefing before every shift. The entire household at your service. *"The full staff, at your disposal."*
+- **Free — "The Manor":** the whole estate — all six Wings, the full calendar with drag-and-drop, offline-first, export/import, sign-in with single-device cloud backup, the Midnight preset, and a taste of the Bell (10 messages/month) once it ships. Genuinely useful forever — free users are the marketing. **The line moved (Aug 2026): the old "one Wing" split is dead.** All six Wings already ship free; wing-gating is client-side theatre in a local-first app (an exported backup is an editable entitlement file); and clawing back shipped capability breaks the taste contract. The rule that replaces it: **what you type is never paywalled.**
+- **Premium — "Full Staff" ($6.99/mo or $59/yr — annual is the real price):** the services — everything that runs on a server or is still being earned: the Bell at full allowance (fair-use 400/month), multi-device sync, crew sharing, all three presets, the what-if engine, shift-aware briefings and the weekly report card when they ship, priority support. Price sits deliberately under Motion/Akiflow ($19–34/mo) and above throwaway utilities: "serious tool, sane price." The Bell is what makes $59 read as a bargain (assistant spec §7); **do not raise the price for the AI now** — $69/yr stays available later, with attach-rate evidence.
+- **Founders' offer:** lifetime Full Staff for $129, capped at 500 seats. Cash now + evangelists forever. **The cap is real** — it is the only scarcity the taste contract permits, so the count must be true and the offer must actually close at 500.
+- **The paywall sits on the server seam.** Hard gates (genuinely enforceable): the Bell's allowance (`bell_grants.tier` + the reserve RPC — already live), crew-share creation, multi-device sync. Soft gates (honor-system, accepted as such): presets, the what-if engine. **Never store entitlement client-side** — the backup export→edit→import round-trip is a supported one-click bypass of any local flag; the client reads its tier from its own `bell_grants` row (RLS already permits it). Households keep any crews they formed before the rope goes up.
+- **Launch sequencing (decided):** launch week ships the **pricing page only — nothing purchasable.** The live promise ("free during the beta") holds until the Bell answers. Checkout — Full Staff subscriptions (14-day no-card trial per the assistant spec) and the founders' seats together — opens when B1 (the Bell's shell) and B6 (the rope line) are real and the Paddle account is approved. Selling the flagship before it exists is how refunds and churn get manufactured.
+- **Publishing path: web-first with Paddle as merchant of record** — Stripe does not serve Israeli merchants, and a US entity for its own sake is overhead, not strategy (research: **Appendix C**). Paddle is the legal seller — global VAT/US sales tax, invoices, refunds and dunning are its problem — at 5% + $0.50 per sale (~94% kept; the honest revision of the old "~97% with Stripe" line). Installable PWA → Capacitor wrap into App Store/Play once demand justifies the 15–30% platform tax — not on day one.
+
+**Pricing-page copy draft** (lands through `src/landing/voice.ts` / the voice packs, never inline; claims only what exists the day it renders):
+> **The Manor** — Free. Every Wing. Your whole estate, on your device, working offline. *"A gentleman's essentials, sir."*
+> **Full Staff** — $59/year. The Bell at your service. Every device, every preset, the what-if engine. *"The full staff, at your disposal."*
+> **Founders' seats** — $129, once, for the first 500 households. *"The house remembers its first guests, sir."*
 
 ---
 
@@ -233,3 +237,31 @@ Consumer shift workers are the wedge, but *employers of shift workers* are where
 
 ## Appendix B — Voice bible (v1)
 Dry. Composed. Understatement over exclamation. "Sir" once per message, sentence-final. Never begs, never guilts, never uses an emoji. Competence is the affection. Errors state fact + remedy. Hebrew register: "אדוני", same restraint. The Majordomo is never impressed and never surprised — merely, occasionally, *quietly satisfied*.
+
+## Appendix C — Payment rails (researched 25 Aug 2026)
+
+**The constraint that decides everything: Stripe does not onboard Israeli merchants** (no Israeli clearing licence; the local SHVA integration never landed). Every Stripe-derived product inherits the problem: Stripe Managed Payments (the former Lemon Squeezy — invite/waitlist preview as of Feb 2026 anyway), RevenueCat Web Billing, and Polar (which pays sellers through Stripe Connect, so Israel is out or at best unconfirmed). The known workaround — a Delaware LLC + EIN — buys Stripe's ~2.9% + 30¢ at the price of US filings, a US bank account, and becoming the seller of record for global tax. Wrong trade for a solo founder.
+
+**Decision: Paddle, as merchant of record.**
+- Supports Israeli sellers explicitly; payouts by bank transfer on a rolling weekly schedule.
+- Merchant of record = Paddle is the legal seller: VAT/US sales tax across 200+ markets, invoices, fraud, refunds and dunning are its liability, not ours. For a one-person operation selling worldwide this outranks any per-sale fee.
+- 5% + $0.50 per transaction, no monthly fee. Subscriptions and one-time purchases (the founders' seat) live in the same account; checkout localizes currency and payment methods (cards, PayPal, Apple/Google Pay).
+- **Onboarding is the long pole: days to ~2 weeks of review**, which wants a live site carrying terms of service, a privacy policy and a refund policy, with the seller's legal name matching the site. **Apply during the free window**, not the week checkout should open.
+
+| Rail | Verdict | Why |
+|---|---|---|
+| **Paddle** | **Chosen** | MoR, Israeli sellers supported, subs + one-time, 5% + $0.50 |
+| Stripe direct | No | Does not serve Israeli merchants |
+| Stripe Managed Payments (ex-Lemon Squeezy) | No | Waitlist preview + Stripe-country rules |
+| Polar | No | Payouts ride Stripe Connect; Israel doubtful; fee now matches Paddle anyway |
+| RevenueCat Web Billing | No | Stripe underneath |
+| FastSpring | Fallback | Working MoR, but pricier and dated |
+| Dodo Payments | Fallback | Young MoR courting Stripe-unsupported countries; verify its claims before relying on it |
+| PayPal Business (IL) | Bridge only | Native in Israel, subscriptions work — but the seller-of-record tax burden becomes ours and the checkout is worse |
+| Local PSPs (Meshulam / PayPlus / Cardcom) | No | ILS-centric card rails, no MoR — wrong tool for global SaaS |
+
+**Integration shape (for the payments milestone — none of this is built):**
+- **The entitlement seam already exists:** `bell_grants.tier` (`free/trial/staff/founder`) is resolved inside the Bell's reserve RPC, and RLS already lets a signed-in client read its own row. A Paddle webhook handler in `api/` (service-role, sibling of the Bell, same never-in-the-bundle rules) writes `staff` on subscribe, back to `free` on lapse, `founder` on a seat purchase; the client reads its tier once per sign-in. No client-writable entitlement, anywhere, ever.
+- **CSP:** a redirect to checkout costs zero header changes (navigation is not governed by `connect-src`; mind `form-action 'self'` — use a link or `location.assign`, not a POST form). The overlay checkout costs `script-src` + `connect-src` additions **plus a `frame-src` directive that does not exist yet** — a deliberate widening of the supply-chain policy, taken knowingly or avoided by staying with the redirect.
+- **The founders' cap is ours to enforce:** count seats from webhooks and close the offer at 500 — the cap is a promise made by us, not a Paddle feature.
+- **Fixed costs the day money changes hands:** Vercel Pro ($20/mo — Hobby is non-commercial by fair-use policy) and, when traffic warrants it, the $25 Supabase tier so the registry stops pausing.
