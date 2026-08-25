@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { Hinted } from '../../core/ui/Hint'
 import { Sheet } from '../../core/ui/Sheet'
 import { useNow } from '../../core/useNow'
+import { track } from '../../core/telemetry'
 import { voice } from '../../core/voice'
 import {
   awaitingReport,
@@ -711,6 +712,7 @@ function Desk({
   const fulfill = (id: string, f: SessionMeta['fulfillment'], doneH?: number) => {
     useStudyStore.getState().fulfill(id, f, doneH)
     setPartialFor(null)
+    track('session_fulfilled', { wing: 'study', outcome: f })
     butler(
       f === 'done'
         ? voice.study.toast.markedDone
@@ -1132,6 +1134,7 @@ function BookSheet({
       fulfillment: past ? 'done' : 'planned',
       ...(hw ? { homeworkId: hw } : {}),
     })
+    track('session_booked', { wing: 'study' })
     butler(past ? voice.study.toast.logged : voice.study.toast.onBooks)
     onClose()
   }

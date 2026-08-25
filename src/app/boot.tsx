@@ -20,6 +20,7 @@ import { initAuth } from '../core/auth/store'
 import { initSync } from './sync/init'
 import { initJoinGate } from './share/joinGate'
 import { initOnboarding } from './onboarding/store'
+import { initTelemetry } from '../core/telemetry'
 import { useShellStore } from '../core/store/shell'
 
 /* The viewport the app asks for. The DOCUMENT ships with the landing's
@@ -85,6 +86,10 @@ export function bootApp() {
     // …and only then decide whether this boot is somebody's first: the setup reads
     // the estate to know whether there is anything here already.
     initOnboarding()
+    // usage counts, wired like the registry (once, at boot, never an effect).
+    // It sends nothing — and writes nothing — until the consent door has been
+    // agreed through on this device; see core/telemetry.
+    initTelemetry()
 
     root.render(
       <StrictMode>

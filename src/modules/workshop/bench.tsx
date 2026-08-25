@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavStore } from '../../core/store/nav'
+import { track } from '../../core/telemetry'
 import { voice } from '../../core/voice'
 import { useWorkshopStore } from './store'
 import { useWorkshopUi } from './uiStore'
@@ -101,8 +102,12 @@ export function BenchControl({
   const stop = () => {
     const r = useWorkshopStore.getState().stopBench()
     const t = voice.workshop.toast
-    if (r.kind === 'logged') onStopped(t.benchStop({ h: r.h, m: r.m }))
-    else if (r.kind === 'short') onStopped(t.benchShort)
+    if (r.kind === 'logged') {
+      // only a stop that actually wrote a session counts — short, idle and
+      // mid-sandbox stops record nothing and so count nothing
+      track('bench_logged', { minutes: r.h * 60 + r.m })
+      onStopped(t.benchStop({ h: r.h, m: r.m }))
+    } else if (r.kind === 'short') onStopped(t.benchShort)
     else if (r.kind === 'sandbox') onStopped(t.benchSandbox)
   }
 

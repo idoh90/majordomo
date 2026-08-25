@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavStore } from '../core/store/nav'
-import { useShellStore } from '../core/store/shell'
+import { TERMS_VERSION, useShellStore } from '../core/store/shell'
+import { track } from '../core/telemetry'
 import { PRESET_SKIN_IDS, SKINS, applySkin } from '../core/ui/skins'
 import { voice } from '../core/voice'
 import { useNow } from '../core/useNow'
@@ -19,8 +20,31 @@ import { useAuthUi } from './authUi'
 import { offReason } from '../core/sync/gate'
 import { TabBar } from './TabBar'
 import { Onboarding } from './onboarding/Onboarding'
+import { useOnboarding } from './onboarding/store'
+import { ConsentDoor } from './ConsentDoor'
 
+// DEV-only: the consent door answers ?consent and nothing else — the Manor
+// harness and every screenshot param drive bare URLs and must not meet a wall
+const CONSENT_PARAM =
+  import.meta.env.DEV && new URLSearchParams(window.location.search).has('consent')
+
+/**
+ * The gate, then the house. A component split rather than an early return
+ * inside Shell because Shell's body opens with hooks — returning above them
+ * would change the hook count on the render after acceptance. App() itself
+ * calls exactly one hook on every render, so accepting simply swaps which
+ * child mounts.
+ */
 export default function App() {
+  const termsAccepted = useShellStore((s) => s.termsAccepted)
+  const gate = import.meta.env.DEV
+    ? CONSENT_PARAM && termsAccepted < TERMS_VERSION
+    : termsAccepted < TERMS_VERSION
+  if (gate) return <ConsentDoor />
+  return <Shell />
+}
+
+function Shell() {
   const skin = useShellStore((s) => s.skin)
   const now = useNow()
   const storageOk = useMemo(() => storageAvailable(), [])
@@ -60,6 +84,19 @@ export default function App() {
   useEffect(() => {
     if (view !== 'manor' && wingsOff.includes(view)) setView('manor')
   }, [wingsOff]) // `view` is read, not watched — see above
+
+  // Usage count: a wing opened by hand. The Manor is deliberately not counted
+  // (boot attendance is app_open's job — and the wings-off eviction above only
+  // ever writes 'manor', so skipping it absorbs that housekeeping too), and
+  // the onboarding walk's five scripted stops are the butler navigating, not
+  // the household. Wing names go out in the sync vocabulary.
+  useEffect(() => {
+    if (view === 'manor') return
+    if (useOnboarding.getState().stage?.startsWith('walk-')) return
+    track('wing_open', {
+      wing: view === 'training' ? 'grounds' : view === 'capital' ? 'ledger' : view,
+    })
+  }, [view])
 
   const active = CONSOLES.find((c) => c.id === view) ?? null
 

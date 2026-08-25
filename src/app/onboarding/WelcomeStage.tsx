@@ -51,7 +51,9 @@ export function WelcomeStage({ stage }: { stage: OnboardStage }) {
   )
 }
 
-function Wordmark() {
+/** the standalone wordmark the full-bleed doors share (this one and the
+ *  consent door in app/ConsentDoor.tsx) — extracted on second contact */
+export function Wordmark() {
   return (
     <div className="font-display text-[19px] font-bold uppercase leading-none tracking-[0.3em] text-ink md:text-[24px]">
       {voice.wordmark.lead}

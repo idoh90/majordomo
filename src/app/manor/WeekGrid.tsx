@@ -12,6 +12,7 @@ import {
 import { useEventsStore } from '../../core/events/store'
 import { localDayKey } from '../../core/dates'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
+import { track } from '../../core/telemetry'
 import { voice } from '../../core/voice'
 import { useIsMobile } from '../useIsMobile'
 import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
@@ -816,8 +817,9 @@ export function WeekGrid({
 
   /** write a picked block at a chosen INSTANT. ONE booking path: the in-grid
    *  popover names the slot the reader clicked, the panel names the slot the
-   *  reader dialled — past this line they are the same event. */
-  const bookAt = (start: Date, tpl: QuickAddPick) => {
+   *  reader dialled — past this line they are the same event. `via` only
+   *  feeds the usage count: which of the two doors was used. */
+  const bookAt = (start: Date, tpl: QuickAddPick, via: 'grid' | 'quickadd') => {
     // no fit-the-day clamp: a 19:00 night watch or a 23:30 sleep simply
     // crosses midnight — natural data; the grid splits it at the seam
     const end = new Date(start.getTime() + tpl.hours * HOUR_MS)
@@ -850,12 +852,16 @@ export function WeekGrid({
     if (start < columns[0].start || start >= columns[6].end) onJumpTo?.(start)
     if (!sandbox) {
       setLastAction({ type: 'add', id: added.id })
+      // a what-if sandbox booking may be discarded wholesale — only the real
+      // calendar's additions count as usage
+      track('event_created', { via })
       butler(voice.manor.onTheBooks, true)
     }
   }
 
   const quickAddPick = (tpl: QuickAddPick) => {
-    if (quickAdd) bookAt(new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS), tpl)
+    if (quickAdd)
+      bookAt(new Date(columns[quickAdd.col].start.getTime() + quickAdd.ts * HOUR_MS), tpl, 'grid')
   }
 
   /* -------------------------------------------------------------- render */
@@ -1080,7 +1086,7 @@ export function WeekGrid({
           rangeFree={(start, hours) =>
             estateFree(start, new Date(start.getTime() + hours * HOUR_MS))
           }
-          onBook={bookAt}
+          onBook={(start, tpl) => bookAt(start, tpl, 'quickadd')}
           onClose={() => setPanel(null)}
         />
       )}

@@ -28,6 +28,10 @@ export default function Footer() {
               {voice.footer.privacy}
             </a>
             <span className="px-1.5">·</span>
+            <a href="/terms" className="underline-offset-4 hover:text-ink hover:underline">
+              {voice.footer.terms}
+            </a>
+            <span className="px-1.5">·</span>
             <a
               href={voice.footer.contactHref}
               className="underline-offset-4 hover:text-ink hover:underline"

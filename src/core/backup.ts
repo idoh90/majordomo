@@ -14,7 +14,10 @@
 
 import { useSyncStore } from './sync/store'
 
-/** every key the app owns. Order is cosmetic — the file is a plain map. */
+/** every key the app owns. Order is cosmetic — the file is a plain map.
+ *  Deliberately absent: `majordomo-telemetry` (core/telemetry) — an export
+ *  must not carry one browser's analytics identity onto another device, and
+ *  `parseEstate`'s unknown-key refusal keeps foreign files honest for free. */
 export const ESTATE_KEYS = [
   'majordomo-shell',
   'majordomo-events',

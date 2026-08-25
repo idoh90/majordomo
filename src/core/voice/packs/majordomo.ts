@@ -2042,6 +2042,23 @@ export const majordomoPack: VoicePack = {
     clearWorkoutsBodySynced: (n) =>
       `All ${n} workout${n === 1 ? '' : 's'} are deleted, here and on every other device. Nothing outside the Grounds is touched.`,
     clearWorkoutsYes: 'Clear the log',
+    groupLegal: 'THE FINE PRINT',
+    termsLabel: 'Terms of Service',
+    termsBlurb: 'The terms the house runs by. Opens in a new tab.',
+    privacyLabel: 'Privacy Policy',
+    privacyBlurb: 'What is kept, where it lives, and what is counted. Opens in a new tab.',
+    analyticsToggle: 'Share usage counts',
+    analyticsBlurb:
+      'Anonymous counts of which features get used — never the contents of your records. Off means the house reports nothing.',
+  },
+  consent: {
+    title: 'The terms of the house',
+    body: 'Your records live on your device and remain yours. The house runs by the terms below, and entering is agreeing to them, sir.',
+    analyticsLine:
+      'Once inside, the app counts which features are used — anonymous counts, never what your records say. Settings holds the switch to stop it.',
+    termsLink: 'Terms of Service',
+    privacyLink: 'Privacy Policy',
+    agree: 'AGREE & ENTER',
   },
   onboarding: {
     welcome: {

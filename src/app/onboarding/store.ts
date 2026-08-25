@@ -4,6 +4,7 @@ import { useEventsStore } from '../../core/events/store'
 import { useNavStore } from '../../core/store/nav'
 import { useShellStore } from '../../core/store/shell'
 import { offReason } from '../../core/sync/gate'
+import { track } from '../../core/telemetry'
 import { useStudyStore } from '../../modules/study/store'
 import { useWorkoutStore } from '../../modules/training/store'
 import { useWorkshopStore } from '../../modules/workshop/store'
@@ -242,6 +243,9 @@ export const useOnboarding = create<OnboardState>((set, get) => ({
     clearResume()
     set({ stage: null, composition: null })
     useNavStore.getState().requestView('manor')
+    // walked to the end or waved off at the door — finish() is both, and the
+    // count means "the interview is over", not "the interview was taken"
+    track('onboarding_finished')
   },
 }))
 

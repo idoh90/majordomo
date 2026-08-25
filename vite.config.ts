@@ -115,10 +115,10 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       rollupOptions: {
-        /* Two documents: the landing (which doubles as the app shell once the
-           boot gate speaks) and its privacy page. scripts/prerender.mjs fills
-           both with markup after this build. */
-        input: { index: 'index.html', privacy: 'privacy.html' },
+        /* Three documents: the landing (which doubles as the app shell once
+           the boot gate speaks) and its two legal pages. scripts/prerender.mjs
+           fills each with markup after this build. */
+        input: { index: 'index.html', privacy: 'privacy.html', terms: 'terms.html' },
       },
     },
     plugins: [
@@ -182,7 +182,11 @@ export default defineConfig(({ mode }) => {
           // the caller cannot read and cannot retry sensibly. Nothing under /api
           // is a navigation today, so this changes nothing yet; it is here so the
           // chat UI does not discover it the hard way.
-          navigateFallbackDenylist: [/^\/api\//],
+          // The legal pages are real documents of their own: without these two
+          // entries an installed user tapping Terms or Privacy got the app
+          // shell back from the precache instead of the page the law and the
+          // consent door both point at.
+          navigateFallbackDenylist: [/^\/api\//, /^\/privacy$/, /^\/terms$/],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           // Quotes are a live-network luxury: serve the cache when it answers,

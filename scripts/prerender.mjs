@@ -33,7 +33,7 @@ const ssrDir = join(root, '.ssr')
 /* Fallback duplicated from site.config.ts (FALLBACK_CONTACT): this script is
    plain node and cannot import TypeScript. It only feeds the SSR bundle's
    `define`; the shipped HTML got the real value from vite.config.ts. */
-const contact = (process.env.CONTACT_EMAIL ?? '').trim() || 'idoh40@gmail.com'
+const contact = (process.env.CONTACT_EMAIL ?? '').trim() || 'majordomocal@gmail.com'
 
 await build({
   root,
@@ -82,7 +82,7 @@ const preloads = WANTED.map((re) => {
   return `<link rel="preload" href="/assets/${hit}" as="font" type="font/woff2" crossorigin>`
 }).join('')
 
-for (const route of ['index', 'privacy']) {
+for (const route of ['index', 'privacy', 'terms']) {
   const file = join(dist, `${route}.html`)
   let html = await readFile(file, 'utf8')
   html = html.replace('</head>', `${preloads}</head>`)
