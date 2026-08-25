@@ -161,7 +161,7 @@ export const voice = {
   },
 
   founder: {
-    body: 'I work 13-hour rotations. I train. I’m studying toward engineering. Every calendar I tried assumed my week was someone else’s — so I’m building the one that runs mine. If your schedule fights back, this is for you.',
+    body: 'Every calendar I tried assumed my week looked like everyone else’s. It doesn’t — training, study and rest have to fit around hours I don’t choose. So I’m building the one that runs my week instead. If your schedule fights back, this is for you.',
     signature: '— Ido, building Majordomo in public',
     /* EMPTY UNTIL THE HANDLES EXIST, and the signature line reads perfectly
        well without them — "— Ido, building Majordomo in public" is a complete

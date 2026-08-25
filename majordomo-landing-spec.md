@@ -223,11 +223,16 @@ what it runs.*
 
 ### 3.6 The founder note (short manifesto — the Arc lesson)
 
-> I work 13-hour rotations. I train. I'm studying toward engineering. Every
-> calendar I tried assumed my week was someone else's — so I'm building the
-> one that runs mine. If your schedule fights back, this is for you.
+> Every calendar I tried assumed my week looked like everyone else's. It
+> doesn't — training, study and rest have to fit around hours I don't choose.
+> So I'm building the one that runs my week instead. If your schedule fights
+> back, this is for you.
 >
 > — Ido, building Majordomo in public · *(links: X · TikTok)*
+
+*(The note deliberately does NOT name the founder's occupation. It stakes the
+claim on the schedule, not on the job — the hostile-week thesis carries the
+page on its own, and a bio line is not worth publishing an employer for.)*
 
 ### 3.7 FAQ (five questions, butler answers — each two sentences maximum)
 
