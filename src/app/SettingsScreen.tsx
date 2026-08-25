@@ -20,6 +20,7 @@ import { ProfileSheet } from '../modules/training/components/ProfileSheet'
 import { useWorkoutStore } from '../modules/training/store'
 import type { Workout } from '../modules/training/types'
 import { useAuthUi } from './authUi'
+import { CalendarsSheet } from './gcal/CalendarsSheet'
 import { openFrontDoor } from './frontDoor'
 import { nudgeWing, useWings } from './wings'
 import { entryStage, useOnboarding } from './onboarding/store'
@@ -48,6 +49,7 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
   const [profileOpen, setProfileOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [estateOpen, setEstateOpen] = useState(false)
+  const [calendarsOpen, setCalendarsOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -58,14 +60,14 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
   // otherwise one key would dismiss the sheet AND the page under it
   useEffect(() => {
     if (!open) return
-    const busy = profileOpen || importOpen || estateOpen || confirmClear
+    const busy = profileOpen || importOpen || estateOpen || calendarsOpen || confirmClear
     if (busy) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose, profileOpen, importOpen, estateOpen, confirmClear])
+  }, [open, onClose, profileOpen, importOpen, estateOpen, calendarsOpen, confirmClear])
 
   if (!open) return null
 
@@ -171,6 +173,24 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
               </Section>
             )}
 
+            {/* the external-calendar bridge follows the account: a shut
+                registry has nowhere to keep the connection, and signed out
+                the note names sign-in as the remedy rather than presenting
+                an inert control */}
+            {registryShut ? null : (
+              <Section title={voice.settings.groupCalendars}>
+                {authStatus === 'signedIn' ? (
+                  <Row
+                    label={voice.calendars.settingsLabel}
+                    blurb={voice.calendars.settingsBlurb}
+                    onClick={() => setCalendarsOpen(true)}
+                  />
+                ) : (
+                  <Note>{voice.calendars.needsAccount}</Note>
+                )}
+              </Section>
+            )}
+
             <Section title={voice.settings.groupEstate}>
               <Row
                 label={voice.backup.estate.exportItem}
@@ -218,6 +238,7 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
       <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ImportSheet open={importOpen} onClose={() => setImportOpen(false)} onImport={replaceAll} />
       <EstateImportSheet open={estateOpen} onClose={() => setEstateOpen(false)} />
+      <CalendarsSheet open={calendarsOpen} onClose={() => setCalendarsOpen(false)} />
 
       <ConfirmDialog
         open={confirmClear}

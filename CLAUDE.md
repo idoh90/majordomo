@@ -129,9 +129,10 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   one real query a day to stop it happening (needs the `SUPABASE_ANON_KEY` repo
   secret; it fails loudly rather than silently if that is unset). The anon key is
   **public by design** — it ships in the bundle and RLS is the only guard.
-  `service_role` now has exactly one legitimate home — `api/bell.ts`, server-side,
-  read from Vercel env (see the Bell section below). Anywhere else, and especially
-  anywhere under `src/`, is still a bug.
+  `service_role` now has exactly two legitimate homes — `api/bell.ts` and
+  `api/google.ts`, server-side, read from Vercel env (see the Bell and Google
+  bridge sections below). Anywhere else, and especially anywhere under `src/`,
+  is still a bug.
 - **`vercel.json` rationale** (the schema rejects `comment` keys, so it lives here):
   hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
   cached** or the app can't learn it's stale; `noindex` + frame/sniff headers
@@ -151,8 +152,9 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   session lives, by deliberate design) and post it somewhere. `script-src 'self'`
   makes that post fail. Keep `connect-src` as the list of origins the app
   genuinely talks to — Supabase over both `https:` and `wss:` (realtime is a
-  WebSocket), Twelve Data, Frankfurter — and **add to it only when a real feature
-  needs it**, since every entry is a place data could go. `style-src` carries
+  WebSocket), Twelve Data, Frankfurter, and `www.googleapis.com` (the Calendar
+  bridge runs client-side; token traffic stays in `api/`) — and **add to it only
+  when a real feature needs it**, since every entry is a place data could go. `style-src` carries
   `'unsafe-inline'` because React writes `style` attributes all over this app;
   that is a style hole, not a script hole. If the build ever gains an inline
   `<script>` (it has none today — checked in `dist/index.html`, where the PWA
@@ -240,6 +242,63 @@ describe it as existing.
   was metered so the probe can say so; the standing fix is B6's reserve-before-spend.
   Until the tables exist at all, every ring is refused — which is the correct
   direction for that error to run: a broken meter is not an unlimited allowance.
+
+## The Google Calendar bridge — two-way sync (`api/google.ts` + `src/app/gcal/`)
+
+The Manor syncs both ways with Google Calendar; Apple devices see it by adding
+the Google account to iPhone/Mac Calendar (no CalDAV, no ICS — deliberate).
+**The server half is custody only**: `api/google.ts` (bell.ts conventions —
+`GCAL_ENABLED` kill switch defaulting OFF, `ALLOWED_ORIGINS` grown by
+`localhost:3000` for `vercel dev`, the same `verifyUser` seam) runs the OAuth
+walk and holds `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`; the refresh token
+lives in `gcal_accounts` (`supabase/migrations/0006_gcal.sql` — RLS on, ZERO
+policies, service_role the only door), and the browser only ever sees hour-long
+access tokens, in memory. The consent walk returns to `?gcal=connected|denied|
+error` — never `?code=`, which Supabase's `detectSessionInUrl` would eat — and
+its `state` is an HMAC over `{user, origin, 10 min}` keyed off the client
+secret, so there is no nonce table. Scopes: `calendar.app.created` +
+`calendar.events.readonly` — the app can never edit an event the user made in
+their own calendar.
+
+- **Everything with judgment runs on the CLIENT** (`src/app/gcal/service.ts`,
+  triggered like estate sync: sign-in, visibility, online, a 5 s-debounced edit,
+  SYNC NOW; never while a what-if sandbox is open). One cycle: pull Google's
+  primary → read-only mirrors; ensure the app-created "Majordomo" calendar;
+  write back Google-side edits to our own events; push the estate's bookings.
+  Window: −7 d → +60 d (`mapping.ts`).
+- **Identity is deterministic both ways** (`mapping.ts`): outbound Google ids
+  are `'mj' + hex(localId)` (reversible — an id read back from Google names its
+  local record); inbound mirrors get `id: 'g-<googleEventId>'`, `source:
+  'google'`, `kind: 'abroad'`, `sourceRef: 'gcal:primary/<id>'`. Two devices
+  ingesting the same event write ONE `records` row (the Watch-templates trick);
+  mirrors are carried by estate sync on purpose — a device that never connected
+  Google still sees them. Never add `gcal:` to `PROJECTION_PREFIXES`.
+- **'abroad' events are read-only everywhere** — `isAbroad()` in
+  `core/events/lib.ts` gates drag/resize/long-press (one lock in `EventBlock`),
+  popover and mobile-sheet actions, with defensive returns in every mutation
+  path. They DO hold their hour (`occupies()` counts them — a Google meeting
+  must block QUICK ADD) and DO appear in month view. All-day imports are built
+  from date components with the LOCAL Date ctor (`core/dates.ts`'s UTC-shift
+  rule, arriving from the other direction).
+- **Two doctrine exceptions, both documented in service.ts**: the pull's delete
+  sweep is a windowed, source-scoped diff (legitimate only because Google is
+  the mirror's authority and the fetch aborts unless every page arrived — and
+  it judges a window one day narrower than the fetch so edge disagreements
+  never flap); a Google-side deletion of OUR event does not delete the estate
+  record — the next push re-creates it ("when in doubt, resurrect").
+- **`majordomo-gcal` is device-local bookkeeping** (the push ledger, toggles,
+  connection cache) — like `majordomo-sync`: never estate, never exported,
+  never synced. The ledger only advances on confirmed writes, so it may
+  under-claim (idempotent re-push) but never over-claim (a lost edit).
+- **Arming is four manual acts**, none in git: create the Google Cloud OAuth
+  client (Web app; redirect URIs `https://majordomocal.com/api/google`, the
+  vercel.app twin, and `http://localhost:3000/api/google` — NOT 5173, which
+  never serves `api/`), set the three env vars in Vercel (`GOOGLE_CLIENT_ID`,
+  `GOOGLE_CLIENT_SECRET`, `GCAL_ENABLED=1`), paste `0006_gcal.sql` in full, and
+  add the scopes + a test user on the consent screen. **While the consent
+  screen sits in Testing mode, Google expires refresh tokens after 7 days** —
+  weekly reconnects until verification lands, and the sensitive read scope's
+  review takes weeks: start it early (playbook §3.3.1 said so first).
 
 ## Stack
 

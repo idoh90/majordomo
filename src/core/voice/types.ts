@@ -1263,6 +1263,8 @@ export interface VoicePack {
     study: string
     workshop: string
     marker: string
+    /** mirrored from an external calendar — read-only on the Manor */
+    abroad: string
   }
   modules: {
     watch: { name: string; tagline: string }
@@ -1439,6 +1441,64 @@ export interface VoicePack {
     takeLocalBody: string
     takeLocalYes: string
   }
+  /**
+   * External calendar sync — the Google Calendar bridge. The estate's own
+   * bookings go out to a calendar this app creates in the user's Google
+   * account; the user's Google events come in as read-only 'abroad' blocks.
+   * Every off/error state names its own reason, per the sync convention.
+   */
+  calendars: {
+    /** settings row (the section heading is settings.groupCalendars) */
+    settingsLabel: string
+    settingsBlurb: string
+    /** settings note when signed out — sign-in is the remedy, and the note says so */
+    needsAccount: string
+    /** the sheet */
+    sheetTitle: string
+    blurb: string
+    connect: string
+    working: string
+    connectedAs: (email: string) => string
+    /** the grant lapsed or was revoked — the fix is the same door again */
+    reconnect: string
+    reconnectNote: string
+    /** the two directions, each its own switch */
+    pullToggle: string
+    pullBlurb: string
+    pushToggle: string
+    pushBlurb: string
+    syncNow: string
+    syncing: string
+    lastSynced: (when: string) => string
+    neverSynced: string
+    disconnect: string
+    disconnectTitle: string
+    /** must say both truths: mirrors leave the Manor; the Google-side calendar stays */
+    disconnectBody: string
+    disconnectYes: string
+    /** what the ?gcal return param says, once, before it is stripped */
+    returnedConnected: string
+    returnedDenied: string
+    returnedError: string
+    /** the line that stands where Edit/Remove would, on an abroad event */
+    abroadLine: string
+    /** a Google event that arrived without a title still needs a name */
+    untitled: string
+    /** the calendar this app creates in the user's Google account */
+    calendarName: string
+    /** the server's closed error codes, given words — fact + remedy */
+    errors: {
+      off: string
+      offline: string
+      unreachable: string
+      signin: string
+      reconnect: string
+      google: string
+      notConnected: string
+      /** disconnect refused while a what-if rehearsal holds the calendar */
+      rehearsal: string
+    }
+  }
   settings: {
     /** the settings screen itself */
     title: string
@@ -1448,6 +1508,7 @@ export interface VoicePack {
     groupAppearance: string
     groupGuidance: string
     groupAccount: string
+    groupCalendars: string
     groupEstate: string
     groupGrounds: string
     /** the navigation itself: which wings it lists, and in what order */

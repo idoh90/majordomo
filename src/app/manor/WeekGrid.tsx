@@ -4,6 +4,7 @@ import {
   SEAM_HOUR,
   clipToWindow,
   hoursOf,
+  isAbroad,
   occupies,
   overlaps,
   type ClippedEvent,
@@ -407,6 +408,7 @@ export function WeekGrid({
   const applyMove = (id: string, start: Date, durH: number) => {
     const prev = events.find((e) => e.id === id)
     if (!prev) return
+    if (isAbroad(prev)) return // belt: no gesture should reach here for a mirror
     updateEvent(id, {
       start: start.toISOString(),
       end: new Date(start.getTime() + durH * HOUR_MS).toISOString(),
@@ -433,6 +435,7 @@ export function WeekGrid({
   const removeEvent = (id: string) => {
     const e = events.find((x) => x.id === id)
     if (!e) return
+    if (isAbroad(e)) return // belt: the popover/sheet never offer Remove for a mirror
     deleteEvent(id)
     setPopover(null)
     if (!sandbox) {
@@ -489,6 +492,7 @@ export function WeekGrid({
   /* ----------------------------------------------------------- drag start */
 
   const onBlockPointerDown = (e: CalendarEvent, ev: React.PointerEvent, grabCol: number) => {
+    if (isAbroad(e)) return // mirrors are edited in their own calendar, not here
     if (ev.button !== 0 && ev.pointerType === 'mouse') return
     const box = boxRef.current
     if (!box) return
@@ -614,6 +618,7 @@ export function WeekGrid({
    * contract a move already has.
    */
   const onResizeStart = (e: CalendarEvent, gripCol: number, ev: React.PointerEvent) => {
+    if (isAbroad(e)) return // mirrors are edited in their own calendar, not here
     if (ev.button !== 0 && ev.pointerType === 'mouse') return
     const box = boxRef.current
     if (!box) return
@@ -807,6 +812,7 @@ export function WeekGrid({
     }
     const prev = events.find((e) => e.id === id)
     if (!prev) return false
+    if (isAbroad(prev)) return false // belt: Edit is never offered for a mirror
     const timeChanged =
       new Date(prev.start).getTime() !== start.getTime() || hoursOf(prev) !== durH
     updateEvent(id, { title, start: start.toISOString(), end: end.toISOString() })
@@ -1370,6 +1376,11 @@ const EventBlock = memo(function EventBlock({
   const e = clip.event
   const meta = KIND_META[e.kind]
   const isRest = e.kind === 'sleep'
+  /* A mirror from an external calendar is shown, never handled: no drag, no
+     resize, no long-press — one lock here covers all three gestures because
+     mobile renders this same block. Tap still opens the popover/sheet, which
+     offer provenance instead of Edit/Remove. */
+  const locked = isAbroad(e)
   const topPx = px(win.start, clip.start)
   const heightPx = px(clip.start, clip.end)
   const visibleHours = (clip.end.getTime() - clip.start.getTime()) / 3_600_000
@@ -1399,7 +1410,7 @@ const EventBlock = memo(function EventBlock({
      watch cut at the seam ends at midnight because the column does, and
      dragging that edge would be dragging a rendering artefact. */
   const [nearEnd, setNearEnd] = useState(false)
-  const resizable = !!onResizeStart && !clip.continuesAfter
+  const resizable = !!onResizeStart && !clip.continuesAfter && !locked
   const overEnd = (ev: React.PointerEvent) =>
     (ev.currentTarget as HTMLElement).getBoundingClientRect().bottom - ev.clientY <= gripH + 2
   return (
@@ -1413,7 +1424,7 @@ const EventBlock = memo(function EventBlock({
       title={resizable && nearEnd ? voice.manor.resizeHandle : undefined}
       onClick={(ev) => onClick(col, e, (ev.currentTarget as HTMLElement).offsetTop)}
       onPointerDown={
-        onPointerDown || resizable
+        !locked && (onPointerDown || resizable)
           ? (ev) => {
               if (resizable && overEnd(ev)) return onResizeStart?.(e, col, ev)
               onPointerDown?.(e, ev, col)
@@ -1444,8 +1455,8 @@ const EventBlock = memo(function EventBlock({
         ['--booked-accent' as string]: meta.color,
         top: topPx + 1,
         height: Math.max(heightPx - 2, 12),
-        cursor: resizable && nearEnd ? 'ns-resize' : onPointerDown ? 'grab' : 'pointer',
-        touchAction: onPointerDown ? blockTouchAction : undefined,
+        cursor: resizable && nearEnd ? 'ns-resize' : onPointerDown && !locked ? 'grab' : 'pointer',
+        touchAction: onPointerDown && !locked ? blockTouchAction : undefined,
         WebkitTouchCallout: 'none',
         opacity: dimmed ? 0.3 : 1,
         borderTopLeftRadius: clip.continuesBefore ? 0 : undefined,
@@ -1704,6 +1715,16 @@ function EventPopover({
           {hoursOf(e).toFixed(1)} h
         </span>
       </div>
+      {/* a mirror is shown, never handled — provenance stands where the
+          actions would, so the absence of Edit/Remove reads as a fact
+          about the event rather than a broken popover */}
+      {isAbroad(e) && (
+        <div className="mt-3 text-[11px] italic leading-relaxed text-ink-dim">
+          {voice.calendars.abroadLine}
+        </div>
+      )}
+      {!isAbroad(e) && (
+        <>
       <button
         type="button"
         onClick={onEdit}
@@ -1737,6 +1758,8 @@ function EventPopover({
         </svg>
         {voice.manor.removeLabel}
       </button>
+        </>
+      )}
     </div>
   )
 }
@@ -1958,6 +1981,7 @@ function MobileWeek({
   /* ------------------------------------------- the mobile drag (long-press) */
 
   const onMobileBlockPointerDown = (e: CalendarEvent, ev: React.PointerEvent) => {
+    if (isAbroad(e)) return // mirrors are edited in their own calendar, not here
     if (placing) return
     if (ev.pointerType === 'mouse' && ev.button !== 0) return
     const s = new Date(e.start)

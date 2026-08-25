@@ -42,6 +42,9 @@
   --color-w-study: #a78bda;
   /* copper, not brass — the Workshop must never read as the Ledger */
   --color-w-workshop: #d18a62;
+  /* muted slate for blocks mirrored from an external calendar — deliberately
+     quieter than every wing accent: foreign hours are context, not duty */
+  --color-w-abroad: #8a94a6;
 
   --font-display: "Big Shoulders", "Arial Narrow", system-ui, sans-serif;
 

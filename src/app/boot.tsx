@@ -19,6 +19,7 @@ import { voice } from '../core/voice'
 import { initAuth } from '../core/auth/store'
 import { initSync } from './sync/init'
 import { initJoinGate } from './share/joinGate'
+import { initGcal } from './gcal/init'
 import { initOnboarding } from './onboarding/store'
 import { useShellStore } from '../core/store/shell'
 
@@ -82,6 +83,9 @@ export function bootApp() {
     // a ?join=CODE invite: stash the code (it must survive an OAuth round-trip),
     // strip the param, and open the sign-in door if one is needed.
     initJoinGate()
+    // the Google Calendar bridge: read and strip the ?gcal return marker, then
+    // start the mirror loop (which waits for a session before doing anything).
+    initGcal()
     // …and only then decide whether this boot is somebody's first: the setup reads
     // the estate to know whether there is anything here already.
     initOnboarding()
