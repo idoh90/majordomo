@@ -300,6 +300,8 @@ function reconcileApplications(memberships: Set<string>, waiting: Set<string>): 
 async function cycle(): Promise<void> {
   if (!armed()) return
   if (useAuthStore.getState().status !== 'signedIn') return
+  const me = useAuthStore.getState().userId
+  if (!me) return
   if (running) {
     again = true
     return
@@ -325,12 +327,36 @@ async function cycle(): Promise<void> {
     const { active, pending } = await listMemberships()
     const memberships = new Set(active)
     const localIds = shareIdsOf(useWorkshopStore.getState().ventures)
-    for (const id of localIds) {
-      if (!memberships.has(id)) {
+
+    /* WHOSE CREWS ARE THESE? The reconcile below turns a crew this account
+       does not belong to back into a private venture, and that is an ordinary
+       local edit — which the PERSONAL engine then uploads to whoever is signed
+       in. That is right when it is your own crew you just left, and wrong in
+       the one case that matters: a second account signing in on a device that
+       already held someone else's crews. The personal loop guards that door
+       (`sync.ownerId`) and even says so out loud — "this device belonged to
+       another account; its records stay here and were not sent" — and then
+       this line sent them: a crew's whole board, including cards written by
+       people who have never heard of the new account, into their cloud and on
+       to all of their devices.
+
+       So the share loop keeps the same fact the personal loop keeps, and when
+       the answer has changed the re-privatisation is applied QUIETLY: the
+       records are baselined rather than queued, so nothing of the previous
+       account's is pushed anywhere. */
+    const shareOwner = useShareStore.getState().ownerId
+    const strangers = shareOwner !== null && shareOwner !== me
+    if (shareOwner !== me) useShareStore.getState().setOwner(me)
+
+    const privatise = () => {
+      for (const id of localIds) {
+        if (memberships.has(id)) continue
         useWorkshopStore.getState().adoptPrivateCopy(id)
         useShareStore.getState().dropShare(id)
       }
     }
+    if (strangers) applyQuietlyAll(privatise)
+    else privatise()
     ensureSources()
     // NOTE: no `requestPull` for a membership with no local venture. Step 4
     // pulls every membership regardless, so asking was already redundant — and
@@ -517,6 +543,23 @@ export function startShareService(): void {
   useWorkshopStore.subscribe((s, prev) => {
     if (s.ventures !== prev.ventures) ensureSources()
   })
+
+  /* THE CREW ENGINE STARTS WITH THE APP, not with a session — the personal one
+     always has, and the asymmetry cost work.
+   *
+   * `ensureSources` was reachable only from `cycle()`, which returns at once
+   * unless auth already says signedIn. So after a reload while signed out
+   * there was no share source registered at all: an hour spent rewriting a
+   * crew's board marked nothing dirty, because nothing was watching. Signing
+   * in then called `start()`, which BASELINES without dirtying by design — the
+   * hour was now invisible to the loop and would never be pushed. The next
+   * repair pull folded the crew's older copies straight over it, and it was
+   * gone from both sides.
+   *
+   * Registering the sources costs a scan of the workshop store and talks to
+   * nothing; the cycle still refuses to touch the network until there is a
+   * session, and `drainShare` still declines to send a guest's queue. */
+  ensureSources()
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void cycle()

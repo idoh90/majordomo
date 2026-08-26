@@ -30,6 +30,22 @@ export interface CrewApplication {
 interface ShareBookkeeping {
   /** per-share pull cursor (server clock, never ours) */
   cursors: Record<string, string | null>
+  /**
+   * WHICH ACCOUNT this device's crew bookkeeping answers to.
+   *
+   * The personal loop has kept the same fact for the same reason, and it is
+   * the one field that must SURVIVE `reset()` — signing out has to leave
+   * behind the knowledge of whose device this was, or the next account to sign
+   * in cannot tell "my own crews" from "the last person's".
+   *
+   * What it decides: a crew this account does not belong to is turned back
+   * into a private venture, and that is an ordinary local edit which the
+   * PERSONAL engine then uploads. Correct when it is your own crew you just
+   * left. Not correct at all when the crews on the device were somebody
+   * else's — the app has just told the new account "its records stay here and
+   * were not sent", and then sent them.
+   */
+  ownerId: string | null
   /** per-share join code, cached so the sheet can show it offline */
   codes: Record<string, string>
   /** per-share keeper (owner user id), cached with the code */
@@ -96,6 +112,7 @@ interface ShareBookkeeping {
   /** cache the crew's facts. `code` null FORGETS one — see the note in the
    *  implementation: only the keeper may hold a code now, and a device that
    *  used to be shown one must stop showing it. */
+  setOwner: (ownerId: string | null) => void
   setCode: (
     shareId: string,
     code: string | null,
@@ -144,6 +161,7 @@ export const useShareStore = create<ShareBookkeeping>()(
   persist(
     (set) => ({
       cursors: {},
+      ownerId: null,
       codes: {},
       owners: {},
       visibilities: {},
@@ -180,6 +198,8 @@ export const useShareStore = create<ShareBookkeeping>()(
             ? s
             : { dirty: omit(s.dirty, keys), tombstones: omit(s.tombstones, keys) },
         ),
+
+      setOwner: (ownerId) => set({ ownerId }),
 
       setCursor: (shareId, cursor) =>
         set((s) => ({ cursors: { ...s.cursors, [shareId]: cursor } })),
@@ -261,6 +281,9 @@ export const useShareStore = create<ShareBookkeeping>()(
 
       setBusy: (busy) => set({ busy }),
       setError: (lastError) => set({ lastError }),
+      /** `ownerId` is absent from this list ON PURPOSE — see the note on the
+       *  field. Everything else here is bookkeeping about a session; that one
+       *  is a fact about the device. */
       reset: () =>
         set({
           cursors: {},
@@ -284,6 +307,7 @@ export const useShareStore = create<ShareBookkeeping>()(
       // `busy` and `lastError` describe this moment, not this device
       partialize: (s) => ({
         cursors: s.cursors,
+        ownerId: s.ownerId,
         codes: s.codes,
         owners: s.owners,
         visibilities: s.visibilities,

@@ -369,6 +369,8 @@ const venturePayload = (id, name) => ({
   say(kept, 'while the entry itself is kept on this device')
 }
 
+let registryArmed = false
+
 /* ====== 15. the crew's OTHER front door: a link from a stranger ==========
  * `?join=` is attacker-supplied text that gets PERSISTED. A code containing a
  * malformed percent-escape made `decodeURIComponent` throw during render — and
@@ -404,6 +406,7 @@ const venturePayload = (id, name) => ({
     )
     await ctx2.close()
   } else {
+  registryArmed = true
   say(true, 'a real invitation opens', 'the link checks below are armed')
   // the probe left its own invitation in the mailbox — clear it, or the next
   // assertion reads the probe's code rather than the crafted one's absence
@@ -424,6 +427,56 @@ const venturePayload = (id, name) => ({
 
   await ctx2.close()
   }
+}
+
+/* ====== 16. AN EDIT MADE WHILE SIGNED OUT IS STILL QUEUED ================
+ * The personal engine has always started with the app; the crew engine only
+ * started inside a signed-in cycle. So after a reload while signed out there
+ * was no share source registered at all, and an hour spent rewriting a crew's
+ * board marked nothing dirty — nothing was watching. Signing in then called
+ * start(), which baselines WITHOUT dirtying by design, so the hour was
+ * invisible to the loop and never pushed; the next repair pull folded the
+ * crew's older copies over it and it was gone from both sides.
+ *
+ * Needs the registry configured for the same reason section 15 does: the
+ * service returns early when it is not armed, so an unarmed run would pass
+ * this by doing nothing. */
+if (registryArmed) {
+  const ctx3 = await browser.newContext({ viewport: { width: 1100, height: 800 } })
+  const p3 = await ctx3.newPage()
+  await p3.addInitScript((S1) => {
+    const now = '2026-01-01T00:00:00.000Z'
+    localStorage.setItem('majordomo-workshop', JSON.stringify({
+      version: 3,
+      state: {
+        ventures: [{ id: 'v-crew1', name: 'Crew One', status: 'building', goalH: 0, order: 0, createdAt: now, shareId: S1 }],
+        cards: [], threads: [], milestones: [], sessions: {}, bench: null, workEntries: {}, members: {},
+      },
+    }))
+    localStorage.setItem('majordomo-shell', JSON.stringify({
+      version: 4,
+      state: { skin: 'midnight', weekStart: 1, onboarded: true, panelTips: true,
+               wingOrder: [], wingsOff: [], deskNoticeSeen: true, crewName: 'Rook' },
+    }))
+  }, S1)
+  await p3.goto(`${BASE}/`, { waitUntil: 'networkidle' })
+  await p3.waitForTimeout(1200)
+
+  const status = await p3.evaluate(() => window.__auth.getState().status)
+  say(status === 'signedOut', 'the page is signed out for this check', `status=${status}`)
+
+  await p3.evaluate(() =>
+    window.__workshop.getState().addCard('v-crew1', 'note', 'Written while signed out'))
+  await p3.waitForTimeout(900)
+
+  const queued = await p3.evaluate((S1) => {
+    const dirty = JSON.parse(localStorage.getItem('majordomo-share') || '{}')?.state?.dirty ?? {}
+    return Object.keys(dirty).filter((k) => k.startsWith(`share:${S1}/card/`))
+  }, S1)
+  say(queued.length === 1, 'a crew edit made while signed out is queued, not lost',
+      `queued=${JSON.stringify(queued)}`)
+
+  await ctx3.close()
 }
 
 await browser.close()
