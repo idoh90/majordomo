@@ -92,7 +92,7 @@ select t_ok('…the keeper is still keeper',
 /* ===================================== B leaves, then knocks on a vetted door */
 :as_B
 select t_ok('a hand may leave', t_try(format(
-  $q$ delete from share_members where share_id = %L and user_id = %L $q$, :'sid', :'B')) = '');
+  $q$ select leave_share(%L) $q$, :'sid')) = '');
 select t_ok('a vetted door only takes the name',
             (select member_status = 'pending' from join_share(:'scode', 'dana')));
 
@@ -125,6 +125,11 @@ select t_ok('the keeper sees who is waiting',
 select t_ok('the keeper may admit', t_try(format(
   $q$ update share_members set status = 'active' where share_id = %L and user_id = %L $q$,
   :'sid', :'B')) = '');
+select t_ok('nobody may delete a roster row any more',
+            t_try(format($q$ delete from share_members where share_id = %L and user_id = %L $q$,
+                         :'sid', :'B')) <> '' or
+            (select count(*) = 1 from share_members where share_id = :'sid' and user_id = :'B'),
+            'a row that can be deleted is a rank that can be erased');
 :as_B
 select t_ok('an admitted hand reads the records',
             (select count(*) = 1 from share_records where share_id = :'sid'));
@@ -165,7 +170,7 @@ select t_ok('a guest may NOT open the door',
             coalesce(nullif(:'door_said', ''), 'silently filtered — door unchanged'));
 :as_B
 select t_ok('a guest may still leave', t_try(format(
-  $q$ delete from share_members where share_id = %L and user_id = %L $q$, :'sid', :'B')) = '');
+  $q$ select leave_share(%L) $q$, :'sid')) = '');
 
 /* ============================== knocking twice never costs a standing */
 :as_A
@@ -187,6 +192,48 @@ select t_ok('keeper re-opens the door', t_try(format(
 :as_B
 select t_ok('an opened door lets the waiting applicant in',
             (select member_status = 'active' from join_share(:'scode', 'dana')));
+
+/* ====== RANK MUST SURVIVE A ROUND TRIP =================================
+ * A rank nobody can escape is the whole point of having one. Leaving is a
+ * DELETE under the 0004 policy and join_share's INSERT branch always seats
+ * 'hand' — so a demoted guest could leave and re-type the code to come back a
+ * writer, and a kicked member could walk straight back into an open crew. */
+:as_A
+select t_ok('the keeper may demote to guest again', t_try(format(
+  $q$ update share_members set role = 'guest' where share_id = %L and user_id = %L $q$,
+  :'sid', :'B')) = '');
+:as_B
+select t_ok('a guest may still step away',
+            t_try(format($q$ select leave_share(%L) $q$, :'sid')) = '');
+select t_ok('…and comes back a GUEST, not a hand',
+            (select member_status from join_share(:'scode', 'dana')) is not null);
+reset role;
+select t_ok('a rank survives leaving and rejoining',
+            (select role = 'guest' from share_members
+              where share_id = :'sid' and user_id = :'B'),
+            'a demotion undone by one round trip is not a demotion');
+
+:as_A
+select t_try(format($q$ update share_members set status = 'removed'
+                       where share_id = %L and user_id = %L $q$, :'sid', :'B')) as kick_said \gset
+:as_B
+select t_ok('a removed member is not readmitted by the code',
+            (select member_status from join_share(:'scode', 'dana')) <> 'active',
+            'being shown the door is not a suggestion');
+reset role;
+reset role;
+select t_ok('…and a removed member reads nothing',
+            (select status = 'removed' from share_members
+              where share_id = :'sid' and user_id = :'B'));
+
+/* the keeper has DISBAND, not LEAVE — a crew cannot be left ownerless */
+:as_A
+select t_ok('the keeper may NOT leave',
+            t_try(format($q$ select leave_share(%L) $q$, :'sid')) <> '');
+reset role;
+select t_ok('…and is still keeper',
+            (select role = 'keeper' and status = 'active' from share_members
+              where share_id = :'sid' and user_id = :'A'));
 
 /* ============================================================ a rank must exist */
 reset role;

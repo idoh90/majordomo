@@ -43,7 +43,8 @@ have run. Paste **the whole file**, never a fragment of one.
 | 3 | `0003_bell.sql` | the Bell's usage tables and daily ceiling | — |
 | 4 | `0004_shares.sql` | crews: the second namespace, its RLS, `create_share` / `join_share` / `push_share_records` | 0001 (reuses `stamp_record`) |
 | 5 | `0005_bell_reserve.sql` | the Bell's reserve-before-spend meter | 0003 |
-| 6 | `0006_crew_roles.sql` | **the crew's door policy, waiting room and ranks** | 0004 |
+| 6 | `0006_crew_roles.sql` | the crew's door policy, waiting room and ranks | 0004 |
+| 7 | `0007_standing.sql` | **a rank that survives leaving and rejoining** | 0006 |
 
 Then, always: paste `verify.sql` and read the rows. Failures sort to the top.
 Every row is one thing that must be true; the note on each says what breaks if
@@ -65,7 +66,7 @@ back — a guest becomes a writer again — and then aborts partway with
 `cannot change return type of existing function`. Postgres shouting on the last
 of those three is luck, not a safety net.
 
-So: if the schema needs rebuilding, go `0001 → 0006` in order, in one sitting.
+So: if the schema needs rebuilding, go `0001 → 0007` in order, in one sitting.
 If one file needs re-applying, re-apply it **and everything after it**.
 
 ---
@@ -99,6 +100,24 @@ This is worth the two minutes. Its first run found `join_share` raising
 `column reference "share_id" is ambiguous` on every single call — which is to
 say nobody could join any crew at all — in a migration that read perfectly, and
 had simply never been executed.
+
+## What 0007 changes, in one paragraph
+
+A rank nobody can escape is the whole point of having one, and 0006 left two
+ways out. Leaving a crew was a DELETE of your own roster row, and `join_share`
+seats anyone it does not already know as a `hand` — so a guest demoted by the
+keeper could press LEAVE, type the code back in (every member can read it), and
+return an active writer; and a removed member could walk straight back into an
+open crew. A roster row is therefore never deleted now. It changes STANDING:
+`pending` · `active` · `left` · `removed`. Leaving goes through a new
+`leave_share()` function rather than plain DML, because a member has to change
+exactly one column of their own row and RLS has no column granularity — a policy
+wide enough to let them step away would be wide enough to let them write their
+own rank. Removing someone, and turning an applicant away, both become
+`status = 'removed'`, which the keeper's existing UPDATE policy already allows.
+The DELETE policy on `share_members` is dropped entirely; disbanding still
+clears the roster through the FK cascade, which does not consult RLS, and the
+harness proves that on every run rather than taking it on trust.
 
 ## What 0006 changes, in one paragraph
 

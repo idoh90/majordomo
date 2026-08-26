@@ -175,6 +175,47 @@ with checks as (
               else has_function_privilege('authenticated', 'public.join_share(text, text)', 'EXECUTE') end,
          ''
 
+  /* ------------------------------------------ 0007: a rank survives a leave */
+  union all
+  select 'standing knows LEFT and REMOVED',
+         coalesce(
+           (select pg_get_constraintdef(oid) from pg_constraint
+             where conname = 'share_members_status_check')
+           like '%removed%', false),
+         'without them, leaving is a DELETE and the rank goes with the row'
+  union all
+  select 'leave_share exists',
+         to_regprocedure('public.leave_share(uuid)') is not null,
+         'a member changes ONE column of their own row, through a function, so no
+          policy has to be wide enough to let them write their own rank'
+  union all
+  select 'authenticated may call leave_share',
+         case when to_regprocedure('public.leave_share(uuid)') is null then false
+              else has_function_privilege('authenticated', 'public.leave_share(uuid)', 'EXECUTE') end,
+         ''
+  union all
+  select 'NOTHING deletes a roster row',
+         not exists (select 1 from pg_policies
+                      where schemaname = 'public' and tablename = 'share_members'
+                        and cmd in ('DELETE', 'ALL')),
+         'THE ONE THAT MATTERS: while a member can delete their own row, a demoted
+          guest leaves and re-types the code to come back a writer'
+  union all
+  select 'knocking never re-grants a rank',
+         coalesce(
+           (select pg_get_functiondef(oid) from pg_proc
+             where proname = 'join_share' and pronamespace = 'public'::regnamespace)
+           like '%role   = share_members.role%', false),
+         'join_share must carry the standing rank forward, never seat a returning
+          member as a hand'
+  union all
+  select 'a removed member stays removed',
+         coalesce(
+           (select pg_get_functiondef(oid) from pg_proc
+             where proname = 'join_share' and pronamespace = 'public'::regnamespace)
+           like '%''removed'' then ''removed''%', false),
+         'being shown the door is not undone by knowing the code'
+
   /* ------------------------------------------------------ 0006: the state */
   union all
   select 'every existing crew has a ranked keeper',

@@ -495,9 +495,9 @@ still applies; the old keys are left in place as insurance and never read again.
 
 A crew is a second namespace beside `records`, never a loosening of it — the
 reasoning is at the top of `supabase/migrations/0004_shares.sql` and still holds.
-`0006_crew_roles.sql` gave that namespace a door policy, a waiting room and ranks.
-Both files are pasted into the SQL editor by hand, IN FULL, like every migration
-here — the whole ritual, and the traps in it, is written down in
+`0006_crew_roles.sql` gave that namespace a door policy, a waiting room and ranks;
+`0007_standing.sql` made a rank survive a departure. All are pasted into the SQL
+editor by hand, IN FULL, like every migration here — the whole ritual, and the traps in it, is written down in
 **`supabase/APPLY.md`**, which is the thing to read before touching the registry.
 
 - **Migrations go FORWARD only.** Re-pasting a file is the right retry when one
@@ -521,6 +521,16 @@ here — the whole ritual, and the traps in it, is written down in
   going through that venture's board first. The shelf's door and the board's CREW
   pill now both open the room; BACK returns to whichever asked, because `boardFor`
   is left standing behind it.
+- **A ROSTER ROW IS NEVER DELETED — it changes STANDING** (`pending`/`active`/
+  `left`/`removed`, 0007). Leaving used to be a DELETE, and `join_share` seats
+  anyone it does not already know as a `hand`, so a demoted guest pressed LEAVE,
+  re-typed the code and came back a writer; a removed member walked back into an
+  open crew. The row now survives so the RANK does: knocking never re-grants one,
+  and `removed` is only undone by the keeper. Leaving goes through `leave_share()`
+  because a member must write one column of their own row and RLS has no column
+  granularity — a policy wide enough for that is wide enough to let them set their
+  own rank. `share_members` has NO delete policy at all now; disband still works
+  because an FK cascade does not consult RLS, which `check:registry` proves.
 - **Three ranks, and they are the REGISTRY's, not the screen's.** `keeper` (the
   owner: admits, ranks, disbands), `hand` (writes the board, milestones and hours),
   `guest` (reads, changes nothing). `is_share_member()` now means an ACTIVE member

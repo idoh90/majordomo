@@ -95,7 +95,10 @@ export function crewRole(
   if (owners[shareId] === me) return 'keeper'
   const row = (members[shareId] ?? []).find((m) => m.userId === me)
   if (!row) return 'hand'
-  return row.status === 'pending' ? 'guest' : row.role
+  // anything but ACTIVE reads as a guest: an applicant still at the door, and
+  // someone who has left or been removed, may none of them put a hand on the
+  // board. Their rank is kept on the row (0007) so it survives, not so it acts.
+  return row.status === 'active' ? row.role : 'guest'
 }
 
 /** the same question from outside React — the sync loop's own guard */
@@ -250,7 +253,7 @@ export async function leaveCrew(ventureId: string): Promise<CrewResult> {
   const me = useAuthStore.getState().userId
   if (!shareId || !me) return { ok: false, reason: voice.workshop.crew.toast.offline }
   try {
-    await wireLeave(shareId, me)
+    await wireLeave(shareId)
   } catch {
     return { ok: false, reason: voice.workshop.crew.toast.offline }
   }

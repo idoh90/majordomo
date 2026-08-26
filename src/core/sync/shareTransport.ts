@@ -26,8 +26,16 @@ export type CrewVisibility = 'open' | 'vetted'
 /** what a hand on the crew may do. Enforced in the registry, not just drawn. */
 export type CrewRole = 'keeper' | 'hand' | 'guest'
 
-/** admitted, or still in the hall */
-export type CrewStanding = 'pending' | 'active'
+/**
+ * Where someone stands with a crew.
+ *
+ * `left` and `removed` exist so that a RANK survives a departure. A roster row
+ * is never deleted now: leaving used to be a DELETE, and since `join_share`
+ * seats anyone it does not already know as a `hand`, a demoted guest could
+ * leave and re-type the code to come back a writer, and a removed member could
+ * walk straight back into an open crew. The row stays so the rank does.
+ */
+export type CrewStanding = 'pending' | 'active' | 'left' | 'removed'
 
 export interface ShareInfo {
   id: string
@@ -48,7 +56,8 @@ export interface MemberRow {
  *  future rank this build has never heard of can only ever look, never write */
 const asRole = (v: unknown): CrewRole =>
   v === 'keeper' || v === 'hand' || v === 'guest' ? v : 'guest'
-const asStanding = (v: unknown): CrewStanding => (v === 'pending' ? 'pending' : 'active')
+const asStanding = (v: unknown): CrewStanding =>
+  v === 'pending' || v === 'left' || v === 'removed' ? v : 'active'
 const asVisibility = (v: unknown): CrewVisibility => (v === 'vetted' ? 'vetted' : 'open')
 
 /** Postgres refuses a batch that touches the same row twice; last write wins */
@@ -206,8 +215,11 @@ export async function listMemberships(): Promise<Memberships> {
   const active = new Set<string>()
   const pending = new Set<string>()
   for (const r of (data ?? []) as Array<{ share_id: string; status: string }>) {
-    if (asStanding(r.status) === 'pending') pending.add(r.share_id)
-    else active.add(r.share_id)
+    // `left` and `removed` are in NEITHER list: the row is kept so the rank
+    // survives, not because this device still belongs to the crew
+    const standing = asStanding(r.status)
+    if (standing === 'pending') pending.add(r.share_id)
+    else if (standing === 'active') active.add(r.share_id)
   }
   return { active: [...active], pending: [...pending] }
 }
@@ -305,27 +317,32 @@ export async function admitMember(shareId: string, userId: string): Promise<void
   if (error) throw new Error(error.message)
 }
 
-/** leaving is deleting your own roster row — plain DML under RLS */
-export async function leaveShare(shareId: string, userId: string): Promise<void> {
+/**
+ * Leaving marks the row `left`; it does not delete it (0007). An RPC rather
+ * than plain DML because a member must be able to change ONE column of their
+ * own row, and a policy wide enough to allow that would be wide enough to let
+ * them write their own `role` — RLS has no column granularity.
+ */
+export async function leaveShare(shareId: string): Promise<void> {
   const client = getClient()
   if (!client) return
   const sb = await client
-  const { error } = await sb
-    .from('share_members')
-    .delete()
-    .eq('share_id', shareId)
-    .eq('user_id', userId)
+  const { error } = await sb.rpc('leave_share', { p_share: shareId })
   if (error) throw new Error(error.message)
 }
 
-/** kicking is the owner deleting someone else's — the policy checks who asks */
+/**
+ * Removing someone, and turning an applicant away, are the same act: the row
+ * stands, marked `removed`, and the code will not let them back in. Deleting
+ * it would erase the rank along with the person.
+ */
 export async function kickMember(shareId: string, userId: string): Promise<void> {
   const client = getClient()
   if (!client) return
   const sb = await client
   const { error } = await sb
     .from('share_members')
-    .delete()
+    .update({ status: 'removed' })
     .eq('share_id', shareId)
     .eq('user_id', userId)
   if (error) throw new Error(error.message)

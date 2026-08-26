@@ -201,7 +201,7 @@ async function pullOne(shareId: string): Promise<void> {
       .ventures.some((v) => v.shareId === shareId)
     if (!stillHere) {
       const me = useAuthStore.getState().userId
-      if (me) await leaveShare(shareId, me).catch(() => {})
+      if (me) await leaveShare(shareId).catch(() => {})
       useShareStore.getState().dropShare(shareId)
       return
     }
