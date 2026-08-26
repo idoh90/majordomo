@@ -5,6 +5,7 @@ import { hoursOf, rangeFree } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
 import { useShellStore } from '../../core/store/shell'
+import { useShareStore } from '../../core/sync/shareStore'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { Hinted } from '../../core/ui/Hint'
 import { Sheet } from '../../core/ui/Sheet'
@@ -14,7 +15,7 @@ import { WorkshopBriefing } from './Briefing'
 import { Board } from './Board'
 import { BenchControl } from './bench'
 import { CrewScreen } from './CrewScreen'
-import { crewsAvailable } from './share'
+import { crewRole, crewsAvailable } from './share'
 import {
   COPPER,
   DayStrip,
@@ -905,6 +906,25 @@ function ShelfCard({
   butler: (msg: string) => void
 }) {
   const workEntries = useWorkshopStore((s) => s.workEntries)
+  /**
+   * A GUEST reads the shelf and does not rewrite it — the same rule the board
+   * has had all along, in the place it was missing.
+   *
+   * RENAME, SHIP, SHELVE and REOPEN write `name`, `goalH`, `status` and
+   * `shippedAt`, and every one of those is a field of the crew's shared face.
+   * The registry refuses a guest's push (0006), so nothing of theirs was ever
+   * reaching the crew — but nothing said so either: the butler answered
+   * "Renamed.", `drainShare` dropped the queued record on the floor, and the
+   * guest's device kept showing a name nobody else could see, for good, since
+   * a record that is no longer dirty is never pushed again.
+   *
+   * ARCHIVE stays open to everyone: `archived` is not a shared field, it is
+   * this shelf's own opinion about what to show.
+   */
+  const members = useWorkshopStore((s) => s.members)
+  const owners = useShareStore((s) => s.owners)
+  const me = useAuthStore((s) => s.userId)
+  const readOnly = crewRole(venture.shareId, members, owners, me) === 'guest'
   const lifetime = lifetimeHours(events, sessions, venture, workEntries)
   const quiet = daysSinceTouched(events, sessions, venture, now, workEntries)
   const shippedMonth = venture.shippedAt
@@ -1025,12 +1045,16 @@ function ShelfCard({
       <div className="mt-1 text-[11.5px] text-ink-dim">{touchedLine}</div>
       <TaskProgressBar progress={tasks} bare className="mt-2.5" />
       <div className="mt-2.5 flex gap-3">
-        {act(voice.workshop.rename, onRename)}
-        {(venture.status === 'spark' || venture.status === 'building') &&
+        {!readOnly && act(voice.workshop.rename, onRename)}
+        {!readOnly &&
+          (venture.status === 'spark' || venture.status === 'building') &&
           act(voice.workshop.ship, set('shipped', tt.shipped))}
-        {(venture.status === 'spark' || venture.status === 'building') &&
+        {!readOnly &&
+          (venture.status === 'spark' || venture.status === 'building') &&
           act(voice.workshop.shelve, set('shelved', tt.shelved))}
-        {venture.status === 'shelved' && act(voice.workshop.reopen, set('building', tt.reopened))}
+        {!readOnly &&
+          venture.status === 'shelved' &&
+          act(voice.workshop.reopen, set('building', tt.reopened))}
         {(venture.status === 'shipped' || venture.status === 'shelved') &&
           act(voice.workshop.archive, onArchive)}
       </div>

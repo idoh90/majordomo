@@ -334,6 +334,41 @@ const venturePayload = (id, name) => ({
   say(v.name === 'Back In', 'and the crew speaks for its face again', `name=${v.name}`)
 }
 
+/* ====== 14b. WHAT THIS DEVICE PUBLISHES — the other side of the fold ======
+ * Every check above asks what a crew may put INTO this device. This one asks
+ * what the device hands OUT, and it is the same question about a different
+ * door: `adoptPrivateCopy` keeps the whole work ledger when a venture goes
+ * private, so a venture that has been through one crew still carries rows
+ * authored by that crew's members. Opening it to a NEW crew published them —
+ * another person's account id, the days they worked and for how long, to
+ * strangers they never met.
+ *
+ * The crewName in the fixture is 'Rook'; the signed-in id below is what the
+ * emitter compares each row's `by` against. */
+{
+  await p.evaluate(() => {
+    window.__auth.setState({ status: 'signedIn', userId: 'rook', email: 'rook@example.com' })
+    const w = window.__workshop.getState()
+    w.upsertWorkEntries({
+      'ev-mine': { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 1, by: 'rook' },
+      'ev-theirs': { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 9, by: 'someone-else' },
+    })
+  })
+  const out = await p.evaluate((share) =>
+    window.__shareFold(share).toRecords()
+      .filter((r) => r.kind === 'work')
+      .map((r) => r.id), S1)
+  say(out.includes('ev-mine'), 'this device publishes the hours it worked')
+  say(!out.includes('ev-theirs'),
+      "and never another member's, carried over from an earlier crew",
+      `published=${JSON.stringify(out)}`)
+  // the ledger row is still HELD locally — the fix is about what leaves, not
+  // about destroying a record of who did the work
+  const kept = await p.evaluate(() =>
+    Object.keys(window.__workshop.getState().workEntries).includes('ev-theirs'))
+  say(kept, 'while the entry itself is kept on this device')
+}
+
 /* ====== 15. the crew's OTHER front door: a link from a stranger ==========
  * `?join=` is attacker-supplied text that gets PERSISTED. A code containing a
  * malformed percent-escape made `decodeURIComponent` throw during render — and

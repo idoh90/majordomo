@@ -178,8 +178,11 @@ export async function shareVenture(ventureId: string): Promise<CrewResult> {
     ...after.cards.filter((c) => c.ventureId === ventureId).map((c) => shareRecordKey(shareId, 'card', c.id)),
     ...after.threads.filter((t) => t.ventureId === ventureId).map((t) => shareRecordKey(shareId, 'thread', t.id)),
     ...after.milestones.filter((m) => m.ventureId === ventureId).map((m) => shareRecordKey(shareId, 'milestone', m.id)),
+    // my own hours only — see the note on the same filter in shareSource's
+    // `toRecords`. A venture that has been through an earlier crew still holds
+    // that crew's ledger rows, and they are not this device's to hand on.
     ...Object.entries(after.workEntries)
-      .filter(([, en]) => en.ventureId === ventureId)
+      .filter(([, en]) => en.ventureId === ventureId && me !== null && en.by === me)
       .map(([key]) => shareRecordKey(shareId, 'work', key)),
   ]
   useShareStore.getState().markDirty(keys, Date.now())

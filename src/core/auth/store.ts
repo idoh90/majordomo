@@ -150,3 +150,11 @@ export function initAuth(): void {
       useAuthStore.setState({ status: 'signedOut', error: message(e) })
     })
 }
+
+/* The signed-in account, in dev — the share fold's emission side depends on
+ * "who am I", and a harness that cannot answer that question can only ever
+ * test the signed-out case, which is the one where nothing is published at
+ * all. Same shape as `__workshop` / `__events`; stripped from the build. */
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  ;(window as unknown as Record<string, unknown>).__auth = useAuthStore
+}

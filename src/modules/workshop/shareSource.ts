@@ -1,3 +1,4 @@
+import { useAuthStore } from '../../core/auth/store'
 import { isDayKey } from '../../core/dates'
 import { mergeList, mergeMap } from '../../core/sync/merge'
 import { noteDeleted } from '../../core/sync/intent'
@@ -228,6 +229,7 @@ export function shareSource(shareId: string): SyncSource {
     wing,
     toRecords: () => {
       const s = useWorkshopStore.getState()
+      const me = useAuthStore.getState().userId
       const mine = s.ventures.filter((v) => v.shareId === shareId)
       const ids = new Set(mine.map((v) => v.id))
       return [
@@ -247,8 +249,17 @@ export function shareSource(shareId: string): SyncSource {
         ...s.milestones
           .filter((m) => ids.has(m.ventureId))
           .map((m) => rec(wing, 'milestone', m.id, m)),
+        // A DEVICE PUBLISHES ONLY THE HOURS IT WORKED. `adoptPrivateCopy` keeps
+        // the whole ledger when a venture goes private — departed hours are
+        // history — so a venture that has been through one crew still carries
+        // rows authored by people from that crew. Opening it to a NEW crew used
+        // to push those rows too: another person's account id, the days they
+        // worked and for how long, handed to strangers they never met, and
+        // drawn in the crew room under the first eight characters of their uuid.
+        // The registry's own author stamp already refuses these on the far side
+        // (see `ledger`), so publishing them was never anything but a leak.
         ...Object.entries(s.workEntries)
-          .filter(([, en]) => ids.has(en.ventureId))
+          .filter(([, en]) => ids.has(en.ventureId) && me !== null && en.by === me)
           .map(([key, en]) => rec(wing, 'work', key, en)),
       ]
     },
