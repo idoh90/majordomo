@@ -59,6 +59,15 @@ const readEvents = (page) =>
     }))
   })
 
+/* The boot gate (public/boot-gate.js + src/main.tsx) shows the LANDING to a
+   browser with no majordomo* key — correct for strangers, wrong for this
+   harness, whose whole world is the app. One sentinel key flips the gate
+   without touching any store's persisted blob, so every estate here is still
+   exactly as empty or as demo-seeded as it always was. */
+async function seedEstate(ctx) {
+  await ctx.addInitScript(() => localStorage.setItem('majordomo-harness', '1'))
+}
+
 async function fresh(browser, { width, height }) {
   const ctx = await browser.newContext({
     viewport: { width, height },
@@ -66,6 +75,7 @@ async function fresh(browser, { width, height }) {
     // the app buckets by LOCAL time everywhere; pin a zone so runs are comparable
     timezoneId: 'Asia/Jerusalem',
   })
+  await seedEstate(ctx)
   const page = await ctx.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(String(e)))
@@ -367,6 +377,7 @@ async function desktopChecks(browser) {
       viewport: { width: 1440, height: 900 },
       timezoneId: 'Asia/Jerusalem',
     })
+    await seedEstate(c)
     const q = await c.newPage()
     await q.goto(`${BASE}/?demo`, { waitUntil: 'networkidle' })
     await q.waitForTimeout(700)
@@ -405,6 +416,7 @@ async function desktopChecks(browser) {
       viewport: { width: 1440, height: 900 },
       timezoneId: 'Asia/Jerusalem',
     })
+    await seedEstate(c)
     const q = await c.newPage()
     await q.goto(`${BASE}/?demo`, { waitUntil: 'networkidle' })
     await q.waitForTimeout(700)
@@ -518,6 +530,7 @@ async function desktopChecks(browser) {
     viewport: { width: 1440, height: 900 },
     timezoneId: 'Asia/Jerusalem',
   })
+  await seedEstate(ctx2)
   const p2 = await ctx2.newPage()
   await p2.goto(`${BASE}/`, { waitUntil: 'networkidle' }) // no ?demo → empty estate
   await p2.waitForTimeout(600)

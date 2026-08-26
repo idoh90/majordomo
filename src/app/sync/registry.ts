@@ -13,7 +13,7 @@ import { useStudyStore } from '../../modules/study/store'
 import { reconcileMarkers } from '../../modules/study/lib'
 import type { Exam, Homework, SessionMeta, Subject, SyllabusTopic } from '../../modules/study/types'
 import type { Profile } from '../../modules/training/lib/nutrition'
-import { useWorkoutStore } from '../../modules/training/store'
+import { byName, useWorkoutStore } from '../../modules/training/store'
 import type { Workout } from '../../modules/training/types'
 import { useWatchStore } from '../../modules/watch/store'
 import type { ShiftTemplate } from '../../modules/watch/types'
@@ -150,6 +150,10 @@ const groundsSource: SyncSource = {
       ...s.workouts.map((w) => rec('grounds', 'workout', w.id, w)),
       rec('grounds', 'pref', 'weeklyGoal', s.weeklyGoal),
       rec('grounds', 'pref', 'profile', s.profile),
+      // the user's OWN exercises only. The bundled catalogue is code, byte
+      // identical on every device, so carrying it would be 736 rows of write
+      // storm for no information — the prices/fx exclusion reasoning.
+      ...s.customExercises.map((e) => rec('grounds', 'exercise', e.id, e)),
       // `skin` is a frozen legacy passthrough nothing reads — excluded
     ]
   },
@@ -158,6 +162,12 @@ const groundsSource: SyncSource = {
     const workouts = of(records, 'workout')
     if (workouts.length > 0) {
       useWorkoutStore.setState((s) => ({ workouts: mergeList(s.workouts, workouts, byDateDesc) }))
+    }
+    const exercises = of(records, 'exercise')
+    if (exercises.length > 0) {
+      useWorkoutStore.setState((s) => ({
+        customExercises: mergeList(s.customExercises, exercises, byName),
+      }))
     }
     for (const r of of(records, 'pref')) {
       if (r.deleted) continue

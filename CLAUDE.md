@@ -60,6 +60,14 @@ technical version.
   deploy time is a function nobody typechecked.
 - `npm run lint` — ESLint, **import-boundary rules only** (no style rules).
   Scoped to `src`; `api/` is outside it (nothing there may import the app anyway).
+- `npm run vendor:exercises` — regenerates the exercise catalogue
+  (`scripts/vendor-exercises.mjs` → `src/modules/training/data/exercises.ts`) from
+  free-exercise-db, **pinned to a commit**, mapping its 17 muscle names onto the
+  app's 16 plates. Hand-run and committed; deliberately NOT part of `npm run build`
+  — a build that needs the network is a build that breaks on a plane. An unknown
+  muscle name, an unknown equipment value, or an OVERRIDES key upstream no longer
+  has are all **hard errors**: a corrections table that silently stops applying
+  ships wrong muscles.
 - `npm run bell:probe` — the **Bell probe** (`scripts/bell-probe.mjs`): rings
   `/api/bell` with a real session token, streams the reply to the terminal, and
   prints the token counts the model actually charged against the estimates in
@@ -431,9 +439,13 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 ### The three stores (one localStorage key each, fully independent)
 
 - **`majordomo-training` v5** (`modules/training/store.ts`) — `{ workouts, weeklyGoal,
-  profile, skin }`. Workouts may carry optional `setsTotal` / `durationMin` (the two
-  session-size inputs on the effort step — additive, so no migrate was needed and old
-  blobs/exports round-trip). The `skin` field is **legacy/frozen**: nothing reads or
+  profile, customExercises, skin }`. Workouts may carry optional `setsTotal` /
+  `durationMin` (the two session-size inputs on the effort step) and an optional
+  `exercises` list (the named-lift flow) — all additive, so no migrate was needed
+  and old blobs/exports round-trip. `customExercises` (exercises the user wrote
+  themselves) landed the same way: a defaulted key an older blob simply lacks, so
+  persist's shallow merge leaves the initializer standing. **Only a changed meaning
+  needs a version bump.** The `skin` field is **legacy/frozen**: nothing reads or
   writes it anymore, but it stays in the interface/partialize/migrate so old blobs and
   exports round-trip unchanged. Do not bump the version for shell concerns.
 - **`majordomo-shell` v4** (`core/store/shell.ts`) — `{ skin, weekStart }`. On
@@ -801,8 +813,16 @@ ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
 - **Weekly volume mode** — `modules/training/lib/volume.ts` estimates "effective hard
   sets" per muscle over a **trailing 7 days** (deliberately not the calendar week —
   no Monday reset), classifies each against RP-style MEV/MAV/MRV `LANDMARKS`, and the
-  body map has a **Strain | Volume** toggle. Sets come from a per-session **budget**
-  split across the muscles trained, most-informed source first: the logged
+  body map has a **Strain | Volume** toggle. A session logged **exercise by
+  exercise** skips the estimate entirely: every set was written down against the
+  exercise that held it, so each muscle is credited DIRECTLY (per-exercise role,
+  ×0.5 for assisting, × the same effort discount). Its per-muscle total legitimately
+  exceeds the session's set count — that is the RP convention the landmarks are
+  stated in, where a bench set is one chest set AND a fraction of a triceps set.
+  **Anything summing `sessionSets` across all muscles to get a session's size is
+  therefore wrong and must call `sessionBudget` instead** (the Manor's volume dial
+  did, and was corrected). Otherwise sets come from a per-session **budget** split
+  across the muscles trained, most-informed source first: the logged
   `setsTotal` (verbatim; discounted below effort 5) → `durationMin` × ~18 sets/h →
   a saturating muscle-count estimate — so a chest-only day credits chest ~2.6× what
   a five-muscle day does, instead of the old flat per-muscle constant. Plates paint
@@ -847,6 +867,22 @@ ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
   path strings, viewBox 200×440). Paired muscles are authored as LEFT-half paths and
   mirrored via `transform="translate(200 0) scale(-1 1)"` for guaranteed symmetry.
   The silhouette is one half-path closed along the centerline, rendered twice.
+- **Named exercises** — the fifth door on the add sheet's method step: pick
+  exercises from a catalogue, log **kg × reps per set**, with last session's numbers
+  standing as the row placeholders. It is a parallel path, not a replacement: PPL /
+  PICK MUSCLES / RUN / SPORT are untouched. A session saved this way is still
+  `method: 'custom'` (no new union member, so nothing that classifies a session had
+  to learn a shape) carrying `exercises`; its muscles, `setsTotal` and rep-style
+  prefill are all **derived** from the list, and the effort step's Working-sets field
+  is replaced by what the log counts — a box that takes a number and then overwrites
+  it is the Ledger's cardinal sin. Names and muscles are copied onto the workout at
+  save, the PPL rule, so re-vendoring the catalogue never rewrites history.
+  - The catalogue is **736 entries generated into `data/exercises.ts`** and reached
+    only through a dynamic import (`data/catalogue.ts`), so its ~100 KB stays out of
+    the entry chunk the boot curtain covers and is precached like any other script —
+    the picker opens offline. It is code, not records: **never synced.** The user's
+    OWN exercises are records (`customExercises`, id prefix `cx-`) and ride the
+    grounds sync source as a new `'exercise'` kind.
 - **PPL workouts resolve to concrete muscle lists at save time** (denormalized into
   each Workout) so tuning `PPL_MAP` in `modules/training/data/muscles.ts` never
   rewrites history.
@@ -854,6 +890,35 @@ ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
   `src/core/dates.ts`. Never bucket with `toISOString().slice(0,10)` (UTC shift bug).
 - **Entrance animations** start from a visible state on purpose (see comment in
   `core/ui/index.css`) — a frozen animation must never hide content.
+
+## The front door — `?landing` (production, NOT a dev flag)
+
+One document serves both the landing page and the app; `public/boot-gate.js` decides
+before first paint which one a browser sees, and `src/main.tsx` loads the matching
+chunk. **`?landing` is that decision, overridden by hand** — the front door's own
+address. Settings → HELP & TIPS → *The front door* navigates to it
+(`app/frontDoor.ts`), and the landing's CTA comes back the other way.
+
+- **Three files must agree** on who is at the door: the boot gate (which shows or
+  hides the prerendered markup), `main.tsx` (which picks the chunk), and the CTA
+  (which is the way back in). The two questions themselves live in ONE place —
+  `src/landing/arrival.ts` — and the boot gate restates them in ES5 because the CSP
+  forbids an inline script. Change one, change the gate.
+- **It navigates rather than swapping the root in place**, which is the reverse of
+  `landing/enterApp.ts`. `bootApp()` is not re-entrant — it registers the service
+  worker, opens the registry, starts sync and takes the root — so a round trip
+  inside one document would run all of it twice. A fresh document costs a frame and
+  the shell is precached, so this works offline.
+- **`enterApp()` strips the param** before booting. Left standing, the next reload
+  would walk the user straight back out of his own app — the same reasoning as the
+  `?join` gate.
+- **A resident's revisit is not counted.** `mountLanding({ revisit })` skips
+  `startAnalytics()` when the browser already holds an estate: the landing's numbers
+  are about strangers, and the owner sightseeing would quietly inflate them.
+- **The CTA's copy changes for a resident, in an EFFECT and never during render.**
+  The page is prerendered and hydrated; build-time markup cannot know whose browser
+  it lands in, so deciding that copy on the first render mismatches hydration on
+  every visit that has an estate.
 
 ## Dev-only URL params (guarded by `import.meta.env.DEV`)
 
@@ -871,8 +936,9 @@ auto-enter Training so they land on the right screen.
 - `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by
   the **shell** store (founder machines also accept the seven legacy skin ids)
 - `?sheet=add` / `?sheet=effort` / `?sheet=when` / `?sheet=sport` / `?sheet=muscles`
-  — opens the add sheet on load (effort = edit mode on newest workout; when = also
-  expands the calendar; sport / muscles = the blank flow open on that picker)
+  / `?sheet=exercises` — opens the add sheet on load (effort = edit mode on newest
+  workout; when = also expands the calendar; sport / muscles / exercises = the blank
+  flow open on that picker)
 - `?sheet=skin` — opens the App-skin picker sheet on load
 - `?board` / `?board=<ventureId>` — opens the Workshop on a venture's pegboard
   (first venture when unnamed) — screenshot aid · `window.__workshop` — store handle

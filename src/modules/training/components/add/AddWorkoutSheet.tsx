@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useReducer, useRef } from 'react'
-import type { MuscleId, PplType, RepStyle, SportId, Workout } from '../../types'
+import type {
+  CatalogueExercise,
+  MuscleId,
+  PplType,
+  RepStyle,
+  SportId,
+  Workout,
+} from '../../types'
 import { PPL_MAP, RUN_MAP } from '../../data/muscles'
 import { SPORT_DOOR_OPEN, SPORT_MAP } from '../../data/sports'
 import { makeId, useWorkoutStore } from '../../store'
@@ -10,6 +17,7 @@ import { voice } from '../../../../core/voice'
 import { Sheet } from '../../../../core/ui/Sheet'
 import type { BlockLink } from './BlockLinkNote'
 import { EffortStep } from './EffortStep'
+import { ExercisesStep } from './ExercisesStep'
 import { MethodStep } from './MethodStep'
 import { MuscleStep } from './MuscleStep'
 import { PplStep } from './PplStep'
@@ -17,6 +25,14 @@ import { SportStep } from './SportStep'
 import { DEFAULT_PACE, EMPTY_RUN_FIELDS, RunStep, runFieldSeconds, type RunFields } from './RunStep'
 import { secondsToMinutes } from '../../lib/runs'
 import { gymEffort } from '../../lib/gymEffort'
+import {
+  deriveSelection,
+  EMPTY_SET,
+  toLoggedExercises,
+  totalSets,
+  type DraftExercise,
+  type DraftSet,
+} from '../../lib/exercises'
 import { clampPace, EFFORT_LIVE, runEffort } from '../../lib/pace'
 import { strainToColor } from '../../lib/strainColor'
 import { SKINS } from '../../../../core/ui/skins'
@@ -24,8 +40,10 @@ import { useShellStore } from '../../../../core/store/shell'
 
 export type Selection = Partial<Record<MuscleId, 'primary' | 'secondary'>>
 
-type Step = 'method' | 'ppl' | 'muscles' | 'run' | 'sport' | 'effort'
-type Method = 'ppl' | 'custom' | 'run' | 'sport'
+type Step = 'method' | 'ppl' | 'muscles' | 'run' | 'sport' | 'exercises' | 'effort'
+/** 'exercises' is a DRAFT method only — it saves as 'custom' with an exercise
+ *  list attached, so nothing that classifies a session has to learn a shape */
+type Method = 'ppl' | 'custom' | 'run' | 'sport' | 'exercises'
 
 /** log-fulfills-block aim: follow the ranked match, claim a named block, or
  *  claim none. Any change of time re-ranks, so the override dies with it. */
@@ -39,6 +57,10 @@ interface Draft {
   selection: Selection
   /** run fields kept as strings — empty means "not recorded" */
   run: RunFields
+  /** the named exercises this session holds, in the order they were added —
+   *  only ever filled by the exercise flow. Its sets are strings while typed,
+   *  the same "empty means not recorded" rule the fields below follow. */
+  exercises: DraftExercise[]
   /** lift session size, same string convention — empty means "not recorded" */
   setsTotal: string
   durationMin: string
@@ -58,6 +80,11 @@ type Action =
   | { type: 'cycle'; muscle: MuscleId }
   | { type: 'continue' }
   | { type: 'back' }
+  | { type: 'exercise-add'; exercise: CatalogueExercise }
+  | { type: 'exercise-remove'; index: number }
+  | { type: 'set-add'; exercise: number }
+  | { type: 'set-remove'; exercise: number; set: number }
+  | { type: 'set-edit'; exercise: number; set: number; patch: Partial<DraftSet> }
   | { type: 'run'; patch: Partial<RunFields> }
   | { type: 'session'; patch: Partial<Pick<Draft, 'setsTotal' | 'durationMin'>> }
   | { type: 'effort'; value: number }
@@ -76,10 +103,28 @@ function runSelection(): Selection {
   return selection
 }
 
+/** the exercise list and the muscles it implies always move together — the
+ *  selection is what every surface downstream already reads (the effort step's
+ *  chips, the header's heat, save's two arrays), so the exercise flow keeps it
+ *  current instead of teaching them all a second source */
+const withExercises = (d: Draft, exercises: DraftExercise[]): Draft => ({
+  ...d,
+  exercises,
+  selection: deriveSelection(exercises),
+})
+
+/** editing one exercise's sets leaves the muscles alone — only adding or
+ *  removing an exercise can change what the session trained */
+const withSets = (d: Draft, index: number, sets: DraftSet[]): Draft => ({
+  ...d,
+  exercises: d.exercises.map((e, i) => (i === index ? { ...e, sets } : e)),
+})
+
 function reducer(d: Draft, a: Action): Draft {
   switch (a.type) {
     case 'method':
       if (a.method === 'ppl') return { ...d, method: 'ppl', step: 'ppl' }
+      if (a.method === 'exercises') return { ...d, method: 'exercises', step: 'exercises' }
       if (a.method === 'run')
         return { ...d, method: 'run', selection: runSelection(), repStyle: 'light', step: 'run' }
       // the two ways into the sport step, both sealed while the door is shut,
@@ -107,6 +152,44 @@ function reducer(d: Draft, a: Action): Draft {
         current === undefined ? 'primary' : current === 'primary' ? 'secondary' : undefined
       return { ...d, selection: { ...d.selection, [a.muscle]: next } }
     }
+    case 'exercise-add':
+      return withExercises(d, [
+        ...d.exercises,
+        {
+          exerciseId: a.exercise.id,
+          // name and muscles are COPIED, not referenced: the PPL rule, so a
+          // later catalogue re-vendor cannot rewrite what a session recorded
+          name: a.exercise.name,
+          primary: a.exercise.primary,
+          secondary: a.exercise.secondary,
+          sets: [EMPTY_SET],
+        },
+      ])
+    case 'exercise-remove':
+      return withExercises(
+        d,
+        d.exercises.filter((_, i) => i !== a.index),
+      )
+    case 'set-add': {
+      const sets = d.exercises[a.exercise]?.sets ?? []
+      // a new set repeats the last one — the same weight for the same reps is
+      // what the next set usually is, and it is one tap to change
+      return withSets(d, a.exercise, [...sets, sets[sets.length - 1] ?? EMPTY_SET])
+    }
+    case 'set-remove':
+      return withSets(
+        d,
+        a.exercise,
+        (d.exercises[a.exercise]?.sets ?? []).filter((_, i) => i !== a.set),
+      )
+    case 'set-edit':
+      return withSets(
+        d,
+        a.exercise,
+        (d.exercises[a.exercise]?.sets ?? []).map((s, i) =>
+          i === a.set ? { ...s, ...a.patch } : s,
+        ),
+      )
     case 'continue':
       return { ...d, step: 'effort' }
     case 'back':
@@ -126,10 +209,18 @@ function reducer(d: Draft, a: Action): Draft {
                 ? 'run'
                 : d.method === 'sport'
                   ? 'sport'
-                  : 'muscles',
+                  : d.method === 'exercises'
+                    ? 'exercises'
+                    : 'muscles',
         }
       }
-      if (d.step === 'ppl' || d.step === 'muscles' || d.step === 'run' || d.step === 'sport')
+      if (
+        d.step === 'ppl' ||
+        d.step === 'muscles' ||
+        d.step === 'run' ||
+        d.step === 'sport' ||
+        d.step === 'exercises'
+      )
         return { ...d, step: 'method' }
       return d
     case 'run':
@@ -158,6 +249,7 @@ const freshDraft = (): Draft => ({
   ppl: null,
   sportKind: null,
   selection: {},
+  exercises: [],
   run: EMPTY_RUN_FIELDS,
   setsTotal: '',
   durationMin: '',
@@ -180,10 +272,25 @@ function draftFromWorkout(w: Workout): Draft {
   const storedKm = w.run?.distanceKm
   return {
     step: 'effort',
-    method: w.method,
+    // a stored session re-enters the flow it was logged through, so Back leads
+    // to the step that made it rather than to a picker it never used
+    method: w.exercises?.length ? 'exercises' : w.method,
     ppl: w.ppl ?? null,
     sportKind: w.sport?.kind ?? null,
     selection,
+    // the STORED muscles win on open, not the ones the exercises imply: an
+    // edit that touches nothing must round-trip verbatim, and the derivation
+    // only re-runs when an exercise is actually added or removed
+    exercises: (w.exercises ?? []).map((e) => ({
+      exerciseId: e.exerciseId,
+      name: e.name,
+      primary: e.primary,
+      secondary: e.secondary,
+      sets: e.sets.map((s) => ({
+        weightKg: s.weightKg != null ? String(s.weightKg) : '',
+        reps: s.reps != null ? String(s.reps) : '',
+      })),
+    })),
     run: {
       distanceKm: storedKm != null ? String(storedKm) : '',
       paceSec:
@@ -223,6 +330,7 @@ const TITLES: Record<Step, string> = {
   muscles: 'What did you hit?',
   run: 'How far?',
   sport: voice.grounds.sport.stepTitle,
+  exercises: voice.grounds.exercises.stepTitle,
   effort: 'How did it go?',
 }
 
@@ -232,6 +340,7 @@ const STEP_INDEX: Record<Step, number> = {
   muscles: 1,
   run: 1,
   sport: 1,
+  exercises: 1,
   effort: 2,
 }
 
@@ -241,9 +350,9 @@ interface AddWorkoutSheetProps {
   onClose: () => void
   /** dev screenshot aid — open the When calendar immediately */
   devWhenOpen?: boolean
-  /** dev screenshot aid — start the blank flow on the sport picker or the
-      muscle picker */
-  devStartStep?: 'sport' | 'muscles'
+  /** dev screenshot aid — start the blank flow on the sport picker, the
+      muscle picker or the exercise list */
+  devStartStep?: 'sport' | 'muscles' | 'exercises'
 }
 
 export function AddWorkoutSheet({
@@ -270,7 +379,11 @@ export function AddWorkoutSheet({
     opened.current = fresh
     dispatch({ type: 'reset', draft: fresh })
     if (devStartStep && !editing)
-      dispatch({ type: 'method', method: devStartStep === 'sport' ? 'sport' : 'custom' })
+      dispatch({
+        type: 'method',
+        method:
+          devStartStep === 'sport' ? 'sport' : devStartStep === 'exercises' ? 'exercises' : 'custom',
+      })
   }, [open, editing, devStartStep])
 
   /** anything the user has chosen — step position alone doesn't count, since
@@ -372,9 +485,17 @@ export function AddWorkoutSheet({
       if (link.kind === 'event' && ranked.some((e) => e.id === link.id)) return link.id
       return ranked[0]?.id
     })()
+    // the exercise flow saves as a custom session carrying its list — listed in
+    // `base` even when empty so re-casting an edit through another method
+    // CLEARS a stale list rather than leaving it behind the shallow merge
+    const viaExercises = draft.method === 'exercises'
+    const exercises = viaExercises ? toLoggedExercises(draft.exercises) : undefined
+    const method: Workout['method'] =
+      draft.method === null || draft.method === 'exercises' ? 'custom' : draft.method
     const base = {
       performedAt,
-      method: draft.method ?? 'custom',
+      method,
+      exercises,
       ppl: draft.method === 'ppl' ? (draft.ppl ?? undefined) : undefined,
       run:
         draft.method === 'run'
@@ -387,8 +508,13 @@ export function AddWorkoutSheet({
       effort: draft.effort,
       strainFeel: draft.strainFeel,
       // lifts only — a run's clock lives in run.durationMin, and conditioning
-      // has no working sets to count
-      setsTotal: isConditioning ? undefined : count(draft.setsTotal),
+      // has no working sets to count. A session logged exercise by exercise
+      // COUNTS its sets instead of being asked for them.
+      setsTotal: viaExercises
+        ? (totalSets(exercises ?? []) || undefined)
+        : isConditioning
+          ? undefined
+          : count(draft.setsTotal),
       durationMin: isConditioning ? undefined : count(draft.durationMin),
       repStyle: draft.repStyle,
       eventId,
@@ -502,6 +628,26 @@ export function AddWorkoutSheet({
             }}
           />
         )}
+        {draft.step === 'exercises' && (
+          <ExercisesStep
+            exercises={draft.exercises}
+            workouts={workouts}
+            editingId={editing?.id}
+            holdEffort={muscleUntouched}
+            onAdd={(exercise) => dispatch({ type: 'exercise-add', exercise })}
+            onRemove={(index) => dispatch({ type: 'exercise-remove', index })}
+            onSetAdd={(exercise) => dispatch({ type: 'set-add', exercise })}
+            onSetRemove={(exercise, set) => dispatch({ type: 'set-remove', exercise, set })}
+            onSetEdit={(exercise, set, patch) =>
+              dispatch({ type: 'set-edit', exercise, set, patch })
+            }
+            onContinue={(effortPrefill, repStyle) => {
+              if (effortPrefill !== null) dispatch({ type: 'effort', value: effortPrefill })
+              if (repStyle !== null) dispatch({ type: 'repStyle', value: repStyle })
+              dispatch({ type: 'continue' })
+            }}
+          />
+        )}
         {draft.step === 'sport' && (
           <SportStep
             value={draft.sportKind}
@@ -529,6 +675,11 @@ export function AddWorkoutSheet({
             repStyle={draft.repStyle}
             setsTotal={draft.setsTotal}
             durationMin={draft.durationMin}
+            countedSets={
+              draft.method === 'exercises'
+                ? { sets: totalSets(draft.exercises), exercises: draft.exercises.length }
+                : null
+            }
             onEffort={(value) => dispatch({ type: 'effort', value })}
             onStrainFeel={(value) => dispatch({ type: 'strainFeel', value })}
             onRepStyle={(value) => dispatch({ type: 'repStyle', value })}

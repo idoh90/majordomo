@@ -2,12 +2,17 @@ import { voice } from '../../../../core/voice'
 import { SPORT_DOOR_OPEN } from '../../data/sports'
 
 interface MethodStepProps {
-  onChoose: (method: 'ppl' | 'custom' | 'run' | 'sport') => void
+  onChoose: (method: 'ppl' | 'custom' | 'run' | 'sport' | 'exercises') => void
 }
 
 export function MethodStep({ onChoose }: MethodStepProps) {
   return (
     <div className="flex flex-col gap-3">
+      <Choice
+        title={voice.grounds.exercises.methodTitle}
+        caption={voice.grounds.exercises.methodCaption}
+        onClick={() => onChoose('exercises')}
+      />
       <Choice
         title="PUSH / PULL / LEGS"
         caption="One tap — the split fills in the muscles for you."

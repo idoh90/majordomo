@@ -779,6 +779,56 @@ export interface VoicePack {
        *  session)' — returns '' when both are zero, leading space included */
       weekTally: (v: { runs: number; sports: number }) => string
     }
+    /** EXERCISES — the named-lift flow: pick exercises, log kg × reps per set.
+     *  Exercise names themselves are wing data (the catalogue), never voice —
+     *  only the chrome around them lives here. */
+    exercises: {
+      /** the method step's fifth door: card title + its one-line caption */
+      methodTitle: string
+      methodCaption: string
+      /** sheet title while the session list / picker is up */
+      stepTitle: string
+      /** the session list: the button that opens the picker, and the line
+       *  standing where the list will be before anything is chosen */
+      addExercise: string
+      empty: string
+      /** the picker: its search field, the filter chip that clears the muscle
+       *  group, the line while the catalogue's chunk is still arriving, and
+       *  what a search matching nothing says */
+      searchPlaceholder: string
+      filterAll: string
+      loading: string
+      noResults: (v: { query: string }) => string
+      /** an exercise the user wrote themselves, marked in every list */
+      yoursTag: string
+      /** the door out of the picker into the create form, offered under a
+       *  search that found nothing (or too little) */
+      create: (v: { name: string }) => string
+      /** the create form: heading, its two fields, and the refusal when no
+       *  muscle has been marked as taking the brunt */
+      createTitle: string
+      createNameLabel: string
+      createNamePlaceholder: string
+      createMusclesLabel: string
+      createMusclesHint: string
+      createSave: string
+      createNeedsName: string
+      createNeedsPrimary: string
+      /** a set row: the add button, and the tally under an exercise's name */
+      addSet: string
+      setCount: (n: number) => string
+      /** the two set columns */
+      weightLabel: string
+      repsLabel: string
+      /** last session's numbers for this exercise, shown while logging the
+       *  next — `sets` arrives pre-formatted ('60×8 · 60×8 · 62.5×6') */
+      lastTime: (v: { sets: string }) => string
+      /** the effort step, where the working-sets field would otherwise be:
+       *  this session's size, counted rather than estimated */
+      derivedSets: (v: { sets: number; exercises: number }) => string
+      /** detail sheet: the heading over the session's exercises */
+      detailTitle: string
+    }
     /** weekly-goal card + its dialog */
     weekTitle: string
     goalMet: string
@@ -1566,6 +1616,9 @@ export interface VoicePack {
     weekMon: string
     /** guidance */
     rerunBlurb: string
+    /** the way out to the landing page, and back in again */
+    frontDoorLabel: string
+    frontDoorBlurb: string
     /** the estate backup pair */
     exportBlurb: string
     /** the Grounds' own rows */

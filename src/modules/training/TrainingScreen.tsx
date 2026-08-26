@@ -62,7 +62,8 @@ export function TrainingScreen() {
     const params = new URLSearchParams(window.location.search)
     const sheet = params.get('sheet')
     const first = useWorkoutStore.getState().workouts[0]
-    if (sheet === 'add' || sheet === 'sport' || sheet === 'muscles') setSheetOpen(true)
+    if (sheet === 'add' || sheet === 'sport' || sheet === 'muscles' || sheet === 'exercises')
+      setSheetOpen(true)
     if ((sheet === 'effort' || sheet === 'when') && first) {
       setEditing(first)
       setSheetOpen(true)
@@ -115,7 +116,9 @@ export function TrainingScreen() {
         devStartStep={(() => {
           if (!import.meta.env.DEV) return undefined
           const sheet = new URLSearchParams(window.location.search).get('sheet')
-          return sheet === 'sport' || sheet === 'muscles' ? sheet : undefined
+          return sheet === 'sport' || sheet === 'muscles' || sheet === 'exercises'
+            ? sheet
+            : undefined
         })()}
       />
 

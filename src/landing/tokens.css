@@ -1,0 +1,259 @@
+/* source(none) + @source: utilities in THIS stylesheet come only from the
+   landing tree. Without it, Tailwind's auto-detection would scan the whole
+   repo and bake the app's every class into a render-blocking stylesheet whose
+   entire job is painting one prerendered page fast. */
+@import "tailwindcss" source(none);
+@source "../landing";
+
+/* ---------------------------------------------------------------------------
+   Majordomo — landing tokens.
+
+   The Midnight preset, lifted verbatim from the app's src/core/ui/index.css so
+   the page and the product are the same physical object. Two additions the app
+   does not need:
+
+   - brass (--color-ember) is promoted to the MARKETING accent: the CTA, the
+     word MAJORDOMO, and one hairline rule. Nothing else on the page is brass.
+   - the wing accents stay exactly where they are in the app — INSIDE product
+     imagery, as data. They never colour page chrome.
+
+   Palette doctrine: two chrome colours (midnight + brass). Colour is meaning.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-bg: #0c1017;
+  --color-panel: #111826;
+  --color-panel-2: #1a2232;
+  --color-line: #1e2739;
+
+  /* a trough is a recess cut through a panel down to page level — it holds
+     the screen's primary instrument. Here: the week. */
+  --color-trough: #0b1017;
+  --color-trough-line: #1a2130;
+  --color-subcard: #0d131e;
+
+  --color-ink: #e6ebf2;
+  --color-ink-dim: #8b97a8;
+  --color-ink-faint: #5e6a7d;
+
+  --color-accent: #7da7d0;
+  --color-ember: #d4ae6a;
+  --color-danger: #e06c5f;
+
+  /* wing accents — product imagery only */
+  --color-w-watch: #7da7d0;
+  --color-w-grounds: #68b984;
+  --color-w-ledger: #d4ae6a;
+  --color-w-study: #a78bda;
+
+  --font-display: "Big Shoulders", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Source Sans 3", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --radius-pill: 9999px;
+  --radius-subcard: 10px;
+}
+
+:root {
+  color-scheme: dark;
+  /* the hero's hairline field and the brass rule share one pitch, so the page
+     reads as drawn on a single sheet */
+  --rule-pitch: 74px;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-ember) 32%, transparent);
+}
+
+/* Focus is never removed, only restyled. Brass, because that is the page's
+   one interactive colour. */
+:focus-visible {
+  outline: 2px solid var(--color-ember);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@layer components {
+  /* ---------------------------------------------------------------- surfaces
+     The app's three depths, unchanged: panel (a section card), trough (a recess
+     holding an instrument), subcard (a tile floating inside either). */
+  .panel {
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: 16px;
+  }
+  .trough {
+    background: var(--color-trough);
+    border: 1px solid var(--color-trough-line);
+    border-radius: 14px;
+    box-shadow: inset 0 2px 10px rgb(0 0 0 / 0.5);
+  }
+  .subcard {
+    background: var(--color-subcard);
+    border: 1px solid var(--color-trough-line);
+    border-radius: var(--radius-subcard);
+  }
+
+  /* section header label */
+  .card-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 11px;
+    line-height: 1.5;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    /* the app sets this in ink-faint; here it is ink-dim, because at 11px on
+       the page background ink-faint measures 3.5:1 and the page's own
+       acceptance criterion is AA everywhere, checked rather than eyeballed */
+    color: var(--color-ink-dim);
+  }
+
+  /* -------------------------------------------------------------------- CTA
+     Brass fill, page-background text, tracked caps. Glow is a STATE: it
+     arrives on hover and focus, never as ambience. */
+  .btn-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-ember);
+    color: var(--color-bg);
+    border: 0;
+    border-radius: 9px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    cursor: pointer;
+    transition: box-shadow 180ms, filter 150ms;
+  }
+  .btn-cta:hover:enabled,
+  .btn-cta:focus-visible:enabled {
+    box-shadow: 0 0 26px color-mix(in srgb, var(--color-ember) 40%, transparent);
+  }
+  .btn-cta:disabled {
+    filter: brightness(0.72);
+    cursor: default;
+  }
+
+  .field {
+    background: var(--color-trough);
+    border: 1px solid var(--color-line);
+    border-radius: 9px;
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    transition: border-color 150ms;
+  }
+  .field::placeholder {
+    color: var(--color-ink-faint);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--color-ember);
+  }
+  .field[aria-invalid='true'] {
+    border-color: var(--color-danger);
+  }
+
+  /* ----------------------------------------------------------------- blocks
+     The .booked family, verbatim from the app. One material for every "this is
+     on the books" rectangle. Consumers set --booked-accent (a wing token) and
+     compose the modifiers. The base class carries no glow — glow is a state. */
+  .booked {
+    --blk: var(--booked-accent, var(--color-accent));
+    --blk-top: color-mix(in srgb, var(--blk) 60%, white);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--blk) 26%, transparent),
+      color-mix(in srgb, var(--blk) 13%, transparent)
+    );
+    border-left: 3px solid var(--blk);
+    border-top: 1px solid color-mix(in srgb, var(--blk-top) 75%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--blk) 28%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--blk) 28%, transparent);
+    border-radius: 7px;
+  }
+  .booked-glow {
+    box-shadow: 0 0 17px color-mix(in srgb, var(--blk) 18%, transparent);
+  }
+  .booked-dim {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--blk) 13%, transparent),
+      color-mix(in srgb, var(--blk) 7%, transparent)
+    );
+    border-left-color: color-mix(in srgb, var(--blk) 55%, transparent);
+    border-top-color: color-mix(in srgb, var(--blk-top) 38%, transparent);
+    border-right-color: color-mix(in srgb, var(--blk) 16%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--blk) 16%, transparent);
+  }
+  /* a block clipped by midnight: dotted on the seamed edge, solid elsewhere */
+  .booked-cut-after {
+    border-bottom: 2px dotted color-mix(in srgb, var(--blk) 70%, transparent);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .booked-cut-before {
+    border-top: 2px dotted color-mix(in srgb, var(--blk) 70%, transparent);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+  /* pencilled in on the estate's behalf, not by hand (recovery sleep) */
+  .booked-hatch {
+    background:
+      repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--blk) 16%, transparent) 0 5px,
+        transparent 5px 10px
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--blk) 12%, transparent),
+        color-mix(in srgb, var(--blk) 6%, transparent)
+      );
+    border-left-style: dashed;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Motion. Everything on this page animates transform and opacity only — no
+   layout property ever transitions. The reduced-motion rule below is not a
+   downgrade: every animation on the page is authored so that its FINAL frame
+   is the good frame, and this rule ships exactly that.
+-------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The boot gate. public/boot-gate.js marks an estate-holding browser on
+   <html> before first paint; the landing document steps aside for the app
+   chunk, which mounts over the same #root. display:contents normally, so the
+   wrapper never affects layout.
+-------------------------------------------------------------------------- */
+.landing-doc {
+  display: contents;
+}
+html[data-estate] .landing-doc {
+  display: none;
+}

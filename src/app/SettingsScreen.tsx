@@ -20,6 +20,7 @@ import { ProfileSheet } from '../modules/training/components/ProfileSheet'
 import { useWorkoutStore } from '../modules/training/store'
 import type { Workout } from '../modules/training/types'
 import { useAuthUi } from './authUi'
+import { openFrontDoor } from './frontDoor'
 import { nudgeWing, useWings } from './wings'
 import { announceName } from '../modules/workshop/share'
 import { InstallGuide } from './install/InstallGuide'
@@ -158,6 +159,15 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
                   />
                 </>
               )}
+              <Divider />
+              {/* the other way of being introduced to the house, and the only
+                  row on this screen that leaves the app — see app/frontDoor.ts
+                  for why it navigates rather than swapping the root */}
+              <Row
+                label={voice.settings.frontDoorLabel}
+                blurb={voice.settings.frontDoorBlurb}
+                onClick={openFrontDoor}
+              />
             </Section>
 
             {/* a shut registry says why (?demo) or says nothing at all (no
