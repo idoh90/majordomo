@@ -275,6 +275,46 @@ with checks as (
            like '%user_id = auth.uid()%', false),
          'it is SECURITY DEFINER — without that filter anyone could rename anyone'
 
+  /* -------------------------------- 0009: one door into a crew's records */
+  union all
+  select 'NOBODY may write share_records by hand',
+         coalesce((select not (has_table_privilege('authenticated', 'public.share_records', 'INSERT')
+                            or has_table_privilege('authenticated', 'public.share_records', 'UPDATE')
+                            or has_table_privilege('authenticated', 'public.share_records', 'DELETE'))
+                     from information_schema.tables
+                    where table_schema = 'public' and table_name = 'share_records'), false),
+         'THE ONE THAT MATTERS: with the table grant standing, a hand skips the RPC,
+          forges author_id — the stamp the fold trusts to say whose work an hour was —
+          and hard-deletes rows, which leaves no tombstone for anyone else to follow'
+  union all
+  select 'a member may still READ share_records',
+         coalesce((select has_table_privilege('authenticated', 'public.share_records', 'SELECT')
+                     from information_schema.tables
+                    where table_schema = 'public' and table_name = 'share_records'), false),
+         'the pull reads this table directly; revoking SELECT stops sync dead'
+  union all
+  select 'push_share_records carries its own authority',
+         coalesce(
+           (select pg_get_functiondef(oid) from pg_proc
+             where proname = 'push_share_records' and pronamespace = 'public'::regnamespace)
+           like '%is_share_writer%', false),
+         'it is SECURITY DEFINER now, so the row policies are NOT what refuses a guest'
+  union all
+  select 'the join code comes from a strong source',
+         coalesce(
+           (select pg_get_functiondef(oid) from pg_proc
+             where proname = 'gen_share_code' and pronamespace = 'public'::regnamespace)
+           like '%gen_random_uuid%', false),
+         'random() is a fast PRNG, and this code is the sole write credential for an open crew'
+  union all
+  select 'a roster label is bounded',
+         coalesce(
+           (select bool_and(pg_get_functiondef(oid) like '%left(btrim(p_label), 40)%')
+              from pg_proc
+             where proname in ('join_share', 'create_share')
+               and pronamespace = 'public'::regnamespace), false),
+         'a label goes into every crewmate''s localStorage, where the estate lives'
+
   /* ------------------------------------------------------ 0006: the state */
   union all
   select 'every existing crew has a ranked keeper',

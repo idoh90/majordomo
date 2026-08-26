@@ -69,6 +69,34 @@ select t_ok('a hand may push a record', t_try(format(
 reset role;
 select t_ok('…and it landed', (select count(*) = 1 from share_records where share_id = :'sid'));
 
+/* ===================== is push_share_records really the ONLY door? ==========
+ * The RPC stamps author_id from auth.uid(), and the fold trusts that stamp to
+ * decide who a ledger entry belongs to. That is only worth anything if a hand
+ * cannot reach the table directly — and Supabase's default privileges hand
+ * `authenticated` every column of every new table, so it has to be revoked. */
+:as_B
+select t_try(format($q$ insert into share_records
+                          (share_id, kind, id, payload, deleted, author_id, client_updated_at)
+                        values (%L, 'work', 'forged', '{"h":99}'::jsonb, false, %L, now()) $q$,
+                    :'sid', :'A')) as forge_said \gset
+select t_try(format($q$ update share_records set author_id = %L
+                        where share_id = %L and id = 'c1' $q$, :'A', :'sid')) as restamp_said \gset
+select t_try(format($q$ delete from share_records where share_id = %L and id = 'c1' $q$,
+                    :'sid')) as hard_said \gset
+reset role;
+select t_ok('a hand may NOT insert a record by hand',
+            (select count(*) = 0 from share_records where share_id = :'sid' and id = 'forged'),
+            coalesce(nullif(:'forge_said', ''), 'silently filtered — nothing landed'));
+select t_ok('a hand may NOT re-stamp an author',
+            (select author_id = :'B' from share_records where share_id = :'sid' and id = 'c1'),
+            coalesce(nullif(:'restamp_said', ''), 'silently filtered — author unchanged'));
+select t_ok('a hand may NOT hard-delete a record',
+            (select count(*) = 1 from share_records where share_id = :'sid' and id = 'c1'),
+            coalesce(nullif(:'hard_said', ''), 'silently filtered — the row is still there'));
+select t_ok('…and the RPC still stamps the pusher',
+            (select author_id = :'B' from share_records where share_id = :'sid' and id = 'c1'),
+            'the fold reads author_id as the registry''s word about who did the work');
+
 /* ============================================== the keeper shuts the door */
 :as_A
 select t_ok('keeper may vet the door', t_try(format(

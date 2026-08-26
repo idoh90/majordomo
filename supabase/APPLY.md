@@ -46,6 +46,7 @@ have run. Paste **the whole file**, never a fragment of one.
 | 6 | `0006_crew_roles.sql` | the crew's door policy, waiting room and ranks | 0004 |
 | 7 | `0007_standing.sql` | **a rank that survives leaving and rejoining** | 0006 |
 | 8 | `0008_code_privacy.sql` | **the code is the keeper's — and can be rotated** | 0007 |
+| 9 | `0009_one_door.sql` | **the push RPC becomes the only way into `share_records`** | 0008 |
 
 Then, always: paste `verify.sql` and read the rows. Failures sort to the top.
 Every row is one thing that must be true; the note on each says what breaks if
@@ -101,6 +102,27 @@ This is worth the two minutes. Its first run found `join_share` raising
 `column reference "share_id" is ambiguous` on every single call — which is to
 say nobody could join any crew at all — in a migration that read perfectly, and
 had simply never been executed.
+
+## What 0009 changes, in one paragraph
+
+`push_share_records` stamps `author_id` from `auth.uid()`, and the client's fold
+trusts that stamp to decide whose work a ledger entry records — it is the whole
+reason a crewmate cannot sign somebody else's name to an afternoon. It was only
+ever worth anything if the RPC was the ONLY door, and it was not: the function
+ran as the caller, and Supabase's default privileges hand `authenticated` every
+column of every new table, which 0004 never revoked. A hand could insert rows
+with any `author_id` they liked, re-stamp existing ones, and hard-DELETE records
+— which is the quiet one, because a deletion with no tombstone leaves nothing
+for a cursor-based pull to carry, so the record vanishes for the pusher and
+lives forever on every other device. 0009 revokes the table writes and makes the
+RPC `security definer` with an explicit `is_share_writer` check, since under
+DEFINER the row policies are no longer what refuses a guest. The policies stay
+anyway. Two smaller things ride along: `gen_share_code` draws from
+`gen_random_uuid()` rather than `random()` — a join code is the sole write
+credential for an open crew, and `random()` is not a cryptographic generator —
+and `join_share` / `create_share` now trim and cap the roster label at 40
+characters and refuse an empty one, matching `rename_member`, because a label is
+written into every crewmate's localStorage and nothing bounded it.
 
 ## What 0008 changes, in one paragraph
 
