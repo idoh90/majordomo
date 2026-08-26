@@ -216,6 +216,65 @@ with checks as (
            like '%''removed'' then ''removed''%', false),
          'being shown the door is not undone by knowing the code'
 
+  /* --------------------------------------- 0008: the code is the keeper's */
+  union all
+  select 'NOBODY may read a join code',
+         coalesce((select not has_column_privilege('authenticated', 'public.shares', 'code', 'SELECT')
+                     from information_schema.columns
+                    where table_schema = 'public' and table_name = 'shares'
+                      and column_name = 'code'), false),
+         'THE ONE THAT MATTERS: while a guest can read the code they can hand out an
+          invitation, and join_share seats whoever uses one as a HAND — so the rank
+          that changes nothing can mint writers'
+  union all
+  select 'a member may still read the door policy',
+         coalesce((select has_column_privilege('authenticated', 'public.shares', 'visibility', 'SELECT')
+                     from information_schema.columns
+                    where table_schema = 'public' and table_name = 'shares'
+                      and column_name = 'visibility'), false),
+         'the revoke above is column-wide; without this grant back, every pull fails'
+  union all
+  select 'share_code exists',
+         to_regprocedure('public.share_code(uuid)') is not null,
+         'the keeper''s own view of the code, since the column is no longer readable'
+  union all
+  select 'authenticated may call share_code',
+         case when to_regprocedure('public.share_code(uuid)') is null then false
+              else has_function_privilege('authenticated', 'public.share_code(uuid)', 'EXECUTE') end,
+         ''
+  union all
+  select 'share_code answers the KEEPER only',
+         coalesce(
+           (select pg_get_functiondef(oid) from pg_proc
+             where proname = 'share_code' and pronamespace = 'public'::regnamespace)
+           like '%owner_id = auth.uid()%', false),
+         'it is SECURITY DEFINER — without that filter it hands the code to anyone who asks'
+  union all
+  select 'rotate_share_code exists',
+         to_regprocedure('public.rotate_share_code(uuid)') is not null,
+         'without it a leaked code is permanent and disbanding is the only remedy'
+  union all
+  select 'authenticated may call rotate_share_code',
+         case when to_regprocedure('public.rotate_share_code(uuid)') is null then false
+              else has_function_privilege('authenticated', 'public.rotate_share_code(uuid)', 'EXECUTE') end,
+         ''
+  union all
+  select 'rename_member exists',
+         to_regprocedure('public.rename_member(uuid, text)') is not null,
+         'a member changes their own label without holding the code — announceName''s wire'
+  union all
+  select 'authenticated may call rename_member',
+         case when to_regprocedure('public.rename_member(uuid, text)') is null then false
+              else has_function_privilege('authenticated', 'public.rename_member(uuid, text)', 'EXECUTE') end,
+         ''
+  union all
+  select 'rename_member writes only the CALLER''s row',
+         coalesce(
+           (select pg_get_functiondef(oid) from pg_proc
+             where proname = 'rename_member' and pronamespace = 'public'::regnamespace)
+           like '%user_id = auth.uid()%', false),
+         'it is SECURITY DEFINER — without that filter anyone could rename anyone'
+
   /* ------------------------------------------------------ 0006: the state */
   union all
   select 'every existing crew has a ranked keeper',

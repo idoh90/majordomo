@@ -1253,6 +1253,14 @@ export interface VoicePack {
       copyCode: string
       copyLink: string
       copied: string
+      /** what stands where the code was, for everyone who is not the keeper */
+      codeKeepers: string
+      /** turn the lock: the old code and every link carrying it stop working */
+      rotate: string
+      rotateNote: string
+      rotateTitle: string
+      rotateBody: string
+      rotateYes: string
       rosterTitle: string
       you: string
       owner: string
@@ -1386,6 +1394,8 @@ export interface VoicePack {
         needsName: string
         /** the name changed, and every crew was told */
         renamed: string
+        /** a new code was drawn; nobody was turned out */
+        rotated: string
       }
       /** transport trouble, in the user's words */
       errorLine: (msg: string) => string

@@ -8,8 +8,9 @@ import { useShareStore } from '../../core/sync/shareStore'
 import {
   admitMember,
   createShare,
-  joinShare,
   deleteShare,
+  renameMember,
+  rotateShareCode,
   setMemberRole,
   setShareVisibility,
   kickMember as wireKick,
@@ -200,13 +201,17 @@ export function joinCrew(code: string): CrewResult {
 }
 
 /**
- * Tell every crew this device holds a code for what to call you now.
+ * Tell every crew this device is on what to call you now.
  *
- * `join_share` is the wire for it, which reads oddly and is exactly right: the
- * function's ON CONFLICT branch updates the label and leaves rank and standing
- * untouched (0006 proves it — "the keeper re-typing their own code stays
- * active"). So knocking again with a new name is a rename, and no new SQL, no
- * new grant and no new policy has to exist for it.
+ * This used to re-knock with the held join code, whose ON CONFLICT branch
+ * updates the label and leaves rank and standing alone — a genuinely neat
+ * trick that depended on every member holding the code. After 0008 only the
+ * keeper does, so the rename has its own door: `rename_member`, one column of
+ * the caller's own row, chosen by the registry rather than by an argument.
+ *
+ * The crews are read off the SHELF, not off the code cache, for the same
+ * reason: a venture carrying a `shareId` is the honest record of which crews
+ * this device is actually on.
  *
  * Best-effort and silent by design. It is called after the name changes, and a
  * crew that has since been disbanded, or a device that is offline, simply does
@@ -215,13 +220,35 @@ export function joinCrew(code: string): CrewResult {
 export async function announceName(): Promise<void> {
   const label = myLabel()
   if (label === '' || gate() !== null) return
-  const { codes } = useShareStore.getState()
   const mine = new Set(
     useWorkshopStore.getState().ventures.map((v) => v.shareId).filter(Boolean) as string[],
   )
-  for (const [shareId, code] of Object.entries(codes)) {
-    if (!mine.has(shareId)) continue
-    await joinShare(code, label).catch(() => {})
+  for (const shareId of mine) {
+    await renameMember(shareId, label).catch(() => {})
+  }
+}
+
+/**
+ * Turn the lock (keeper only). A code handed to the wrong person used to be
+ * permanent — 0006 revoked the UPDATE on `shares` so that nobody could rewrite
+ * one, which also meant the keeper couldn't, and the only remedy for a leak was
+ * to disband the crew and rebuild it.
+ *
+ * Nothing is evicted. Standing lives on the roster and is never re-derived from
+ * the code, so the crew is exactly as it was a moment ago and only the links
+ * already in the world stop working.
+ */
+export async function rotateCrewCode(ventureId: string): Promise<CrewResult> {
+  const refused = gate()
+  if (refused) return { ok: false, reason: refused }
+  const shareId = useWorkshopStore.getState().ventures.find((v) => v.id === ventureId)?.shareId
+  if (!shareId) return { ok: false, reason: voice.workshop.crew.toast.offline }
+  try {
+    const code = await rotateShareCode(shareId)
+    useShareStore.getState().setCode(shareId, code)
+    return { ok: true, code }
+  } catch {
+    return { ok: false, reason: voice.workshop.crew.toast.offline }
   }
 }
 

@@ -45,6 +45,7 @@ have run. Paste **the whole file**, never a fragment of one.
 | 5 | `0005_bell_reserve.sql` | the Bell's reserve-before-spend meter | 0003 |
 | 6 | `0006_crew_roles.sql` | the crew's door policy, waiting room and ranks | 0004 |
 | 7 | `0007_standing.sql` | **a rank that survives leaving and rejoining** | 0006 |
+| 8 | `0008_code_privacy.sql` | **the code is the keeper's — and can be rotated** | 0007 |
 
 Then, always: paste `verify.sql` and read the rows. Failures sort to the top.
 Every row is one thing that must be true; the note on each says what breaks if
@@ -100,6 +101,27 @@ This is worth the two minutes. Its first run found `join_share` raising
 `column reference "share_id" is ambiguous` on every single call — which is to
 say nobody could join any crew at all — in a migration that read perfectly, and
 had simply never been executed.
+
+## What 0008 changes, in one paragraph
+
+The join code had two faults and they are the same fault twice. EVERY MEMBER
+COULD READ IT — `member reads share` grants the whole row, and the row carries
+the code — so a guest, the rank that exists to change nothing, could copy the
+invite link and hand it to a stranger, whom `join_share` then seats as a HAND.
+A read-only member could mint writers. And A LEAKED CODE WAS PERMANENT: 0006
+revoked the table UPDATE on `shares` so that nobody could rewrite a code, which
+included the keeper, so the only answer to a code in the wrong group chat was to
+disband the crew and rebuild it. Both are fixed the way this schema always fixes
+a rule about one column: `code` leaves the SELECT grant entirely and comes back
+only through `share_code()`, which answers the keeper and nobody else, while
+`rotate_share_code()` draws a new one with the table grant still shut. Rotation
+evicts NOBODY — standing lives on the roster and is never re-derived from the
+code — so the crew wakes up exactly as it was and only the links already in the
+world stop working. The third function is fallout: the client used to change a
+display name by re-knocking with the held code, which only worked because every
+member held one, so `rename_member()` gives that its own narrow door — one
+column of the caller's own row, chosen by `auth.uid()` rather than by an
+argument, exactly like `leave_share`.
 
 ## What 0007 changes, in one paragraph
 
@@ -160,6 +182,13 @@ five need two signed-in accounts and about ten minutes.
 5. **Turn away.** Account A: with the door vetted, have B apply and then TURN
    AWAY. B should get a "not taken up" line they can dismiss, not a silent
    disappearance.
+6. **The code is the keeper's.** Account B (any rank below keeper) should see a
+   line where the code used to be, and no COPY buttons. If B's device was on an
+   older build it will have a code cached in localStorage — it should disappear
+   on the next sync cycle, not linger.
+7. **Rotation.** Account A: COPY LINK, then NEW CODE. The old link, opened in a
+   signed-out browser, must be refused; the new one must work; and B, who was
+   already on the crew, must still be on it and still able to write.
 
 ### One caveat worth knowing before it looks like a bug
 

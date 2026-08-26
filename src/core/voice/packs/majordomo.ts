@@ -1474,6 +1474,14 @@ export const majordomoPack: VoicePack = {
       copyCode: 'COPY CODE',
       copyLink: 'COPY LINK',
       copied: 'Copied.',
+      codeKeepers:
+        'The keeper holds the code, sir. Anyone who has it can bring in a writer, so invitations are theirs to make.',
+      rotate: 'NEW CODE',
+      rotateNote: 'A new code retires the old one and every link carrying it. The crew stays as it is.',
+      rotateTitle: 'Draw a new join code?',
+      rotateBody:
+        'The old code stops working, along with any link already sent out. Nobody on the crew is turned out, sir.',
+      rotateYes: 'DRAW ONE',
       rosterTitle: 'ON THE CREW',
       you: 'you',
       owner: 'keeper',
@@ -1585,6 +1593,7 @@ export const majordomoPack: VoicePack = {
         needsName:
           'Choose the name crews should see first, sir. The house will not put your email address on a stranger’s screen.',
         renamed: 'Noted. Every crew has been told.',
+        rotated: 'A new code, sir. The old one is retired; the crew is untouched.',
       },
       errorLine: (msg) => `The crew registry demurred: ${msg}`,
     },

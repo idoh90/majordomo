@@ -511,7 +511,8 @@ still applies; the old keys are left in place as insurance and never read again.
 A crew is a second namespace beside `records`, never a loosening of it — the
 reasoning is at the top of `supabase/migrations/0004_shares.sql` and still holds.
 `0006_crew_roles.sql` gave that namespace a door policy, a waiting room and ranks;
-`0007_standing.sql` made a rank survive a departure. All are pasted into the SQL
+`0007_standing.sql` made a rank survive a departure; `0008_code_privacy.sql`
+made the join code the keeper's alone, and rotatable. All are pasted into the SQL
 editor by hand, IN FULL, like every migration here — the whole ritual, and the traps in it, is written down in
 **`supabase/APPLY.md`**, which is the thing to read before touching the registry.
 
@@ -642,6 +643,28 @@ editor by hand, IN FULL, like every migration here — the whole ritual, and the
   one identity, and every `find(x => x.id === …)` reaching whichever it met
   first. The copy is made only when the two disagree, so the honest path keeps
   payload identity (the engine's hash cache is keyed on it).
+- **THE JOIN CODE IS THE KEEPER'S, and it can be turned.** `member reads share`
+  grants the whole row and the row carried the code, so a GUEST — the rank that
+  exists to change nothing — could copy the invite link and hand it out, and
+  `join_share` seats whoever uses one as a HAND: a read-only member could mint
+  writers. And a leaked code was permanent, because 0006 revoked the UPDATE on
+  `shares` so that nobody could rewrite one, keeper included; the only remedy was
+  to disband. 0008 fixes both the way this schema always fixes a rule about ONE
+  COLUMN — `code` leaves the SELECT grant and comes back only through
+  `share_code()` (keeper only), and `rotate_share_code()` draws a new one with
+  the table grant still shut. **Rotation evicts nobody**: standing lives on the
+  roster and is never re-derived from the code, so only the links already in the
+  world stop working. The pull cycle passes `setCode(id, null)` for anyone who
+  is not the keeper — that null is not "we didn't ask", it is what clears the
+  copy already sitting in a guest's localStorage from the older builds.
+- **A rename is `rename_member()`, not a re-knock.** `announceName()` used to
+  change a display name by calling `join_share` again with the held code (its
+  ON CONFLICT branch updates the label and leaves rank alone) — neat, and it
+  only worked because every member held a code. They no longer do, so the
+  rename has `leave_share`'s shape: one column of the caller's OWN row, chosen
+  by `auth.uid()` rather than by an argument, so there is no version of the call
+  that touches anybody else. The crews it announces to are read off the SHELF
+  (ventures carrying a `shareId`), never off the code cache.
 - **The join CODE has two forms** (`modules/workshop/joinCode.ts`): canonical
   (8 chars, no separators — what the registry stores) and display (`XXXX-XXXX` — what
   a person reads and types). The field dashes as it fills, and `editCode` exists for

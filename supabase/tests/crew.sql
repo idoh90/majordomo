@@ -168,6 +168,41 @@ select t_ok('a guest may NOT promote themselves',
 select t_ok('a guest may NOT open the door',
             (select visibility = 'vetted' from shares where id = :'sid'),
             coalesce(nullif(:'door_said', ''), 'silently filtered — door unchanged'));
+/* ------------------------------- 0008: the code is the KEEPER'S, not the crew's
+ * A guest could read the code and hand it to a stranger, and join_share seats a
+ * stranger as a HAND — so the rank that exists to change nothing could mint
+ * writers. Unlike the row-filtered refusals above, a column-level SELECT grant
+ * actually RAISES: there is no row to filter, only a column nobody may name. */
+:as_B
+select t_ok('a guest may NOT read the join code',
+            t_try(format($q$ select code from shares where id = %L $q$, :'sid')) <> '',
+            'THE ONE THAT MATTERS: a readable code is a licence to invite');
+select t_ok('…but still reads the door policy',
+            (select count(*) = 1 from (select visibility from shares where id = :'sid') q),
+            'the revoke is column-wide, so the grant back has to be, too');
+select t_ok('share_code tells a guest nothing',
+            (select share_code(:'sid')) is null,
+            'DEFINER, filtered on owner_id — "not yours" and "no such crew" answer alike');
+select t_ok('a guest may NOT rotate the code',
+            t_try(format($q$ select rotate_share_code(%L) $q$, :'sid')) <> '');
+
+/* the rename door — leave_share's shape: one column, one row, and the row is
+ * chosen by auth.uid() rather than by an argument, so there is no version of
+ * this call that touches anybody else */
+select t_ok('a member may rename THEMSELVES',
+            t_try(format($q$ select rename_member(%L, 'dana v') $q$, :'sid')) = '');
+select t_ok('…and an empty name is refused',
+            t_try(format($q$ select rename_member(%L, '   ') $q$, :'sid')) <> '');
+reset role;
+select t_ok('…the rename landed',
+            (select label = 'dana v' from share_members
+              where share_id = :'sid' and user_id = :'B'));
+select t_ok('…and the keeper''s own label is untouched',
+            (select label = 'ido' from share_members where share_id = :'sid' and user_id = :'A'),
+            'rename_member takes no user id at all — there is nothing to point elsewhere');
+select t_ok('…and the code is untouched by any of it',
+            (select code = :'scode' from shares where id = :'sid'));
+
 :as_B
 select t_ok('a guest may still leave', t_try(format(
   $q$ select leave_share(%L) $q$, :'sid')) = '');
@@ -234,6 +269,30 @@ reset role;
 select t_ok('…and is still keeper',
             (select role = 'keeper' and status = 'active' from share_members
               where share_id = :'sid' and user_id = :'A'));
+
+/* ============================================ 0008: TURNING THE LOCK ==========
+ * A leaked code used to be permanent. 0006 revoked the UPDATE on `shares` so
+ * that nobody could rewrite one — which included the keeper, so a code posted
+ * in the wrong group chat could only be answered by disbanding the crew. The
+ * grant stays shut; rotation is a function narrow enough to be the only way. */
+:as_A
+select rotate_share_code(:'sid') as newcode \gset
+select t_ok('the keeper still reads their own code',
+            (select share_code(:'sid')) = :'newcode');
+select t_ok('…and the column is STILL not writable by hand',
+            t_try(format($q$ update shares set code = 'HACKED00' where id = %L $q$, :'sid')) <> '',
+            'rotation must not be a loophole back to a writable code column');
+reset role;
+select t_ok('a new code was drawn', :'newcode' <> :'scode');
+select t_ok('…and it is what the crew row holds',
+            (select code = :'newcode' from shares where id = :'sid'));
+select t_ok('rotation evicts NOBODY',
+            (select count(*) = 2 from share_members where share_id = :'sid'),
+            'standing lives on the roster and is never re-derived from the code');
+:as_B
+select t_ok('the OLD code opens nothing now',
+            t_try(format($q$ select * from join_share(%L, 'dana') $q$, :'scode')) <> '');
+reset role;
 
 /* ============================================================ a rank must exist */
 reset role;

@@ -37,11 +37,23 @@ export type CrewRole = 'keeper' | 'hand' | 'guest'
  */
 export type CrewStanding = 'pending' | 'active' | 'left' | 'removed'
 
+/**
+ * The share row as anyone on the roster may read it — and the join CODE is not
+ * in it, on purpose. 0008 takes `code` out of the SELECT grant entirely: a
+ * guest who could read it could hand it to a stranger, and `join_share` seats a
+ * stranger as a HAND, so the rank that changes nothing could mint writers.
+ * The keeper reads theirs through `shareCode()` below.
+ */
 export interface ShareInfo {
   id: string
-  code: string
   ownerId: string
   visibility: CrewVisibility
+}
+
+/** what `create_share` hands back, and the one moment a code arrives unasked */
+export interface NewShare {
+  id: string
+  code: string
 }
 
 export interface MemberRow {
@@ -74,7 +86,7 @@ function chunk<T>(rows: T[], size: number): T[][] {
 }
 
 /** open a venture to a crew — returns the share id and its join code */
-export async function createShare(label: string): Promise<ShareInfo> {
+export async function createShare(label: string): Promise<NewShare> {
   const client = getClient()
   if (!client) throw new Error('sync is off')
   const sb = await client
@@ -82,7 +94,7 @@ export async function createShare(label: string): Promise<ShareInfo> {
   if (error) throw new Error(error.message)
   const row = (data as Array<{ share_id: string; code: string }> | null)?.[0]
   if (!row) throw new Error('create_share returned nothing')
-  return { id: row.share_id, code: row.code, ownerId: '', visibility: 'open' }
+  return { id: row.share_id, code: row.code }
 }
 
 export interface JoinResult {
@@ -250,25 +262,70 @@ export async function listMembers(shareId: string): Promise<MemberRow[]> {
   }))
 }
 
-/** the share row itself — who keeps it, its door policy, and the code */
+/** the share row itself — who keeps it and its door policy. Not the code. */
 export async function getShare(shareId: string): Promise<ShareInfo | null> {
   const client = getClient()
   if (!client) return null
   const sb = await client
   const { data, error } = await sb
     .from('shares')
-    .select('id,code,owner_id,visibility')
+    .select('id,owner_id,visibility')
     .eq('id', shareId)
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
-  const row = data as { id: string; code: string; owner_id: string; visibility: string }
+  const row = data as { id: string; owner_id: string; visibility: string }
   return {
     id: row.id,
-    code: row.code,
     ownerId: row.owner_id,
     visibility: asVisibility(row.visibility),
   }
+}
+
+/**
+ * The keeper's own view of the code. Answers null for anyone else — the
+ * function is DEFINER and filters on `owner_id = auth.uid()`, so "not yours"
+ * and "no such crew" are the same empty answer and neither is an error.
+ */
+export async function shareCode(shareId: string): Promise<string | null> {
+  const client = getClient()
+  if (!client) return null
+  const sb = await client
+  const { data, error } = await sb.rpc('share_code', { p_share: shareId })
+  if (error) throw new Error(error.message)
+  return typeof data === 'string' && data !== '' ? data : null
+}
+
+/**
+ * Turn the lock. Keeper only (the registry says so, not this function), and it
+ * evicts nobody: standing lives on the roster and is never re-derived from the
+ * code, so the crew wakes up unchanged and only the old links stop working.
+ */
+export async function rotateShareCode(shareId: string): Promise<string> {
+  const client = getClient()
+  if (!client) throw new Error('sync is off')
+  const sb = await client
+  const { data, error } = await sb.rpc('rotate_share_code', { p_share: shareId })
+  if (error) throw new Error(error.message)
+  if (typeof data !== 'string' || data === '') throw new Error('rotate_share_code returned nothing')
+  return data
+}
+
+/**
+ * Change the name THIS account is listed under on one crew.
+ *
+ * It used to be done by re-knocking with the join code, whose ON CONFLICT
+ * branch updates the label — clever, and it worked only because every member
+ * held the code. After 0008 they do not, so a rename gets its own narrow door:
+ * one column, one row, chosen by the registry from auth.uid() rather than from
+ * an argument, exactly like `leave_share`.
+ */
+export async function renameMember(shareId: string, label: string): Promise<void> {
+  const client = getClient()
+  if (!client) return
+  const sb = await client
+  const { error } = await sb.rpc('rename_member', { p_share: shareId, p_label: label })
+  if (error) throw new Error(error.message)
 }
 
 /**

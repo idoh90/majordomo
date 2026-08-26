@@ -18,6 +18,7 @@ import {
   joinCrew,
   leaveCrew,
   removeMember,
+  rotateCrewCode,
   setCrewPrivacy,
   setCrewRole,
   shareVenture,
@@ -306,6 +307,7 @@ type Confirming =
   | { kind: 'kick'; userId: string; label: string }
   | { kind: 'decline'; userId: string; label: string }
   | { kind: 'leave' }
+  | { kind: 'rotate' }
   | { kind: 'disband' }
   | { kind: 'delete' }
   | null
@@ -404,23 +406,43 @@ function VenturePanel({
 
           {/* ---------------------------------------------- code + the door */}
           <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {/* THE CODE IS THE KEEPER'S. Every rank used to see it, which made a
+                guest — the rank that exists to change nothing — able to hand out
+                an invitation, and `join_share` seats whoever uses one as a HAND.
+                The registry is where that is actually enforced (0008 takes the
+                column out of the read grant); this is only where it is SAID. */}
             <div className="rounded-xl border border-line bg-panel-2 px-4 py-3.5">
               <SectionLabel>{c.codeLabel}</SectionLabel>
-              <div className="stat-num mt-1 font-display text-[26px] font-semibold tracking-[0.14em]">
-                {code ? formatCode(code) : '····-····'}
-              </div>
-              <div className="mt-3 flex gap-2">
-                <CopyButton
-                  label={c.copyCode}
-                  text={code ? formatCode(code) : null}
-                  onDone={() => butler(c.copied)}
-                />
-                <CopyButton
-                  label={c.copyLink}
-                  text={code ? `${window.location.origin}/?join=${code}` : null}
-                  onDone={() => butler(c.copied)}
-                />
-              </div>
+              {isKeeper ? (
+                <>
+                  <div className="stat-num mt-1 font-display text-[26px] font-semibold tracking-[0.14em]">
+                    {code ? formatCode(code) : '····-····'}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <CopyButton
+                      label={c.copyCode}
+                      text={code ? formatCode(code) : null}
+                      onDone={() => butler(c.copied)}
+                    />
+                    <CopyButton
+                      label={c.copyLink}
+                      text={code ? `${window.location.origin}/?join=${code}` : null}
+                      onDone={() => butler(c.copied)}
+                    />
+                    <button
+                      type="button"
+                      disabled={working || !code}
+                      onClick={() => setConfirming({ kind: 'rotate' })}
+                      className="btn-soft rounded-pill px-3 py-1.5 font-display text-[10px] font-semibold tracking-[0.12em] disabled:opacity-40"
+                    >
+                      {c.rotate}
+                    </button>
+                  </div>
+                  <p className="mt-2.5 text-[12px] leading-snug text-ink-dim">{c.rotateNote}</p>
+                </>
+              ) : (
+                <p className="mt-2 text-[13px] leading-relaxed text-ink-dim">{c.codeKeepers}</p>
+              )}
             </div>
 
             <div className="rounded-xl border border-line bg-panel-2 px-4 py-3.5">
@@ -648,6 +670,16 @@ function VenturePanel({
         confirmLabel={c.leaveYes}
         onConfirm={() => {
           void run(() => leaveCrew(venture.id), c.toast.left)
+        }}
+        onCancel={() => setConfirming(null)}
+      />
+      <ConfirmDialog
+        open={confirming?.kind === 'rotate'}
+        title={c.rotateTitle}
+        message={c.rotateBody}
+        confirmLabel={c.rotateYes}
+        onConfirm={() => {
+          void run(() => rotateCrewCode(venture.id), c.toast.rotated)
         }}
         onCancel={() => setConfirming(null)}
       />

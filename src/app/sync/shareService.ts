@@ -8,6 +8,7 @@ import {
   countShareRecords,
   deleteShare,
   getShare,
+  shareCode,
   joinShare,
   leaveShare,
   listMembers,
@@ -244,12 +245,22 @@ async function pullOne(shareId: string): Promise<void> {
   }
 
   await refreshRoster(shareId)
-  // The share row is read on EVERY pull, not just the first. The code and the
-  // keeper never change, but the door policy does, and no realtime channel
-  // watches `shares` — without this a crew shut to applications would go on
-  // reading "open" on every device but the keeper's.
+  // The share row is read on EVERY pull, not just the first. The keeper never
+  // changes, but the door policy does, and no realtime channel watches
+  // `shares` — without this a crew shut to applications would go on reading
+  // "open" on every device but the keeper's.
   const info = await getShare(shareId).catch(() => null)
-  if (info) useShareStore.getState().setCode(shareId, info.code, info.ownerId, info.visibility)
+  if (!info) return
+  // The CODE is a separate question and a separate call, because after 0008 it
+  // is no longer a column anyone may read: `share_code` answers the keeper and
+  // nobody else. Passing null for everyone else is not merely "we didn't ask" —
+  // it is what clears the copy already sitting in a guest's localStorage from
+  // the builds that handed it to the whole roster. It also carries a ROTATION
+  // to the keeper's other devices, which have no other way to hear about one.
+  const me = useAuthStore.getState().userId
+  const mine = !!me && info.ownerId === me
+  const code = mine ? await shareCode(shareId).catch(() => null) : null
+  useShareStore.getState().setCode(shareId, code, info.ownerId, info.visibility)
 }
 
 /* ----------------------------------------------------------------- cycle */

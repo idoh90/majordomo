@@ -93,7 +93,15 @@ interface ShareBookkeeping {
   markDeleted: (keys: RecordKey[], at: number) => void
   clearPending: (keys: RecordKey[]) => void
   setCursor: (shareId: string, cursor: string | null) => void
-  setCode: (shareId: string, code: string, ownerId?: string, visibility?: CrewVisibility) => void
+  /** cache the crew's facts. `code` null FORGETS one — see the note in the
+   *  implementation: only the keeper may hold a code now, and a device that
+   *  used to be shown one must stop showing it. */
+  setCode: (
+    shareId: string,
+    code: string | null,
+    ownerId?: string,
+    visibility?: CrewVisibility,
+  ) => void
   /** the keeper changed the door policy — reflected now, confirmed on the pull */
   setVisibility: (shareId: string, visibility: CrewVisibility) => void
   /** measured after a full pull: the crew's rows this device does not keep */
@@ -176,13 +184,24 @@ export const useShareStore = create<ShareBookkeeping>()(
       setCursor: (shareId, cursor) =>
         set((s) => ({ cursors: { ...s.cursors, [shareId]: cursor } })),
       setCode: (shareId, code, ownerId, visibility) =>
-        set((s) => ({
-          codes: { ...s.codes, [shareId]: code },
-          owners: ownerId ? { ...s.owners, [shareId]: ownerId } : s.owners,
-          visibilities: visibility
-            ? { ...s.visibilities, [shareId]: visibility }
-            : s.visibilities,
-        })),
+        set((s) => {
+          // Null is not "unknown", it is "this device has no business holding
+          // one". Every member used to be handed the code by the registry, so
+          // every member's localStorage still has one sitting in it; the pull
+          // cycle passes null for anyone who is not the keeper, and this is
+          // where that old copy actually goes away. A rotation lands the same
+          // way — the new code replaces the stale one on the keeper's device.
+          const codes = { ...s.codes }
+          if (code === null) delete codes[shareId]
+          else codes[shareId] = code
+          return {
+            codes,
+            owners: ownerId ? { ...s.owners, [shareId]: ownerId } : s.owners,
+            visibilities: visibility
+              ? { ...s.visibilities, [shareId]: visibility }
+              : s.visibilities,
+          }
+        }),
 
       setVisibility: (shareId, visibility) =>
         set((s) => ({ visibilities: { ...s.visibilities, [shareId]: visibility } })),
