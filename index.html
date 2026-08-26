@@ -58,12 +58,597 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Majordomo" />
 
+    <!-- ====================================================================
+         THE BOOT CURTAIN.
+
+         The only thing in this app that paints before any JavaScript runs,
+         and the reason it has to live here rather than in a component: the
+         app boots from localStorage SYNCHRONOUSLY, so React's first paint IS
+         the finished app. There is no moment a React-rendered skeleton could
+         occupy. The gap it fills is the one before that — a megabyte of
+         JavaScript being fetched, parsed and executed, which on a phone is
+         a second or more of nothing.
+
+         Rules this block lives under:
+
+         · NO SCRIPT. The CSP is `script-src 'self'`, so an inline script
+           would be blocked outright. Inline STYLE is allowed and is what
+           this uses. Consequently the curtain cannot read the persisted
+           skin, and is always drawn in Midnight — the same palette already
+           hardcoded into `theme-color` above and the manifest's
+           `background_color`. A non-default skin gets one tonal shift on
+           load; that was the accepted trade.
+
+         · NO TEXT. Pure geometry. Partly because copy belongs in
+           `src/core/voice/` and this file is already the one carve-out from
+           that rule (see the Open Graph block above) — but mostly because a
+           wordmark that flashes and then re-renders reads worse than a plate.
+
+         · ONE SHEEN, MOVED BY TRANSFORM. Not a per-plate shimmer. This
+           animation has to keep running while the main thread is blocked
+           parsing that megabyte, and only compositor properties (transform,
+           opacity) survive a blocked main thread. A background-position
+           shimmer would freeze at precisely the moment it is meant to say
+           "still working".
+
+         · ESTATE ONLY. This file is the landing page's document as well as
+           the app's, so the curtain is hidden until `boot-gate.js` says an
+           estate lives here. See the gate note on the `#boot` rule below.
+
+         It is torn down by `src/app/BootCurtain.tsx`, which is mounted
+         OUTSIDE the error boundary so the recovery screen can never end up
+         underneath it.
+         ==================================================================== -->
+    <style>
+      /* ── THE ESTATE GATE ──────────────────────────────────────────────
+         Hidden unless `public/boot-gate.js` has found an estate in this
+         browser. The document the curtain now ships in is the LANDING page:
+         a stranger — and a crawler — must meet the pitch, not the skeleton
+         of an app they do not have.
+
+         Same attribute, same evidence, same frame as the rule in
+         `src/landing/tokens.css` that hides the landing FOR an estate
+         holder. The two are opposite halves of one decision and must not
+         drift apart: whatever the gate marks, exactly one of the two
+         documents is shown.
+
+         A stranger who presses GET STARTED boots the app without the
+         attribute ever being set, and so gets no curtain — correctly. The
+         landing is already painted, and a skeleton drawn over a legible
+         page is a step backwards. */
+      #boot {
+        display: none;
+      }
+      html[data-estate] #boot {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        overflow: hidden;
+        background: #0c1017;
+        padding-top: env(safe-area-inset-top);
+        transition: opacity 220ms ease-out;
+      }
+      #boot * {
+        box-sizing: border-box;
+      }
+      #boot.bt-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* the plates, and the surfaces they sit on */
+      #boot .bt-b {
+        display: block;
+        background: #1a2232;
+        border-radius: 5px;
+      }
+      #boot .bt-panel {
+        background: #111826;
+        border: 1px solid #1e2739;
+        border-radius: 14px;
+      }
+
+      #boot .bt-sheen {
+        position: absolute;
+        inset: -20% -60%;
+        background: linear-gradient(
+          100deg,
+          transparent 42%,
+          rgba(125, 167, 208, 0.05) 47%,
+          rgba(125, 167, 208, 0.1) 50%,
+          rgba(125, 167, 208, 0.05) 53%,
+          transparent 58%
+        );
+        animation: bt-sweep 1.9s linear infinite;
+        will-change: transform;
+      }
+      @keyframes bt-sweep {
+        from {
+          transform: translate3d(-42%, 0, 0);
+        }
+        to {
+          transform: translate3d(42%, 0, 0);
+        }
+      }
+      /* the plates stay; only the sweep goes. An "entrance" that hides
+         content when animation is off is the bug this app already learned. */
+      @media (prefers-reduced-motion: reduce) {
+        #boot .bt-sheen {
+          animation: none;
+          opacity: 0;
+        }
+      }
+
+      /* the shell's own measurements */
+      #boot .bt-wrap {
+        width: 100%;
+        max-width: 1280px;
+        height: 100%;
+        margin: 0 auto;
+        padding: 0 16px 96px;
+      }
+      @media (min-width: 768px) {
+        #boot .bt-wrap {
+          padding-bottom: 40px;
+        }
+      }
+      @media (min-width: 1024px) {
+        #boot .bt-wrap {
+          padding-left: 32px;
+          padding-right: 32px;
+        }
+      }
+      @media (min-width: 1280px) {
+        #boot .bt-wrap {
+          max-width: 1560px;
+        }
+      }
+
+      /* masthead */
+      #boot .bt-head {
+        display: flex;
+        align-items: flex-end;
+        gap: 24px;
+        padding: 18px 0;
+      }
+      #boot .bt-mark {
+        width: 134px;
+        height: 14px;
+      }
+      #boot .bt-stamp {
+        width: 158px;
+        height: 9px;
+        margin-top: 8px;
+        border-radius: 3px;
+      }
+      #boot .bt-tabs,
+      #boot .bt-tools {
+        display: none;
+        align-items: center;
+        padding-bottom: 4px;
+      }
+      #boot .bt-tabs {
+        gap: 20px;
+      }
+      #boot .bt-tools {
+        margin-left: auto;
+        gap: 10px;
+      }
+      #boot .bt-tabs .bt-b {
+        height: 11px;
+        border-radius: 3px;
+      }
+      #boot .bt-tabs .bt-b:nth-child(1) { width: 52px; }
+      #boot .bt-tabs .bt-b:nth-child(2) { width: 48px; }
+      #boot .bt-tabs .bt-b:nth-child(3) { width: 66px; }
+      #boot .bt-tabs .bt-b:nth-child(4) { width: 46px; }
+      #boot .bt-tabs .bt-b:nth-child(5) { width: 74px; }
+      #boot .bt-tabs .bt-b:nth-child(6) { width: 58px; }
+      #boot .bt-dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+      }
+      #boot .bt-gear {
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+      }
+      @media (min-width: 768px) {
+        #boot .bt-mark { width: 192px; height: 19px; }
+        #boot .bt-tabs,
+        #boot .bt-tools { display: flex; }
+      }
+
+      /* the screen column, and the House rail that joins it at xl */
+      #boot .bt-body {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+      }
+      #boot .bt-main {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      #boot .bt-aside {
+        display: none;
+        width: 252px;
+        flex: none;
+        flex-direction: column;
+        gap: 16px;
+      }
+      #boot .bt-aside .bt-panel:nth-child(1) { height: 150px; }
+      #boot .bt-aside .bt-panel:nth-child(2) { height: 212px; }
+      #boot .bt-aside .bt-panel:nth-child(3) { height: 168px; }
+      @media (min-width: 1280px) {
+        #boot .bt-aside { display: flex; }
+      }
+
+      /* week/month control row: ‹ · the week's dates · › · TODAY · week|month,
+         then the quick-add pair pushed to the far end */
+      #boot .bt-ctl {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #boot .bt-nav {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      #boot .bt-nav .bt-b { height: 30px; border-radius: 9px; }
+      #boot .bt-arrow { width: 30px; flex: none; }
+      #boot .bt-range { width: 132px; }
+      #boot .bt-today { display: none; width: 66px; }
+      #boot .bt-seg { width: 132px; flex: none; }
+      #boot .bt-acts {
+        display: flex;
+        margin-left: auto;
+        gap: 10px;
+      }
+      #boot .bt-acts .bt-b {
+        height: 30px;
+        border-radius: 9px;
+      }
+      #boot .bt-acts .bt-b:nth-child(1) {
+        display: none;
+        width: 118px;
+      }
+      #boot .bt-acts .bt-b:nth-child(2) { width: 100px; }
+      @media (min-width: 768px) {
+        #boot .bt-ctl .bt-b { height: 34px; }
+        #boot .bt-range { width: 186px; }
+        #boot .bt-seg { width: 158px; }
+        #boot .bt-today { display: block; }
+        #boot .bt-acts .bt-b:nth-child(1) { display: block; }
+      }
+
+      /* the briefing strip — two lines of it, so it is taller than it looks */
+      #boot .bt-strip {
+        height: 66px;
+        margin-top: 12px;
+        border-radius: 10px;
+      }
+      @media (min-width: 768px) {
+        #boot .bt-strip { height: 78px; }
+      }
+
+      /* the week: a legend, the day heads, the all-day marker band, then the
+         hour rail and seven columns */
+      #boot .bt-week {
+        margin-top: 14px;
+        padding: 12px;
+      }
+      #boot .bt-legend {
+        display: flex;
+        gap: 14px;
+        padding: 0 0 10px 36px;
+      }
+      #boot .bt-legend .bt-b { height: 8px; border-radius: 3px; }
+      #boot .bt-legend .bt-b:nth-child(1) { width: 54px; }
+      #boot .bt-legend .bt-b:nth-child(2) { width: 62px; }
+      #boot .bt-legend .bt-b:nth-child(3) { width: 50px; }
+      #boot .bt-legend .bt-b:nth-child(4) { width: 56px; }
+      #boot .bt-days,
+      #boot .bt-marks,
+      #boot .bt-cols {
+        display: grid;
+        grid-template-columns: 30px repeat(7, 1fr);
+        gap: 6px;
+      }
+      #boot .bt-day {
+        height: 30px;
+        border-radius: 8px;
+      }
+      /* the all-day chips — homework, exams, milestones, delivery dates */
+      #boot .bt-marks {
+        align-items: start;
+        margin-top: 8px;
+        height: 46px;
+      }
+      #boot .bt-mk { border-radius: 6px; }
+      #boot .bt-marks .bt-mk:nth-child(2) { height: 26px; }
+      #boot .bt-marks .bt-mk:nth-child(4) { height: 44px; }
+      #boot .bt-marks .bt-mk:nth-child(6) { height: 26px; }
+      #boot .bt-cols {
+        height: 330px;
+        margin-top: 8px;
+      }
+      @media (min-width: 768px) {
+        #boot .bt-cols { height: 500px; }
+      }
+      #boot .bt-rail {
+        border-radius: 4px;
+        opacity: 0.5;
+        background: repeating-linear-gradient(
+          to bottom,
+          #1a2232 0 6px,
+          transparent 6px 42px
+        );
+      }
+      #boot .bt-col {
+        position: relative;
+        overflow: hidden;
+        border-radius: 8px;
+        background: rgba(26, 34, 50, 0.35);
+      }
+      /* the ghost blocks, drawn as pseudo-elements so the markup stays short */
+      #boot .bt-col::before,
+      #boot .bt-col::after {
+        content: '';
+        position: absolute;
+        left: 4px;
+        right: 4px;
+        border-radius: 5px;
+        background: #1a2232;
+      }
+      #boot .bt-col:nth-child(2)::before { top: 8%;  height: 16%; }
+      #boot .bt-col:nth-child(2)::after  { top: 46%; height: 22%; }
+      #boot .bt-col:nth-child(3)::before { top: 20%; height: 12%; }
+      #boot .bt-col:nth-child(3)::after  { top: 58%; height: 14%; }
+      #boot .bt-col:nth-child(4)::before { top: 6%;  height: 26%; }
+      #boot .bt-col:nth-child(4)::after  { top: 62%; height: 10%; }
+      #boot .bt-col:nth-child(5)::before { top: 30%; height: 18%; }
+      #boot .bt-col:nth-child(5)::after  { top: 70%; height: 16%; }
+      #boot .bt-col:nth-child(6)::before { top: 12%; height: 14%; }
+      #boot .bt-col:nth-child(6)::after  { top: 40%; height: 28%; }
+      #boot .bt-col:nth-child(7)::before { top: 24%; height: 20%; }
+      #boot .bt-col:nth-child(7)::after  { top: 66%; height: 12%; }
+      #boot .bt-col:nth-child(8)::before { top: 10%; height: 12%; }
+      #boot .bt-col:nth-child(8)::after  { top: 52%; height: 24%; }
+
+      /* THE BRIEFING: the paragraph, then the four instruments */
+      #boot .bt-brief {
+        margin-top: 16px;
+      }
+      #boot .bt-brow {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px 0;
+      }
+      #boot .bt-sq {
+        width: 30px;
+        height: 30px;
+        flex: none;
+        border-radius: 9px;
+      }
+      #boot .bt-cap {
+        width: 92px;
+        height: 10px;
+        border-radius: 3px;
+      }
+      #boot .bt-pen {
+        width: 84px;
+        height: 22px;
+        margin-left: auto;
+        border-radius: 999px;
+      }
+      #boot .bt-lines {
+        display: flex;
+        flex-direction: column;
+        gap: 11px;
+        max-width: 960px;
+        padding: 16px 16px 20px;
+      }
+      @media (min-width: 640px) {
+        #boot .bt-lines { padding-left: 62px; }
+      }
+      #boot .bt-lines .bt-b {
+        height: 11px;
+        border-radius: 3px;
+      }
+      #boot .bt-lines .bt-b:nth-child(1) { width: 97%; }
+      #boot .bt-lines .bt-b:nth-child(2) { width: 91%; }
+      #boot .bt-lines .bt-b:nth-child(3) { width: 95%; }
+      #boot .bt-lines .bt-b:nth-child(4) { width: 58%; }
+      #boot .bt-lines .bt-b:nth-child(5) { width: 93%; }
+      #boot .bt-lines .bt-b:nth-child(6) { width: 88%; }
+      #boot .bt-lines .bt-b:nth-child(7) { width: 71%; }
+      /* the paragraph is a paragraph, not a list: the clause breaks fall where
+         a wing ends, so the short lines are the ones that matter */
+      #boot .bt-lines .bt-b:nth-child(4),
+      #boot .bt-lines .bt-b:nth-child(7) { margin-bottom: 9px; }
+      #boot .bt-icap {
+        width: 118px;
+        height: 9px;
+        border-radius: 3px;
+      }
+      #boot .bt-irow {
+        border-top: 1px solid #1e2739;
+        padding: 14px 16px 16px;
+      }
+      #boot .bt-dials {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-top: 12px;
+      }
+      #boot .bt-dial {
+        height: 112px;
+        padding: 12px;
+        border: 1px solid #1e2739;
+        border-radius: 12px;
+        background: #1a2232;
+      }
+      @media (min-width: 768px) {
+        #boot .bt-dial { height: 132px; }
+      }
+      #boot .bt-dial .bt-b { background: #202940; }
+      #boot .bt-dcap { width: 64px; height: 8px; border-radius: 3px; }
+      #boot .bt-dnum { width: 88px; height: 22px; margin-top: 14px; }
+      #boot .bt-dbar { width: 100%; height: 8px; margin-top: 16px; border-radius: 4px; }
+
+      /* the mobile tab bar */
+      #boot .bt-bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        gap: 8px;
+        border-top: 1px solid #1e2739;
+        background: #111826;
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+      }
+      @media (min-width: 768px) {
+        #boot .bt-bar { display: none; }
+      }
+      #boot .bt-tab {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      #boot .bt-ticon { width: 22px; height: 22px; border-radius: 6px; }
+      #boot .bt-tlab { width: 30px; height: 7px; border-radius: 2px; }
+    </style>
+
     <!-- The gate. Synchronous and first, so an estate holder never paints a
          landing frame. External file: the CSP forbids inline script. -->
     <script src="/boot-gate.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
+    <!-- see the curtain's block in <head> for why this is markup and not a
+         component. Torn down by src/app/BootCurtain.tsx. -->
+    <div id="boot" aria-hidden="true">
+      <div class="bt-wrap">
+        <div class="bt-head">
+          <div>
+            <span class="bt-b bt-mark"></span>
+            <span class="bt-b bt-stamp"></span>
+          </div>
+          <div class="bt-tabs">
+            <span class="bt-b"></span><span class="bt-b"></span><span class="bt-b"></span>
+            <span class="bt-b"></span><span class="bt-b"></span><span class="bt-b"></span>
+          </div>
+          <div class="bt-tools">
+            <span class="bt-b bt-dot"></span><span class="bt-b bt-dot"></span>
+            <span class="bt-b bt-dot"></span><span class="bt-b bt-gear"></span>
+          </div>
+        </div>
+
+        <div class="bt-body">
+          <div class="bt-main">
+            <div class="bt-ctl">
+              <div class="bt-nav">
+                <span class="bt-b bt-arrow"></span>
+                <span class="bt-b bt-range"></span>
+                <span class="bt-b bt-arrow"></span>
+                <span class="bt-b bt-today"></span>
+                <span class="bt-b bt-seg"></span>
+              </div>
+              <div class="bt-acts"><span class="bt-b"></span><span class="bt-b"></span></div>
+            </div>
+
+            <span class="bt-b bt-strip"></span>
+
+            <div class="bt-panel bt-week">
+              <div class="bt-legend">
+                <span class="bt-b"></span><span class="bt-b"></span>
+                <span class="bt-b"></span><span class="bt-b"></span>
+              </div>
+              <div class="bt-days">
+                <span></span>
+                <span class="bt-b bt-day"></span><span class="bt-b bt-day"></span>
+                <span class="bt-b bt-day"></span><span class="bt-b bt-day"></span>
+                <span class="bt-b bt-day"></span><span class="bt-b bt-day"></span>
+                <span class="bt-b bt-day"></span>
+              </div>
+              <div class="bt-marks">
+                <span></span>
+                <span class="bt-b bt-mk"></span><span></span>
+                <span class="bt-b bt-mk"></span><span></span>
+                <span class="bt-b bt-mk"></span><span></span>
+                <span></span>
+              </div>
+              <div class="bt-cols">
+                <div class="bt-rail"></div>
+                <div class="bt-col"></div><div class="bt-col"></div><div class="bt-col"></div>
+                <div class="bt-col"></div><div class="bt-col"></div><div class="bt-col"></div>
+                <div class="bt-col"></div>
+              </div>
+            </div>
+
+            <div class="bt-panel bt-brief">
+              <div class="bt-brow">
+                <span class="bt-b bt-sq"></span>
+                <span class="bt-b bt-cap"></span>
+                <span class="bt-b bt-pen"></span>
+              </div>
+              <div class="bt-lines">
+                <span class="bt-b"></span><span class="bt-b"></span>
+                <span class="bt-b"></span><span class="bt-b"></span>
+                <span class="bt-b"></span><span class="bt-b"></span>
+                <span class="bt-b"></span>
+              </div>
+              <div class="bt-irow">
+                <span class="bt-b bt-icap"></span>
+                <div class="bt-dials">
+                  <div class="bt-dial">
+                    <span class="bt-b bt-dcap"></span><span class="bt-b bt-dnum"></span>
+                    <span class="bt-b bt-dbar"></span>
+                  </div>
+                  <div class="bt-dial">
+                    <span class="bt-b bt-dcap"></span><span class="bt-b bt-dnum"></span>
+                    <span class="bt-b bt-dbar"></span>
+                  </div>
+                  <div class="bt-dial">
+                    <span class="bt-b bt-dcap"></span><span class="bt-b bt-dnum"></span>
+                    <span class="bt-b bt-dbar"></span>
+                  </div>
+                  <div class="bt-dial">
+                    <span class="bt-b bt-dcap"></span><span class="bt-b bt-dnum"></span>
+                    <span class="bt-b bt-dbar"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bt-aside">
+            <div class="bt-panel"></div><div class="bt-panel"></div><div class="bt-panel"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bt-bar">
+        <span class="bt-tab"><span class="bt-b bt-ticon"></span><span class="bt-b bt-tlab"></span></span>
+        <span class="bt-tab"><span class="bt-b bt-ticon"></span><span class="bt-b bt-tlab"></span></span>
+        <span class="bt-tab"><span class="bt-b bt-ticon"></span><span class="bt-b bt-tlab"></span></span>
+        <span class="bt-tab"><span class="bt-b bt-ticon"></span><span class="bt-b bt-tlab"></span></span>
+        <span class="bt-tab"><span class="bt-b bt-ticon"></span><span class="bt-b bt-tlab"></span></span>
+      </div>
+
+      <div class="bt-sheen"></div>
+    </div>
+
+
     <div id="root"></div>
 
     <!-- The build prerenders, so the whole pitch above reads without

@@ -13,6 +13,7 @@ import '@fontsource/source-sans-3/700.css'
 import '../core/ui/index.css'
 import App from './App'
 import { BootBoundary, BootFailure } from './BootFailure'
+import { BootCurtain } from './BootCurtain'
 import { applySkin } from '../core/ui/skins'
 import { lockZoom } from '../core/ui/zoomLock'
 import { voice } from '../core/voice'
@@ -37,8 +38,12 @@ const APP_VIEWPORT =
  * paint lives here — and every line of it reads the estate, which is why it
  * is inside a guard.
  *
- * The app has no loading screen by design: it boots from localStorage
+ * The app has no loading GATE by design: it boots from localStorage
  * synchronously so a cold open on a plane is indistinguishable from one on wifi.
+ * Nothing below waits on a network, and nothing below waits on the curtain
+ * either — the skeleton in index.html covers the browser's own fetch-and-parse
+ * of this chunk, which is time the app spends whether or not anyone draws
+ * something over it. It is a curtain, never a gate.
  * The price is that a throw in here used to mean a permanently white page, with
  * no way back from inside the app. Now it means the recovery screen, which can
  * take a copy of the records before anything is cleared.
@@ -88,6 +93,10 @@ export function bootApp() {
 
     root.render(
       <StrictMode>
+        {/* OUTSIDE the boundary on purpose: the curtain in index.html has to come
+            down whichever screen wins, and an effect inside App never runs if App
+            is what threw. */}
+        <BootCurtain />
         {/* the same screen, reached the other way: a blob that rehydrated without
             complaint but is the wrong shape throws in the first component that
             maps over it, not here */}
@@ -98,6 +107,11 @@ export function bootApp() {
     )
   } catch (e) {
     console.error('[boot] the app failed to start:', e)
-    root.render(<BootFailure detail={e instanceof Error ? e.message : String(e)} />)
+    root.render(
+      <>
+        <BootCurtain />
+        <BootFailure detail={e instanceof Error ? e.message : String(e)} />
+      </>,
+    )
   }
 }
