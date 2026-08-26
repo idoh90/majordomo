@@ -36,6 +36,43 @@ function isRunDetail(x: unknown): boolean {
   return num(r.distanceKm) && num(r.durationMin)
 }
 
+function isSportDetail(x: unknown): boolean {
+  if (x === undefined) return true
+  if (typeof x !== 'object' || x === null) return false
+  return typeof (x as Record<string, unknown>).kind === 'string'
+}
+
+/** a set: both numbers optional, both positive when present */
+function isLoggedSet(x: unknown): boolean {
+  if (typeof x !== 'object' || x === null) return false
+  const s = x as Record<string, unknown>
+  const n = (v: unknown) => v === undefined || (typeof v === 'number' && Number.isFinite(v) && v > 0)
+  return n(s.weightKg) && n(s.reps)
+}
+
+/** Undefined, or a well-formed list. Validated rather than waved through
+ *  because the detail sheet maps over it — a pasted file whose `sets` is a
+ *  string would take the whole screen down at render, which is the one failure
+ *  an import validator exists to prevent. */
+function isExerciseList(x: unknown): boolean {
+  if (x === undefined) return true
+  if (!Array.isArray(x)) return false
+  return x.every((e) => {
+    if (typeof e !== 'object' || e === null) return false
+    const r = e as Record<string, unknown>
+    return (
+      typeof r.exerciseId === 'string' &&
+      typeof r.name === 'string' &&
+      Array.isArray(r.primary) &&
+      r.primary.every(isMuscleId) &&
+      Array.isArray(r.secondary) &&
+      r.secondary.every(isMuscleId) &&
+      Array.isArray(r.sets) &&
+      r.sets.every(isLoggedSet)
+    )
+  })
+}
+
 function isWorkout(x: unknown): x is Workout {
   if (typeof x !== 'object' || x === null) return false
   const w = x as Record<string, unknown>
@@ -44,8 +81,10 @@ function isWorkout(x: unknown): x is Workout {
     typeof w.performedAt === 'string' &&
     !Number.isNaN(Date.parse(w.performedAt)) &&
     typeof w.createdAt === 'string' &&
-    (w.method === 'ppl' || w.method === 'custom' || w.method === 'run') &&
+    (w.method === 'ppl' || w.method === 'custom' || w.method === 'run' || w.method === 'sport') &&
     isRunDetail(w.run) &&
+    isSportDetail(w.sport) &&
+    isExerciseList(w.exercises) &&
     (w.ppl === undefined || w.ppl === 'push' || w.ppl === 'pull' || w.ppl === 'legs') &&
     (w.repStyle === undefined ||
       w.repStyle === 'light' ||

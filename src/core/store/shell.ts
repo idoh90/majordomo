@@ -22,9 +22,23 @@ import { setWeekStartDefault, type WeekStart } from '../dates'
  * `wingOrder` / `wingsOff` (the navs' running order and what has been taken
  * off them) need no version bump for the same reason `panelTips` did not: an
  * older blob simply lacks them and the initializer's defaults stand.
+ * `termsAccepted` / `termsAcceptedAt` / `telemetryOff` (the consent door and
+ * the analytics switch) follow the same rule — and here the direction of the
+ * default is load-bearing: an absent key reads 0, and 0 shows the door, so a
+ * blob that never answered can only fail toward asking. Per-device like
+ * `onboarded`, and for the same reason with teeth: signing in is optional, so
+ * an account is not something every household even has to hang consent on.
  */
 
 adoptLegacyKey('majordomo-shell', 'batman-shell')
+
+/**
+ * The terms revision the consent door asks for. Bumping this re-shows the
+ * door to every device on its next boot — that is the whole re-acceptance
+ * mechanism for a material change to /terms or /privacy, so bump it only
+ * when the documents change in a way a user would want to re-read.
+ */
+export const TERMS_VERSION = 1
 
 // First boot only: inherit the skin the user picked before this store existed
 // (frozen in the training blob — that field is never written again). If a
@@ -81,12 +95,23 @@ interface ShellState {
   /** wing ids taken off both navs. Hiding is not deleting — the wing's records,
    *  its housekeeping and its briefing facts all carry on untouched. */
   wingsOff: string[]
+  /** highest TERMS_VERSION accepted on THIS device; 0 = the door has never
+   *  been agreed through here */
+  termsAccepted: number
+  /** ISO instant of that acceptance — the device's own evidence, never synced */
+  termsAcceptedAt: string | null
+  /** the settings opt-out for anonymous usage analytics; false = allowed.
+   *  Named in the off direction so the absent-key default (false) means what
+   *  the consent door disclosed: analytics on after agreement. */
+  telemetryOff: boolean
   setSkin: (skin: SkinId) => void
   setWeekStart: (ws: WeekStart) => void
   setOnboarded: (onboarded: boolean) => void
   setPanelTips: (panelTips: boolean) => void
   setWingOrder: (ids: string[]) => void
   setWingOff: (id: string, off: boolean) => void
+  setTermsAccepted: (version: number) => void
+  setTelemetryOff: (off: boolean) => void
 }
 
 export const useShellStore = create<ShellState>()(
@@ -98,6 +123,9 @@ export const useShellStore = create<ShellState>()(
       panelTips: true,
       wingOrder: [],
       wingsOff: [],
+      termsAccepted: 0,
+      termsAcceptedAt: null,
+      telemetryOff: false,
       setSkin: (skin) => set({ skin: normalizeSkin(skin) }),
       setWeekStart: (ws) => {
         setWeekStartDefault(ws) // keep core/dates in sync before the re-render
@@ -110,6 +138,9 @@ export const useShellStore = create<ShellState>()(
         set((s) => ({
           wingsOff: off ? [...new Set([...s.wingsOff, id])] : s.wingsOff.filter((w) => w !== id),
         })),
+      setTermsAccepted: (version) =>
+        set({ termsAccepted: version, termsAcceptedAt: new Date().toISOString() }),
+      setTelemetryOff: (telemetryOff) => set({ telemetryOff }),
     }),
     {
       name: 'majordomo-shell',
@@ -122,12 +153,26 @@ export const useShellStore = create<ShellState>()(
         panelTips: s.panelTips,
         wingOrder: s.wingOrder,
         wingsOff: s.wingsOff,
+        termsAccepted: s.termsAccepted,
+        termsAcceptedAt: s.termsAcceptedAt,
+        telemetryOff: s.telemetryOff,
       }),
       // v1 blobs may hold a founder-only skin (e.g. 'gotham'); v1/v2 blobs
       // carry a now-dead `ambient` key that this simply doesn't return
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<
-          Pick<ShellState, 'skin' | 'weekStart' | 'onboarded' | 'panelTips' | 'wingOrder' | 'wingsOff'>
+          Pick<
+            ShellState,
+            | 'skin'
+            | 'weekStart'
+            | 'onboarded'
+            | 'panelTips'
+            | 'wingOrder'
+            | 'wingsOff'
+            | 'termsAccepted'
+            | 'termsAcceptedAt'
+            | 'telemetryOff'
+          >
         >
         return {
           skin: normalizeSkin(p.skin),
@@ -142,6 +187,11 @@ export const useShellStore = create<ShellState>()(
           // `undefined` over the defaults if these were simply left out
           wingOrder: ids(p.wingOrder),
           wingsOff: ids(p.wingsOff),
+          // absence fails toward the door, which is the only safe direction a
+          // consent flag can fail
+          termsAccepted: typeof p.termsAccepted === 'number' ? p.termsAccepted : 0,
+          termsAcceptedAt: typeof p.termsAcceptedAt === 'string' ? p.termsAcceptedAt : null,
+          telemetryOff: p.telemetryOff === true,
         }
       },
       // re-apply the persisted week-start into core/dates once rehydrated

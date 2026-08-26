@@ -4,6 +4,7 @@ import { MUSCLES, PPL_LABELS } from '../../data/muscles'
 import { sportLabel } from '../../data/sports'
 import { SportIcon } from '../icons'
 import { formatClock, formatKm, runPaceSeconds, runTotalSeconds } from '../../lib/runs'
+import { formatSets } from '../../lib/exercises'
 import { voice } from '../../../../core/voice'
 import { hoursBetween, relativeDayLabel, timeLabel } from '../../../../core/dates'
 import {
@@ -88,6 +89,24 @@ export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDet
         <ScoreTile label="Effort given" value={w.effort} barClass="bg-accent" />
         <ScoreTile label="Felt strain" value={w.strainFeel} barClass="bg-ember" />
       </div>
+
+      {w.exercises && w.exercises.length > 0 && (
+        <div className="mb-5">
+          <h3 className="mb-1.5 font-display text-xs font-bold uppercase tracking-[0.2em] text-ink-dim">
+            {voice.grounds.exercises.detailTitle}
+          </h3>
+          <div className="flex flex-col gap-1.5">
+            {w.exercises.map((e, i) => (
+              <div key={`${e.exerciseId}-${i}`} className="flex items-baseline gap-3">
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">{e.name}</span>
+                <span className="stat-num shrink-0 text-xs text-ink-dim">
+                  {e.sets.length > 0 ? formatSets(e.sets) : voice.grounds.exercises.setCount(0)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <h3 className="mb-1 font-display text-xs font-bold uppercase tracking-[0.2em] text-ink-dim">
         Impact on strain now

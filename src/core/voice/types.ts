@@ -779,6 +779,56 @@ export interface VoicePack {
        *  session)' — returns '' when both are zero, leading space included */
       weekTally: (v: { runs: number; sports: number }) => string
     }
+    /** EXERCISES — the named-lift flow: pick exercises, log kg × reps per set.
+     *  Exercise names themselves are wing data (the catalogue), never voice —
+     *  only the chrome around them lives here. */
+    exercises: {
+      /** the method step's fifth door: card title + its one-line caption */
+      methodTitle: string
+      methodCaption: string
+      /** sheet title while the session list / picker is up */
+      stepTitle: string
+      /** the session list: the button that opens the picker, and the line
+       *  standing where the list will be before anything is chosen */
+      addExercise: string
+      empty: string
+      /** the picker: its search field, the filter chip that clears the muscle
+       *  group, the line while the catalogue's chunk is still arriving, and
+       *  what a search matching nothing says */
+      searchPlaceholder: string
+      filterAll: string
+      loading: string
+      noResults: (v: { query: string }) => string
+      /** an exercise the user wrote themselves, marked in every list */
+      yoursTag: string
+      /** the door out of the picker into the create form, offered under a
+       *  search that found nothing (or too little) */
+      create: (v: { name: string }) => string
+      /** the create form: heading, its two fields, and the refusal when no
+       *  muscle has been marked as taking the brunt */
+      createTitle: string
+      createNameLabel: string
+      createNamePlaceholder: string
+      createMusclesLabel: string
+      createMusclesHint: string
+      createSave: string
+      createNeedsName: string
+      createNeedsPrimary: string
+      /** a set row: the add button, and the tally under an exercise's name */
+      addSet: string
+      setCount: (n: number) => string
+      /** the two set columns */
+      weightLabel: string
+      repsLabel: string
+      /** last session's numbers for this exercise, shown while logging the
+       *  next — `sets` arrives pre-formatted ('60×8 · 60×8 · 62.5×6') */
+      lastTime: (v: { sets: string }) => string
+      /** the effort step, where the working-sets field would otherwise be:
+       *  this session's size, counted rather than estimated */
+      derivedSets: (v: { sets: number; exercises: number }) => string
+      /** detail sheet: the heading over the session's exercises */
+      detailTitle: string
+    }
     /** weekly-goal card + its dialog */
     weekTitle: string
     goalMet: string
@@ -1552,6 +1602,36 @@ export interface VoicePack {
     /** the same, signed in: "on this device" stops being true */
     clearWorkoutsBodySynced: (n: number) => string
     clearWorkoutsYes: string
+    /** the legal section: the documents, and the analytics switch */
+    groupLegal: string
+    termsLabel: string
+    /** both blurbs say the row leaves the app — these are pages, not sheets */
+    termsBlurb: string
+    privacyLabel: string
+    privacyBlurb: string
+    /** the usage-analytics opt-out. The blurb must restate the door's promise:
+     *  counts of features used, never the contents of any record. */
+    analyticsToggle: string
+    analyticsBlurb: string
+  }
+  /**
+   * The consent door — the one deliberate wall in an app of doors. Shown
+   * before the shell whenever this device has not accepted the current
+   * TERMS_VERSION; one reading, one button, no dismiss. The analytics line
+   * is the disclosure the Privacy Policy's usage-analytics section stands on,
+   * so the two must never drift apart in substance.
+   */
+  consent: {
+    title: string
+    /** what the house keeps and what pressing the button means — this line IS
+     *  the clickwrap, so it must say that entering is agreeing */
+    body: string
+    /** the one-line analytics disclosure: anonymous feature counts, never
+     *  record contents, and where the off-switch lives */
+    analyticsLine: string
+    termsLink: string
+    privacyLink: string
+    agree: string
   }
   /**
    * The first-time setup — the butler, scripted.

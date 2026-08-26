@@ -57,9 +57,21 @@ technical version.
   `api/` is Node and the app is a browser — `@types/node` declares `fetch`/`Request`
   as globals and collides with the DOM lib, so the main tsconfig pins `"types": []`
   and the server's config pins `"types": ["node"]`. A function that only fails at
-  deploy time is a function nobody typechecked.
+  deploy time is a function nobody typechecked. The build ends with the **brand
+  gate** (`scripts/check-brand.mjs`): dist must carry no Batman-era strings beyond
+  the three legacy wire keys. It skips itself loudly under `VITE_FOUNDER_SKIN=1`
+  (a founder bundle is not a shippable bundle); Vercel never sets the flag, so
+  every production build is gated.
 - `npm run lint` — ESLint, **import-boundary rules only** (no style rules).
   Scoped to `src`; `api/` is outside it (nothing there may import the app anyway).
+- `npm run vendor:exercises` — regenerates the exercise catalogue
+  (`scripts/vendor-exercises.mjs` → `src/modules/training/data/exercises.ts`) from
+  free-exercise-db, **pinned to a commit**, mapping its 17 muscle names onto the
+  app's 16 plates. Hand-run and committed; deliberately NOT part of `npm run build`
+  — a build that needs the network is a build that breaks on a plane. An unknown
+  muscle name, an unknown equipment value, or an OVERRIDES key upstream no longer
+  has are all **hard errors**: a corrections table that silently stops applying
+  ships wrong muscles.
 - `npm run bell:probe` — the **Bell probe** (`scripts/bell-probe.mjs`): rings
   `/api/bell` with a real session token, streams the reply to the terminal, and
   prints the token counts the model actually charged against the estimates in
@@ -135,15 +147,10 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   is still a bug.
 - **`vercel.json` rationale** (the schema rejects `comment` keys, so it lives here):
   hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
-  cached** or the app can't learn it's stale; `noindex` + frame/sniff headers
-  because this is a personal estate, not a public product. `public/robots.txt`
-  says the same thing from the filesystem, where it is legible without inspecting
-  a response. **That `X-Robots-Tag` is APP-scoped, and it is written on `/(.*)`.**
-  The app owns the apex today, so the two coincide; the day a landing page wants
-  `majordomocal.com`, a blanket noindex on that origin becomes a waitlist page
-  Google cannot index. Whichever way that split goes — landing on the apex with the
-  app moved to `app.majordomocal.com`, or the landing at `join.`— the header and
-  `robots.txt` move WITH THE APP, and so do the two absolute-URL sites above.
+  cached** or the app can't learn it's stale; frame/sniff/referrer headers on
+  everything. The pre-landing `X-Robots-Tag: noindex` is GONE — the site is a
+  public product now, `index.html` says `index, follow`, and `public/robots.txt`
+  + `public/sitemap.xml` (which lists `/`, `/privacy`, `/terms`) agree.
 - **The CSP is there for the supply chain, not for injection.** There is no
   HTML-injection route in this codebase — no `dangerouslySetInnerHTML`, no
   `innerHTML`, no `eval` — so the policy is not defending against user content.
@@ -152,9 +159,10 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   session lives, by deliberate design) and post it somewhere. `script-src 'self'`
   makes that post fail. Keep `connect-src` as the list of origins the app
   genuinely talks to — Supabase over both `https:` and `wss:` (realtime is a
-  WebSocket), Twelve Data, Frankfurter, and `www.googleapis.com` (the Calendar
-  bridge runs client-side; token traffic stays in `api/`) — and **add to it only
-  when a real feature needs it**, since every entry is a place data could go. `style-src` carries
+  WebSocket), Twelve Data, Frankfurter, `eu.i.posthog.com` (the telemetry
+  outbox; see TELEMETRY below), and `www.googleapis.com` (the Calendar bridge
+  runs client-side; token traffic stays in `api/`) — and **add to it only when
+  a real feature needs it**, since every entry is a place data could go. `style-src` carries
   `'unsafe-inline'` because React writes `style` attributes all over this app;
   that is a style hole, not a script hole. If the build ever gains an inline
   `<script>` (it has none today — checked in `dist/index.html`, where the PWA
@@ -242,6 +250,75 @@ describe it as existing.
   was metered so the probe can say so; the standing fix is B6's reserve-before-spend.
   Until the tables exist at all, every ring is refused — which is the correct
   direction for that error to run: a broken meter is not an unlimited allowance.
+
+## The consent door & the legal pages (launch, Aug 2026)
+
+The commercial launch's legal seam: `/terms` + `/privacy` (real prerendered pages),
+one **consent door**, and the acceptance stamp that gates telemetry.
+
+- **The door** (`src/app/ConsentDoor.tsx`) renders INSTEAD of the shell — `App()` in
+  `App.tsx` is now a two-line gate over a private `Shell()` (a component split, not an
+  early return, because Shell opens with hooks). It shows whenever the device's
+  `termsAccepted` stamp in the shell store is below **`TERMS_VERSION`**
+  (`core/store/shell.ts`). It is the app's ONE deliberate wall (the sign-in door
+  stays a door); pressing AGREE & ENTER stamps `termsAccepted`/`termsAcceptedAt`.
+  Per-device and never synced, like `onboarded` — sign-in is optional, so consent
+  cannot hang on an account. In DEV the door only answers `?consent` (the Manor
+  harness and every screenshot param drive bare URLs); in production it is
+  unconditional, so existing estates meet it once as an interstitial.
+- **A material change to /terms or /privacy = bump `TERMS_VERSION`** — that is the
+  whole re-acceptance mechanism. Also update each document's "Last updated" line
+  (`src/landing/voice.ts`).
+- **The legal pages follow the /privacy pattern exactly**: root `terms.html` /
+  `privacy.html` → rollup `input` in `vite.config.ts` → `entry-*.tsx` client entry →
+  `TermsPage`/`PrivacyPage` over the shared `LegalPage` shell → copy in
+  `src/landing/voice.ts` → prerendered by `scripts/prerender.mjs`. **Adding a landing
+  route means touching four fail-loud lists**: the rollup `input`, the prerender
+  route loop, `entry-server.tsx` (union + meta), and `audit.mjs` `ROUTES` — plus
+  `public/sitemap.xml` and the landing footer. The html must carry `__SITE_ORIGIN__`
+  in its canonical or the build throws.
+- **The SW must not answer for the legal pages**: `/privacy` and `/terms` are in
+  `navigateFallbackDenylist` (vite.config.ts) so an installed app's navigation gets
+  the document, not the precached shell. A new legal route needs the same entry.
+- **The legal copy carries honesty invariants** (stated in a comment block above it
+  in `src/landing/voice.ts`): the public pages stay tracker-free (Vercel aggregate
+  counts only); app analytics are named actions only; deletion is a mailbox
+  (`majordomocal@gmail.com` — `FALLBACK_CONTACT` in `site.config.ts`, duplicated in
+  `scripts/prerender.mjs`, both overridden by a `CONTACT_EMAIL` Vercel env var)
+  because no in-app deletion exists. Do not edit the documents into promising
+  machinery the app does not have.
+
+## Telemetry (`src/core/telemetry/`)
+
+Anonymous usage counts to PostHog **EU** — hand-rolled (no SDK) so every byte that
+leaves is auditable in one file against the Privacy Policy's promises.
+
+- **Named actions only, never estate contents.** The event vocabulary is the closed
+  union in `core/telemetry/events.ts` (~18 names: `app_open`, `wing_open`,
+  `workout_logged`, …). No amounts, titles, notes, body stats, or record text may
+  ride as properties. Adding an event = add to the union, then instrument a
+  **SUBMIT HANDLER, never a store action** — heal passes, onboarding seeds, `?demo`
+  fixtures and sync all drive store actions, and housekeeping must never count as
+  usage. (This is why `refreshPrices`, the events-store actions, and
+  `planWatchPost` are NOT instrumented.)
+- **The predicate** (all must hold before anything is sent — or even written):
+  production build · `VITE_POSTHOG_KEY` present (set in Vercel for **Production
+  only**, so previews and DEV are silent; the key is public-by-design, same class
+  as the anon key) · `termsAccepted >= TERMS_VERSION` · settings switch not off
+  (`telemetryOff` in the shell store; settings → THE FINE PRINT) · no Global
+  Privacy Control signal.
+- **`majordomo-telemetry`** is a raw localStorage key ({deviceId, lastUserId,
+  sessionId, outbox}) created **lazily on the first allowed capture** — never
+  before consent, partly because `hasEstate()` matches any `majordomo*` key and a
+  pre-consent write would walk a bounced stranger past the landing. Deliberately
+  absent from `ESTATE_KEYS` (an export must not carry a device identity) and from
+  sync. Events queue in an outbox (cap 200) and drain on boot/online/visibility —
+  offline usage counts, later. `visibilitychange→hidden` drains via `sendBeacon`
+  with an optimistic clear (a rarely lost event beats a duplicate).
+- **Identity**: `distinct_id` = the random device id; a genuine sign-in (detected
+  via the persisted `lastUserId`, because OAuth makes every real sign-in look like
+  a boot restore) sends `$identify` to merge into the Supabase user id. Email never.
+- Owner-side setup and the dashboard recipes live in `docs/telemetry-dashboards.md`.
 
 ## The Google Calendar bridge — two-way sync (`api/google.ts` + `src/app/gcal/`)
 
@@ -465,9 +542,13 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 ### The three stores (one localStorage key each, fully independent)
 
 - **`majordomo-training` v5** (`modules/training/store.ts`) — `{ workouts, weeklyGoal,
-  profile, skin }`. Workouts may carry optional `setsTotal` / `durationMin` (the two
-  session-size inputs on the effort step — additive, so no migrate was needed and old
-  blobs/exports round-trip). The `skin` field is **legacy/frozen**: nothing reads or
+  profile, customExercises, skin }`. Workouts may carry optional `setsTotal` /
+  `durationMin` (the two session-size inputs on the effort step) and an optional
+  `exercises` list (the named-lift flow) — all additive, so no migrate was needed
+  and old blobs/exports round-trip. `customExercises` (exercises the user wrote
+  themselves) landed the same way: a defaulted key an older blob simply lacks, so
+  persist's shallow merge leaves the initializer standing. **Only a changed meaning
+  needs a version bump.** The `skin` field is **legacy/frozen**: nothing reads or
   writes it anymore, but it stays in the interface/partialize/migrate so old blobs and
   exports round-trip unchanged. Do not bump the version for shell concerns.
 - **`majordomo-shell` v3** (`core/store/shell.ts`) — `{ skin, weekStart }`. On
@@ -662,8 +743,16 @@ ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
 - **Weekly volume mode** — `modules/training/lib/volume.ts` estimates "effective hard
   sets" per muscle over a **trailing 7 days** (deliberately not the calendar week —
   no Monday reset), classifies each against RP-style MEV/MAV/MRV `LANDMARKS`, and the
-  body map has a **Strain | Volume** toggle. Sets come from a per-session **budget**
-  split across the muscles trained, most-informed source first: the logged
+  body map has a **Strain | Volume** toggle. A session logged **exercise by
+  exercise** skips the estimate entirely: every set was written down against the
+  exercise that held it, so each muscle is credited DIRECTLY (per-exercise role,
+  ×0.5 for assisting, × the same effort discount). Its per-muscle total legitimately
+  exceeds the session's set count — that is the RP convention the landmarks are
+  stated in, where a bench set is one chest set AND a fraction of a triceps set.
+  **Anything summing `sessionSets` across all muscles to get a session's size is
+  therefore wrong and must call `sessionBudget` instead** (the Manor's volume dial
+  did, and was corrected). Otherwise sets come from a per-session **budget** split
+  across the muscles trained, most-informed source first: the logged
   `setsTotal` (verbatim; discounted below effort 5) → `durationMin` × ~18 sets/h →
   a saturating muscle-count estimate — so a chest-only day credits chest ~2.6× what
   a five-muscle day does, instead of the old flat per-muscle constant. Plates paint
@@ -708,6 +797,22 @@ ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
   path strings, viewBox 200×440). Paired muscles are authored as LEFT-half paths and
   mirrored via `transform="translate(200 0) scale(-1 1)"` for guaranteed symmetry.
   The silhouette is one half-path closed along the centerline, rendered twice.
+- **Named exercises** — the fifth door on the add sheet's method step: pick
+  exercises from a catalogue, log **kg × reps per set**, with last session's numbers
+  standing as the row placeholders. It is a parallel path, not a replacement: PPL /
+  PICK MUSCLES / RUN / SPORT are untouched. A session saved this way is still
+  `method: 'custom'` (no new union member, so nothing that classifies a session had
+  to learn a shape) carrying `exercises`; its muscles, `setsTotal` and rep-style
+  prefill are all **derived** from the list, and the effort step's Working-sets field
+  is replaced by what the log counts — a box that takes a number and then overwrites
+  it is the Ledger's cardinal sin. Names and muscles are copied onto the workout at
+  save, the PPL rule, so re-vendoring the catalogue never rewrites history.
+  - The catalogue is **736 entries generated into `data/exercises.ts`** and reached
+    only through a dynamic import (`data/catalogue.ts`), so its ~100 KB stays out of
+    the entry chunk the boot curtain covers and is precached like any other script —
+    the picker opens offline. It is code, not records: **never synced.** The user's
+    OWN exercises are records (`customExercises`, id prefix `cx-`) and ride the
+    grounds sync source as a new `'exercise'` kind.
 - **PPL workouts resolve to concrete muscle lists at save time** (denormalized into
   each Workout) so tuning `PPL_MAP` in `modules/training/data/muscles.ts` never
   rewrites history.
@@ -756,13 +861,16 @@ auto-enter Training so they land on the right screen.
   holdings with cached quotes so the board renders without a key), **and** the
   Manor's "brutal week" (4 night watches + sleep + training + study + payday,
   plus a quieter next week) — screenshot aid
+- `?consent` — shows the consent door (DEV never shows it unprompted; accepting
+  stamps the shell store, so clear `majordomo-shell` to see it again)
 - `?manor=month` — opens the Manor in month view · `window.__events` — events store
 - `?console=training|capital` — start the shell inside that console
 - `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by
   the **shell** store (founder machines also accept the seven legacy skin ids)
 - `?sheet=add` / `?sheet=effort` / `?sheet=when` / `?sheet=sport` / `?sheet=muscles`
-  — opens the add sheet on load (effort = edit mode on newest workout; when = also
-  expands the calendar; sport / muscles = the blank flow open on that picker)
+  / `?sheet=exercises` — opens the add sheet on load (effort = edit mode on newest
+  workout; when = also expands the calendar; sport / muscles / exercises = the blank
+  flow open on that picker)
 - `?sheet=skin` — opens the App-skin picker sheet on load
 - `?board` / `?board=<ventureId>` — opens the Workshop on a venture's pegboard
   (first venture when unnamed) — screenshot aid · `window.__workshop` — store handle

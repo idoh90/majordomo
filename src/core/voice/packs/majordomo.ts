@@ -884,6 +884,36 @@ export const majordomoPack: VoicePack = {
         return parts.length ? ` (plus ${parts.join(' and ')})` : ''
       },
     },
+    exercises: {
+      methodTitle: 'EXERCISES',
+      methodCaption: 'Named lifts, set by set — with last time beside you.',
+      stepTitle: 'What did you lift?',
+      addExercise: 'Add exercise',
+      empty: 'Nothing logged yet. Add the first exercise and its sets follow.',
+      searchPlaceholder: 'Search exercises',
+      filterAll: 'All',
+      loading: 'Fetching the catalogue.',
+      noResults: ({ query }) => `Nothing matches “${query}”.`,
+      yoursTag: 'Yours',
+      create: ({ name }) => `Add “${name}” as your own`,
+      createTitle: 'Your own exercise',
+      createNameLabel: 'Name',
+      createNamePlaceholder: 'What you call it',
+      createMusclesLabel: 'What it works',
+      createMusclesHint:
+        'Tap once for the muscles taking the brunt, twice for the ones assisting. At least one has to take the brunt.',
+      createSave: 'Add exercise',
+      createNeedsName: 'Give it a name first.',
+      createNeedsPrimary: 'Mark at least one muscle as taking the brunt.',
+      addSet: 'Add set',
+      setCount: (n) => `${n} ${plural(n, 'set', 'sets')}`,
+      weightLabel: 'kg',
+      repsLabel: 'reps',
+      lastTime: ({ sets }) => `Last time · ${sets}`,
+      derivedSets: ({ sets, exercises }) =>
+        `${sets} working ${plural(sets, 'set', 'sets')} across ${exercises} ${plural(exercises, 'exercise', 'exercises')} — counted, not estimated.`,
+      detailTitle: 'Exercises',
+    },
     weekTitle: 'This week',
     goalMet: "You've hit this week's goal.",
     goalRemaining: (n) => `${n} more to hit this week's goal.`,
@@ -2087,6 +2117,23 @@ export const majordomoPack: VoicePack = {
     clearWorkoutsBodySynced: (n) =>
       `All ${n} workout${n === 1 ? '' : 's'} are deleted, here and on every other device. Nothing outside the Grounds is touched.`,
     clearWorkoutsYes: 'Clear the log',
+    groupLegal: 'THE FINE PRINT',
+    termsLabel: 'Terms of Service',
+    termsBlurb: 'The terms the house runs by. Opens in a new tab.',
+    privacyLabel: 'Privacy Policy',
+    privacyBlurb: 'What is kept, where it lives, and what is counted. Opens in a new tab.',
+    analyticsToggle: 'Share usage counts',
+    analyticsBlurb:
+      'Anonymous counts of which features get used — never the contents of your records. Off means the house reports nothing.',
+  },
+  consent: {
+    title: 'The terms of the house',
+    body: 'Your records live on your device and remain yours. The house runs by the terms below, and entering is agreeing to them, sir.',
+    analyticsLine:
+      'Once inside, the app counts which features are used — anonymous counts, never what your records say. Settings holds the switch to stop it.',
+    termsLink: 'Terms of Service',
+    privacyLink: 'Privacy Policy',
+    agree: 'AGREE & ENTER',
   },
   onboarding: {
     welcome: {

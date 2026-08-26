@@ -19,10 +19,15 @@ export function WorkoutCard({ workout, onEdit, onOpen }: WorkoutCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
 
-  const chips = [
-    ...workout.primary.map((m) => ({ label: MUSCLES[m].label, primary: true })),
-    ...workout.secondary.map((m) => ({ label: MUSCLES[m].label, primary: false })),
-  ]
+  // A session logged exercise by exercise names its exercises here instead of
+  // its muscles: the muscles are still on the body map and in the detail sheet,
+  // and "Bench Press, Incline Fly" is the scarcer half of what happened.
+  const chips = workout.exercises?.length
+    ? workout.exercises.map((e) => ({ label: e.name, primary: true }))
+    : [
+        ...workout.primary.map((m) => ({ label: MUSCLES[m].label, primary: true })),
+        ...workout.secondary.map((m) => ({ label: MUSCLES[m].label, primary: false })),
+      ]
   const visible = chips.slice(0, 4)
   const overflow = chips.length - visible.length
 

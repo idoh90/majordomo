@@ -1,6 +1,7 @@
 import { renderToString } from 'react-dom/server'
 import LandingPage from './LandingPage'
 import PrivacyPage from './PrivacyPage'
+import TermsPage from './TermsPage'
 import { voice } from './voice'
 
 /* ---------------------------------------------------------------------------
@@ -18,8 +19,10 @@ import { voice } from './voice'
    Break any of those and hydration mismatches; there is no server at runtime
    to paper over it.
 --------------------------------------------------------------------------- */
-export function render(route: 'index' | 'privacy'): string {
-  return renderToString(route === 'privacy' ? <PrivacyPage /> : <LandingPage />)
+export function render(route: 'index' | 'privacy' | 'terms'): string {
+  return renderToString(
+    route === 'privacy' ? <PrivacyPage /> : route === 'terms' ? <TermsPage /> : <LandingPage />,
+  )
 }
 
 /* The document's own strings come from voice.ts too — a <title> and a meta
@@ -28,4 +31,5 @@ export function render(route: 'index' | 'privacy'): string {
 export const meta = {
   index: { title: voice.meta.title, description: voice.meta.description },
   privacy: { title: voice.privacy.metaTitle, description: voice.privacy.metaDescription },
+  terms: { title: voice.terms.metaTitle, description: voice.terms.metaDescription },
 }

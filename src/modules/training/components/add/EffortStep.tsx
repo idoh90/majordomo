@@ -27,6 +27,11 @@ interface EffortStepProps {
   /** lift session size, string-valued like the run fields — '' = not recorded */
   setsTotal: string
   durationMin: string
+  /** present when the session was logged exercise by exercise: its size is
+   *  then a COUNT, not an estimate, so the sets field is replaced by what the
+   *  log adds up to. A box that accepts a number and then overwrites it is the
+   *  Ledger's cardinal sin — display one number, store another. */
+  countedSets?: { sets: number; exercises: number } | null
   onEffort: (v: number) => void
   onStrainFeel: (v: number) => void
   onRepStyle: (s: RepStyle) => void
@@ -52,6 +57,7 @@ export function EffortStep({
   repStyle,
   setsTotal,
   durationMin,
+  countedSets = null,
   onEffort,
   onStrainFeel,
   onRepStyle,
@@ -155,15 +161,21 @@ export function EffortStep({
       {!isRun && !isSport && (
         <div className="mt-5" role="group" aria-label={voice.grounds.sessionSizeTitle}>
           <div className="flex gap-2.5">
-            <Field
-              label={voice.grounds.sessionSetsLabel}
-              unit={voice.grounds.sessionSetsUnit}
-              value={setsTotal}
-              onChange={(v) => onSession({ setsTotal: v })}
-              placeholder={`~${budgetPreview}`}
-              step="1"
-              max={60}
-            />
+            {countedSets ? (
+              <p className="flex-1 self-end text-xs text-ink-dim">
+                {voice.grounds.exercises.derivedSets(countedSets)}
+              </p>
+            ) : (
+              <Field
+                label={voice.grounds.sessionSetsLabel}
+                unit={voice.grounds.sessionSetsUnit}
+                value={setsTotal}
+                onChange={(v) => onSession({ setsTotal: v })}
+                placeholder={`~${budgetPreview}`}
+                step="1"
+                max={60}
+              />
+            )}
             <Field
               label={voice.grounds.sessionMinLabel}
               unit={voice.grounds.sessionMinUnit}

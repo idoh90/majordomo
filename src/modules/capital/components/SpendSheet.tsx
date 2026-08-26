@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Sheet } from '../../../core/ui/Sheet'
 import { localDayKey } from '../../../core/dates'
 import { makeId } from '../../../core/ids'
+import { track } from '../../../core/telemetry'
 import { voice } from '../../../core/voice'
 import { useCapitalStore } from '../store'
 import type { RecurringExpense, SpendItem } from '../types'
@@ -205,6 +206,10 @@ export function SpendSheet({ open, now, onClose }: SpendSheetProps) {
       setMonthItems(mk, cleanItems(d.items))
       setSpend(mk, signed(d.quick))
     }
+    // one count per Save press that wrote anything (this handler fires up to
+    // four store actions) — a look-only Save writes nothing and counts nothing
+    if (changed.budgetChanged || changed.recChanged || changed.months.length > 0)
+      track('spend_saved')
     onClose()
   }
 

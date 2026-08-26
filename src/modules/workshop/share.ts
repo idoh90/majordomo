@@ -4,6 +4,7 @@ import { offReason } from '../../core/sync/gate'
 import { noteDeleted } from '../../core/sync/intent'
 import { shareRecordKey } from '../../core/sync/shareIntent'
 import { useShareStore } from '../../core/sync/shareStore'
+import { track } from '../../core/telemetry'
 import {
   createShare,
   deleteShare,
@@ -107,6 +108,7 @@ export async function shareVenture(ventureId: string): Promise<CrewResult> {
   ]
   useShareStore.getState().markDirty(keys, Date.now())
 
+  track('crew_shared')
   return { ok: true, code: created.code }
 }
 
@@ -120,6 +122,9 @@ export function joinCrew(code: string): CrewResult {
   if (refused) return { ok: false, reason: refused }
   useShareStore.getState().setError(null)
   useShareStore.getState().setPendingJoin(code)
+  // counted at intent (the code is stashed) rather than confirmed redemption —
+  // redemption happens later in the service, possibly after an OAuth round trip
+  track('crew_joined')
   return { ok: true }
 }
 

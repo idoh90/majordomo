@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.api.json && vite build && node scripts/prerender.mjs",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.api.json && vite build && node scripts/prerender.mjs && node scripts/check-brand.mjs",
     "lint": "eslint src",
     "preview": "vite preview",
     "audit": "node scripts/audit.mjs",
     "check:manor": "node scripts/manor-harness.mjs",
+    "vendor:exercises": "node scripts/vendor-exercises.mjs",
     "bell:probe": "node scripts/bell-probe.mjs"
   },
   "dependencies": {
