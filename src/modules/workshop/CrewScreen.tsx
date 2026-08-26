@@ -433,7 +433,7 @@ function VenturePanel({
                       type="button"
                       disabled={working || !code}
                       onClick={() => setConfirming({ kind: 'rotate' })}
-                      className="btn-soft rounded-pill px-3 py-1.5 font-display text-[10px] font-semibold tracking-[0.12em] disabled:opacity-40"
+                      className="btn-soft flex-1 py-2 text-[11px] tracking-[0.1em] disabled:opacity-40"
                     >
                       {c.rotate}
                     </button>

@@ -94,11 +94,13 @@ technical version.
   drives the real crew fold in a real page with FORGED records — a record's kind,
   id and payload are all whatever the pusher says they are — and asserts that a
   crew can touch only what it owns, while everything it legitimately may do still
-  works. Needs `npm run dev` up; its invite-link section additionally needs a
-  configured registry (any non-empty `VITE_SUPABASE_*` in `.env.local` — nothing
-  is called), and SAYS SO and skips rather than passing for the wrong reason when
-  there is none. **Run it after touching `shareSource.ts`, `core/sync/merge.ts`
-  or the join gate.** Against the pre-fix fold it scores 6/19: a crew could annex
+  works. It also checks the EMISSION side — what this device hands out, not just
+  what it takes in — and that a crew edit made while signed OUT is still queued.
+  Needs `npm run dev` up; its invite-link and signed-out sections additionally
+  need a configured registry (any non-empty `VITE_SUPABASE_*` in `.env.local` —
+  nothing is called), and it SAYS SO and skips rather than passing for the wrong
+  reason when there is none. **Run it after touching `shareSource.ts`,
+  `core/sync/merge.ts`, `shareService.ts` or the join gate.** Against the pre-fix fold it scores 6/19: a crew could annex
   a venture it had never contained and post milestones onto the owner's calendar,
   and nothing about reading the code showed it.
 - No test runner **for the app at large**; verification is done in the browser. The
@@ -512,7 +514,8 @@ A crew is a second namespace beside `records`, never a loosening of it — the
 reasoning is at the top of `supabase/migrations/0004_shares.sql` and still holds.
 `0006_crew_roles.sql` gave that namespace a door policy, a waiting room and ranks;
 `0007_standing.sql` made a rank survive a departure; `0008_code_privacy.sql`
-made the join code the keeper's alone, and rotatable. All are pasted into the SQL
+made the join code the keeper's alone, and rotatable; `0009_one_door.sql` shut
+every way into `share_records` except the push RPC. All are pasted into the SQL
 editor by hand, IN FULL, like every migration here — the whole ritual, and the traps in it, is written down in
 **`supabase/APPLY.md`**, which is the thing to read before touching the registry.
 
@@ -643,6 +646,21 @@ editor by hand, IN FULL, like every migration here — the whole ritual, and the
   one identity, and every `find(x => x.id === …)` reaching whichever it met
   first. The copy is made only when the two disagree, so the honest path keeps
   payload identity (the engine's hash cache is keyed on it).
+- **THE PUSH RPC IS THE ONLY DOOR INTO `share_records`, and only since 0009.**
+  `push_share_records` stamps `author_id` from `auth.uid()`, and the fold trusts
+  that stamp to say whose work an hour was — which is worth nothing unless the
+  RPC is the only way in, and it was not. The function ran as the CALLER, so the
+  caller needed the table privileges anyway, and Supabase's default privileges
+  hand `authenticated` every column of every new table; 0004 revoked nothing. A
+  hand could insert rows with any `author_id`, re-stamp existing ones, and
+  hard-DELETE records — the quiet one, since a deletion with no tombstone leaves
+  nothing for a cursor-based pull to carry, so the record vanishes for the pusher
+  and lives forever on every other device. The table writes are revoked and the
+  RPC is `security definer` with an explicit `is_share_writer` check, because
+  under DEFINER the row policies are no longer what refuses a guest. Its
+  `ON CONFLICT` names the PK **constraint**, not its columns: the function
+  returns columns called `kind` and `id`, and a bare conflict target would ship
+  `join_share`'s ambiguity bug a second time.
 - **THE JOIN CODE IS THE KEEPER'S, and it can be turned.** `member reads share`
   grants the whole row and the row carried the code, so a GUEST — the rank that
   exists to change nothing — could copy the invite link and hand it out, and
@@ -665,6 +683,41 @@ editor by hand, IN FULL, like every migration here — the whole ritual, and the
   by `auth.uid()` rather than by an argument, so there is no version of the call
   that touches anybody else. The crews it announces to are read off the SHELF
   (ventures carrying a `shareId`), never off the code cache.
+- **A DEVICE PUBLISHES ONLY THE HOURS IT WORKED.** `adoptPrivateCopy` keeps the
+  whole ledger when a venture goes private — departed hours are history — so a
+  venture that has been through one crew still carries rows authored by that
+  crew's members. Opening it to a NEW crew pushed those too: another person's
+  account id, the days they worked and how long, to strangers they never met.
+  Both emitters (`shareSource.toRecords`, `shareVenture`'s seed) filter on the
+  signed-in account. The entries stay on the device; only the publishing stops.
+- **A guest reads the SHELF too, not just the board.** RENAME / SHIP / SHELVE /
+  REOPEN all write the crew's shared face, and only the board ever had a rank
+  gate. The registry refused the push, so nothing reached the crew — but nothing
+  said so either, and `drainShare` drops a guest's queue, so their device showed
+  a name nobody else could see, for good. ARCHIVE stays open to everyone:
+  `archived` is the shelf's own opinion, not a shared field.
+- **The share loop keeps `ownerId` for the same reason the personal one does.**
+  The membership reconcile turns a crew this account does not belong to back
+  into a private venture — an ordinary local edit, which the PERSONAL engine
+  then uploads to whoever is signed in. Right when it is your own crew you just
+  left; on an ACCOUNT SWITCH it uploaded the previous person's whole board into
+  the new account's cloud, moments after the app said "its records stay here and
+  were not sent". When the answer has changed, the re-privatisation runs inside
+  `applyQuietlyAll` instead. Like the personal store's, this field SURVIVES
+  `reset()`.
+- **The crew engine starts with the app, not with a session.** It used to start
+  only inside a signed-in cycle, so after a reload while signed out no share
+  source was registered and crew edits marked nothing dirty; signing in then
+  BASELINED them without dirtying and the work was never pushed, then overwritten
+  by the next repair pull. `ensureSources()` is called from `startShareService`;
+  the cycle still refuses the network without a session.
+- **A fold failure is one crew's problem.** Persist writes to localStorage
+  synchronously inside `setState`, so a crew sending more than the origin holds
+  makes the fold throw — and that throw used to unwind into `cycle`'s catch and
+  abandon every other crew. Caught per share now: the cursor is NOT advanced
+  (nothing landed, so nothing has been seen) and the rest of the cycle carries
+  on. `SHAPES` also bounds every string it checks, at ceilings far above
+  anything a person types — a gate that eats a crewmate's real work is its own bug.
 - **The join CODE has two forms** (`modules/workshop/joinCode.ts`): canonical
   (8 chars, no separators — what the registry stores) and display (`XXXX-XXXX` — what
   a person reads and types). The field dashes as it fills, and `editCode` exists for
