@@ -7,6 +7,7 @@ import Wings from './components/Wings'
 import WhatIf from './components/WhatIf'
 import Briefing from './components/Briefing'
 import FounderNote from './components/FounderNote'
+import Pricing from './components/Pricing'
 import Faq from './components/Faq'
 import Footer from './components/Footer'
 import { Section } from './components/Section'
@@ -54,6 +55,12 @@ export default function LandingPage() {
         <WhatIf />
         <Briefing />
         <FounderNote />
+        {/* The price list sits after the argument and the man who made it, and
+            before the questions — a reader who has just been told what the
+            house does, and by whom, is the one who wants to know what it costs.
+            The FAQ's own cost answer points back at it by saying "on this
+            page", so the two must not be separated. */}
+        <Pricing />
         <Faq />
       </main>
 

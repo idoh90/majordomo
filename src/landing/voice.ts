@@ -178,6 +178,77 @@ export const voice = {
     links: [] as { label: string; href: string }[],
   },
 
+  /* -------------------------------------------------------------- the terms
+     The price list, standing on a page that cannot take money yet. Every rule
+     this section obeys is a consequence of that:
+
+     - the HEADING is future tense, because the honesty has to land before the
+       numbers do. "What it will cost", never "Pricing".
+     - NOTHING here is a button. The page has one CTA and it is the door; a
+       second one that led to a checkout would be a lie, and one that led
+       nowhere would be worse.
+     - a feature the app does not have yet is MARKED, every time, with
+       `pending`. The paid column leans on the Bell, and the Bell does not
+       answer yet — a price list that quietly implies otherwise is the one
+       dishonesty this brand cannot afford, and the beta testers who read this
+       page arrive in the real app weeks later and remember.
+     - the two allowances (10 a month, 400 a month) tell the whole story
+       without an adjective between them. Numbers are specific or absent.
+     - the founders' seat states its cap as a fact and never counts down.
+       Scarcity that is true is permitted; urgency theatre is not.
+  ------------------------------------------------------------------------- */
+  pricing: {
+    title: 'WHAT IT WILL COST',
+    kicker: 'Nothing is for sale yet. When it is, these are the terms.',
+    /* the marker on anything not yet built — dry, and never dressed up as a
+       feature that is nearly here */
+    pending: 'NOT YET',
+    pendingLabel: 'not yet in service',
+    tiers: [
+      {
+        id: 'manor',
+        name: 'THE MANOR',
+        line: 'Your whole estate, on your own device.',
+        price: 'Free',
+        period: 'and it stays free',
+        items: [
+          { text: 'Every wing — the Watch, the Grounds, the Study, the Workshop, the Ledger', pending: false },
+          { text: 'The whole calendar: drag, seams, watches that end tomorrow', pending: false },
+          { text: 'Works offline, signed out, with your records on your device', pending: false },
+          { text: 'Export the estate whenever you like', pending: false },
+          /* the free half of the sync line — its opposite number in Full Staff
+             is "every device you own", and the two only read as a pair if this
+             one names the limit out loud */
+          { text: 'Sign in and keep one device backed up', pending: false },
+          { text: 'The Bell, ten questions a month', pending: true },
+        ],
+      },
+      {
+        id: 'staff',
+        name: 'FULL STAFF',
+        line: 'The household, working while you are on shift.',
+        price: '$59',
+        period: 'a year · or $6.99 a month',
+        items: [
+          { text: 'The Bell, four hundred questions a month', pending: true },
+          { text: 'Your estate on every device you own', pending: false },
+          { text: 'Crews — a shared board for the people you work with', pending: false },
+          { text: 'The what-if engine', pending: false },
+          { text: 'Every preset', pending: false },
+          { text: 'A briefing timed to your shift, and the weekly report card', pending: true },
+        ],
+      },
+    ],
+    founders: {
+      name: 'FOUNDERS’ SEATS',
+      terms: '$129, once',
+      line: 'The first five hundred households keep the full staff for good. Five hundred is the whole of it — when they are taken, the offer closes.',
+    },
+    /* The promise that matters more than either number: the free tier does not
+       get hollowed out later to make the paid one look better. */
+    note: 'The beta costs nothing, and none of this can be bought today. When it can, the free estate stays exactly as complete as it is now.',
+  },
+
   faq: {
     title: 'ANTICIPATED QUESTIONS',
     items: [
@@ -187,7 +258,7 @@ export const voice = {
       },
       {
         q: 'What will it cost?',
-        a: 'The beta costs nothing. At launch: a free tier that stays genuinely useful, and a paid tier priced like a serious tool, not a subscription trap.',
+        a: 'Nothing while the beta runs. After that the free estate stays as complete as it is today, and the full household is $59 a year. The whole arrangement is set out on this page, in advance.',
       },
       {
         q: 'What platforms?',
