@@ -87,6 +87,16 @@ export function occupies(e: CalendarEvent): boolean {
   return !e.allDay && !(e.sourceRef?.startsWith('workout:') ?? false)
 }
 
+/**
+ * Mirrored from an external calendar (today: Google). Abroad events are real
+ * commitments — they render, they hold their hour — but the Manor never edits
+ * them: the drag/resize/edit/delete surfaces all gate on this one predicate,
+ * so the mirror can only ever be rewritten by the sync that owns it.
+ */
+export function isAbroad(e: CalendarEvent): boolean {
+  return e.source === 'google'
+}
+
 /** is [start,end) free of every timed event that holds its hour? */
 export function rangeFree(events: CalendarEvent[], start: Date, end: Date): boolean {
   return !events.some(
@@ -190,6 +200,7 @@ export function hoursByKind(events: CalendarEvent[]): Record<EventKind, number> 
     study: 0,
     workshop: 0,
     marker: 0,
+    abroad: 0,
   }
   for (const e of events) if (!e.allDay) totals[e.kind] += hoursOf(e)
   return totals

@@ -9,13 +9,17 @@ export const KIND_META: Record<EventKind, { color: string; label: string }> = {
   study: { color: 'var(--color-w-study)', label: voice.kinds.study },
   workshop: { color: 'var(--color-w-workshop)', label: voice.kinds.workshop },
   marker: { color: 'var(--color-w-ledger)', label: voice.kinds.marker },
+  abroad: { color: 'var(--color-w-abroad)', label: voice.kinds.abroad },
 }
 
 /** marker chips color by the wing that owns them (payday = ledger ₪; a study
- *  due/exam day = study accent, its title already says what it is) */
+ *  due/exam day = study accent, its title already says what it is). The google
+ *  branch must sit before the ledger default — an external all-day event must
+ *  never wear the payday ₪. */
 export function markerMeta(e: CalendarEvent): { color: string; label: string; glyph: string } {
   if (e.source === 'study') return { color: 'var(--color-w-study)', label: voice.kinds.study, glyph: '' }
   if (e.source === 'workshop') return { color: 'var(--color-w-workshop)', label: voice.kinds.workshop, glyph: '◇' }
+  if (e.source === 'google') return { color: 'var(--color-w-abroad)', label: voice.kinds.abroad, glyph: '' }
   return { color: 'var(--color-w-ledger)', label: voice.kinds.marker, glyph: '₪' }
 }
 

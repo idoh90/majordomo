@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CalendarEvent, EventKind } from '../../core/events/types'
-import { hoursOf } from '../../core/events/lib'
+import { hoursOf, isAbroad } from '../../core/events/lib'
 import { localDayKey } from '../../core/dates'
 import { useNavStore } from '../../core/store/nav'
 import { Sheet } from '../../core/ui/Sheet'
@@ -172,6 +172,9 @@ export function MobileEventSheet({
   const e = event
   const meta = e ? eventMeta(e) : null
   const openIn = e ? OPEN_IN[e.kind] : undefined
+  // a mirror from an external calendar: shown in full, handled not at all —
+  // REMOVE/MOVE/Edit give way to one provenance line
+  const locked = e ? isAbroad(e) : false
   return (
     <Sheet open={open} onClose={onClose}>
       {e && meta && (
@@ -185,13 +188,15 @@ export function MobileEventSheet({
           <div className="flex items-center gap-2.5 pt-1">
             <span className="h-2 w-2 flex-none rounded-full" style={{ background: meta.color }} />
             <span className="text-[15px] font-bold">{e.title}</span>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="ml-auto p-1 text-[10px] font-semibold tracking-[0.16em] text-danger transition-colors hover:brightness-125"
-            >
-              {voice.manor.removeLabel.toUpperCase()}
-            </button>
+            {!locked && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="ml-auto p-1 text-[10px] font-semibold tracking-[0.16em] text-danger transition-colors hover:brightness-125"
+              >
+                {voice.manor.removeLabel.toUpperCase()}
+              </button>
+            )}
           </div>
           <EventTimeLine e={e} />
           <div className="mt-2 flex items-center gap-2">
@@ -218,34 +223,42 @@ export function MobileEventSheet({
               ▲ {voice.manor.nearWatchLine(near)}
             </div>
           )}
-          <button
-            type="button"
-            onClick={onMove}
-            className="btn-cta mt-3.5 h-12 w-full font-display text-[13.5px] font-semibold tracking-[0.18em]"
-          >
-            {voice.manor.eventSheet.move}
-          </button>
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="card h-11 flex-1 px-3 text-[12.5px] transition-colors hover:border-accent"
-            >
-              {voice.manor.eventSheet.edit}
-            </button>
-            {openIn && (
+          {locked ? (
+            <div className="mt-3 text-[11.5px] italic leading-relaxed text-ink-dim">
+              {voice.calendars.abroadLine}
+            </div>
+          ) : (
+            <>
               <button
                 type="button"
-                onClick={() => {
-                  onClose()
-                  useNavStore.getState().requestView(openIn.view)
-                }}
-                className="card h-11 flex-[1.5] px-3 text-[12.5px] transition-colors hover:border-accent"
+                onClick={onMove}
+                className="btn-cta mt-3.5 h-12 w-full font-display text-[13.5px] font-semibold tracking-[0.18em]"
               >
-                {voice.manor.eventSheet.openIn(openIn.name())}
+                {voice.manor.eventSheet.move}
               </button>
-            )}
-          </div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="card h-11 flex-1 px-3 text-[12.5px] transition-colors hover:border-accent"
+                >
+                  {voice.manor.eventSheet.edit}
+                </button>
+                {openIn && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose()
+                      useNavStore.getState().requestView(openIn.view)
+                    }}
+                    className="card h-11 flex-[1.5] px-3 text-[12.5px] transition-colors hover:border-accent"
+                  >
+                    {voice.manor.eventSheet.openIn(openIn.name())}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
     </Sheet>

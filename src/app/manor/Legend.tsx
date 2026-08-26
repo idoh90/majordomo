@@ -24,7 +24,7 @@ export function ManorLegend({ variant }: { variant: 'month' | 'week' }) {
   const ramp = SKINS[useShellStore((s) => s.skin)].heatRamp
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] lowercase text-ink-dim">
-      {(['shift', 'training', 'study', 'marker'] as const).map((k) => (
+      {(['shift', 'training', 'study', 'marker', 'abroad'] as const).map((k) => (
         <span key={k} className="inline-flex items-center gap-1.5">
           <span className="h-[5px] w-[5px] rounded-full" style={{ background: KIND_META[k].color }} />
           {KIND_META[k].label}

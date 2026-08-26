@@ -118,8 +118,15 @@ these remain undecided and must not be presented as settled:
 - tier, price, trial length and free-tier allowance;
 - whether it requires sign-in (proposed: yes, for metering).
 
+**Built, awaiting arming:** two-way Google Calendar sync (settings → CALENDARS) —
+the estate's bookings go to an app-created "Majordomo" calendar in the user's
+Google account, Google's own events arrive as read-only blocks that hold their
+hours. The code ships dormant: it needs the Google Cloud OAuth client, the
+`gcal_accounts` migration and `GCAL_ENABLED=1` before the door opens (playbook
+§3.3.1's verification warning applies from the moment the consent screen exists).
+
 **Not built, and not to be described as existing:** onboarding or first-run flow ·
-external calendar sync · payments or any paid tier · push notifications and the
+payments or any paid tier · push notifications and the
 shift-aware briefing schedule · the weekly report card · app-store presence ·
 persona or Hebrew voice packs · a public landing page or waitlist.
 

@@ -6,11 +6,15 @@
  * to draw that (the duty-cycle grid keeps it whole); the data never splits.
  */
 
-/** what the event is — drives color, iconography and wing routing */
-export type EventKind = 'shift' | 'sleep' | 'training' | 'study' | 'workshop' | 'marker'
+/** what the event is — drives color, iconography and wing routing.
+ *  'abroad' = mirrored from an external calendar: rendered and counted (it
+ *  holds its hour against new bookings) but read-only on every surface — the
+ *  external calendar is its editor, the Manor only shows it. */
+export type EventKind = 'shift' | 'sleep' | 'training' | 'study' | 'workshop' | 'marker' | 'abroad'
 
-/** which wing wrote the event ('manual' = placed by hand on the Manor) */
-export type EventSource = 'manual' | 'watch' | 'grounds' | 'capital' | 'study' | 'workshop'
+/** which wing wrote the event ('manual' = placed by hand on the Manor;
+ *  'google' = the Google Calendar mirror — no wing sweep may ever claim it) */
+export type EventSource = 'manual' | 'watch' | 'grounds' | 'capital' | 'study' | 'workshop' | 'google'
 
 export interface CalendarEvent {
   id: string
