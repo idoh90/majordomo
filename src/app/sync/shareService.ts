@@ -160,7 +160,16 @@ async function pullOne(shareId: string): Promise<void> {
   const wing = shareWing(shareId)
   const incoming: IncomingRecord[] = rows
     .filter((r) => !held.has(shareRecordKey(shareId, r.kind, r.id)))
-    .map((r) => ({ wing, kind: r.kind, id: r.id, payload: r.payload, deleted: r.deleted }))
+    .map((r) => ({
+      wing,
+      kind: r.kind,
+      id: r.id,
+      payload: r.payload,
+      deleted: r.deleted,
+      // carried, not dropped: the registry's word on who wrote this is the only
+      // field on the wire the pusher did not choose, and the ledger needs it
+      authorId: r.author_id ?? null,
+    }))
 
   const ventureTombs = incoming.filter((r) => r.kind === 'venture' && r.deleted).length
 

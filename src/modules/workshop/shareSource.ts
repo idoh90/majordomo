@@ -155,16 +155,64 @@ function heldBy(v: Venture, shareId: string): boolean {
 function held(
   records: IncomingRecord[],
   mine: Set<string>,
+  strikeable: Set<string>,
   localVentureById: Map<string, string>,
 ): IncomingRecord[] {
   return records.filter((r) => {
     if (r.deleted) {
       const local = localVentureById.get(r.id)
-      return local === undefined || mine.has(local)
+      return local === undefined || strikeable.has(local)
     }
     const claimed = (r.payload as { ventureId?: unknown } | null)?.ventureId
     return typeof claimed === 'string' && mine.has(claimed)
   })
+}
+
+/**
+ * THE LEDGER'S AUTHOR IS THE REGISTRY'S, NEVER THE PAYLOAD'S.
+ *
+ * A work entry says who did the hours, and the fold used to believe its `by`
+ * field — which the pushing client writes. Two things followed. Any crewmate
+ * could sign somebody else's name to work, or their own to another's. And
+ * because the ledger is keyed by the AUTHOR'S OWN EVENT ID, and those ids
+ * travel on the wire where every member can read them, a crewmate could push
+ * `{ id: <a victim's event id>, h: 0 }` and erase hours the victim had really
+ * worked — from the rings, the odometer and the contribution table, on
+ * everyone's screen including the victim's. The victim's own heal pass then
+ * declined to put it back, because `workLedgerPatch` skips an entry it does
+ * not own, and the forged `by` made it somebody else's.
+ *
+ * `author_id` is stamped inside the push RPC from `auth.uid()`, so it is the
+ * one field on a share record the pusher does not choose. Two rules follow
+ * from it: an entry is stored under the author the REGISTRY names, and an
+ * entry already standing may only be rewritten by the hand that wrote it.
+ *
+ * A row with no stamp at all is dropped — every row this app has ever pushed
+ * carries one, so an unstamped row was not written by this app.
+ *
+ * Tombstones are deliberately left to the venture rules: deleting a venture
+ * cascades its whole ledger, other people's rows included, and that is a
+ * deletion a hand is entitled to make. A row struck that way is rebuilt from
+ * the author's own calendar by their next heal pass.
+ */
+function ledger(
+  records: IncomingRecord[],
+  local: Record<string, WorkEntry>,
+): IncomingRecord[] {
+  const out: IncomingRecord[] = []
+  for (const r of records) {
+    if (r.deleted) {
+      out.push(r)
+      continue
+    }
+    const author = r.authorId
+    if (typeof author !== 'string' || author === '') continue
+    const standing = local[r.id]
+    if (standing && standing.by !== author) continue
+    const p = r.payload as WorkEntry
+    out.push(p.by === author ? r : { ...r, payload: { ...p, by: author } })
+  }
+  return out
 }
 
 /**
@@ -211,6 +259,23 @@ export function shareSource(shareId: string): SyncSource {
       const records = wellFormed(raw)
       useWorkshopStore.setState((s) => {
         let ventures = s.ventures
+        /**
+         * What this share held BEFORE the fold, and what the fold buried.
+         *
+         * Both exist for tombstones. `mine` below is computed after the venture
+         * fold, so by the time a venture's own cascade — its cards, threads,
+         * milestones and ledger rows, which `deleteVenture` pushes in the SAME
+         * batch — is judged, the venture they name has already been removed and
+         * every one of them is refused. The board then sits on every other
+         * member's device forever, with no venture on the shelf to reach it
+         * from, while the heal pass keeps redrawing its milestone and deadline
+         * chips on the Manor. Judging a tombstone against what the share held
+         * on entry is what makes a deletion complete.
+         */
+        const heldOnEntry = new Set(
+          s.ventures.filter((v) => v.shareId === shareId).map((v) => v.id),
+        )
+        const buried = new Set<string>()
         const incoming = of(records, 'venture')
         if (incoming.length > 0) {
           const byId = new Map(ventures.map((v) => [v.id, v]))
@@ -226,13 +291,18 @@ export function shareSource(shareId: string): SyncSource {
             // gone private can still be re-adopted by the crew it came from.
             if (cur && !heldBy(cur, shareId)) continue
             if (r.deleted) {
-              // deleted FOR THE CREW, by a member who declared it. The local
+              // Deleted FOR THE CREW, by a member who declared it. The local
               // copy goes, and so must this device's own dual-homed personal
               // record — otherwise the venture stub resurrects on our other
               // devices with a board that no longer exists anywhere. This is
               // declared intent arriving over the wire, not a diff.
-              if (cur) {
+              //
+              // CURRENTLY holds, not `heldBy`: a private copy kept on leaving
+              // is not the crew's to delete. Rejoining would otherwise replay
+              // the old tombstone and destroy the copy you were promised.
+              if (cur && cur.shareId === shareId) {
                 byId.delete(r.id)
+                buried.add(r.id)
                 noteDeleted('workshop', 'venture', [r.id])
               }
               continue
@@ -293,31 +363,45 @@ export function shareSource(shareId: string): SyncSource {
         const mine = new Set(
           ventures.filter((v) => v.shareId === shareId).map((v) => v.id),
         )
+        // a tombstone is judged against the union: what the share holds now,
+        // and what it held when this batch arrived
+        const strikeable = new Set([...mine, ...heldOnEntry])
         /** id → the venture it currently hangs on, for judging tombstones */
         const ventureOf = (xs: Array<{ id: string; ventureId: string }>) =>
           new Map(xs.map((x) => [x.id, x.ventureId]))
+        /** a venture the fold just buried takes its whole board with it, so an
+         *  incomplete batch cannot orphan one either */
+        const orphan = (v: string) => buried.has(v)
 
         return {
           ventures,
           cards: mergeList<BoardCard>(
             s.cards,
-            held(of(records, 'card'), mine, ventureOf(s.cards)),
-          ),
+            held(of(records, 'card'), mine, strikeable, ventureOf(s.cards)),
+          ).filter((c) => !orphan(c.ventureId)),
           threads: mergeList<Thread>(
             s.threads,
-            held(of(records, 'thread'), mine, ventureOf(s.threads)),
-          ),
+            held(of(records, 'thread'), mine, strikeable, ventureOf(s.threads)),
+          ).filter((t) => !orphan(t.ventureId)),
           milestones: mergeList<Milestone>(
             s.milestones,
-            held(of(records, 'milestone'), mine, ventureOf(s.milestones)),
-          ),
-          workEntries: mergeMap<WorkEntry>(
-            s.workEntries,
-            held(
-              of(records, 'work'),
-              mine,
-              new Map(Object.entries(s.workEntries).map(([k, e]) => [k, e.ventureId])),
-            ),
+            held(of(records, 'milestone'), mine, strikeable, ventureOf(s.milestones)),
+          ).filter((m) => !orphan(m.ventureId)),
+          workEntries: Object.fromEntries(
+            Object.entries(
+              mergeMap<WorkEntry>(
+                s.workEntries,
+                ledger(
+                  held(
+                    of(records, 'work'),
+                    mine,
+                    strikeable,
+                    new Map(Object.entries(s.workEntries).map(([k, e]) => [k, e.ventureId])),
+                  ),
+                  s.workEntries,
+                ),
+              ),
+            ).filter(([, e]) => !orphan(e.ventureId)),
           ),
         }
       })

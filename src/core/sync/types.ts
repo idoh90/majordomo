@@ -70,4 +70,11 @@ export interface IncomingRecord {
   id: string
   payload: unknown
   deleted: boolean
+  /**
+   * WHO WROTE IT, according to the registry — stamped from `auth.uid()` inside
+   * the push RPC, so unlike everything else on a record this one field is not
+   * the pushing client's to choose. Absent in personal space, where the row is
+   * already scoped to one account and the question does not arise.
+   */
+  authorId?: string | null
 }

@@ -79,7 +79,7 @@ const fold = (share, records) =>
       ventures: s.ventures.map((v) => ({ id: v.id, name: v.name, shareId: v.shareId ?? null })),
       cards: s.cards.map((c) => ({ id: c.id, ventureId: c.ventureId, title: c.title })),
       milestones: s.milestones.map((m) => ({ id: m.id, ventureId: m.ventureId, title: m.title })),
-      work: Object.entries(s.workEntries).map(([k, e]) => ({ k, ventureId: e.ventureId, h: e.h })),
+      work: Object.entries(s.workEntries).map(([k, e]) => ({ k, ventureId: e.ventureId, h: e.h, by: e.by })),
       markers: window.__events.getState().events
         .filter((e) => e.kind === 'marker')
         .map((e) => e.title),
@@ -87,6 +87,9 @@ const fold = (share, records) =>
   }, [share, records])
 
 const rec = (kind, id, payload, deleted = false) => ({ kind, id, payload, deleted })
+/** a record as the registry hands it down: `authorId` is stamped by the push
+ *  RPC from auth.uid(), so it is the one field a pusher cannot choose */
+const signed = (kind, id, payload, authorId) => ({ kind, id, payload, deleted: false, authorId })
 const venturePayload = (id, name) => ({
   id, name, status: 'building', goalH: 0, createdAt: '2026-01-01T00:00:00.000Z',
 })
@@ -201,7 +204,85 @@ const venturePayload = (id, name) => ({
   say(bricked === null, 'the store is still readable after the assault', bricked ?? '')
 }
 
-/* ============================ 10. the LEGITIMATE paths still work ========= */
+/* ====== 10. deleting a crew venture takes its whole board with it ========
+ * `deleteVenture` pushes the venture tombstone and its cards/threads/
+ * milestones/ledger tombstones in ONE batch. Judged against the post-fold
+ * venture list, every dependent tombstone was refused — the board stayed on
+ * every other member's device forever, with no venture on the shelf to reach
+ * it from, while the heal pass kept redrawing its chips on the Manor. */
+{
+  // stand a full crew venture up first
+  await fold(S1, [
+    rec('venture', 'v-doomed', venturePayload('v-doomed', 'Doomed')),
+    rec('card', 'c-doomed', { id: 'c-doomed', ventureId: 'v-doomed', type: 'note', title: 'Card', col: 0, row: 0, createdAt: '2026-01-01T00:00:00.000Z' }),
+    rec('thread', 't-doomed', { id: 't-doomed', ventureId: 'v-doomed', from: 'c-doomed', to: 'c-ok' }),
+    rec('milestone', 'm-doomed', { id: 'm-doomed', ventureId: 'v-doomed', title: 'DOOMED CHIP', on: '2026-04-01', done: false, countFrom: '2026-01-01T00:00:00.000Z' }),
+    signed('work', 'w-doomed', { ventureId: 'v-doomed', at: '2026-01-02T00:00:00.000Z', h: 1, by: 'dana' }, 'dana'),
+  ])
+  // …then the whole cascade, exactly as deleteVenture pushes it
+  const st = await fold(S1, [
+    rec('venture', 'v-doomed', null, true),
+    rec('card', 'c-doomed', null, true),
+    rec('thread', 't-doomed', null, true),
+    rec('milestone', 'm-doomed', null, true),
+    rec('work', 'w-doomed', null, true),
+  ])
+  say(!st.ventures.some((v) => v.id === 'v-doomed'), 'the venture goes')
+  say(!st.cards.some((c) => c.id === 'c-doomed'), 'and its cards go with it')
+  say(!st.milestones.some((m) => m.id === 'm-doomed'), 'and its milestones')
+  say(!st.work.some((w) => w.k === 'w-doomed'), 'and its ledger entries')
+  say(!st.markers.some((t) => /DOOMED CHIP/.test(t)),
+      'and no chip is left on the calendar', `markers=${JSON.stringify(st.markers)}`)
+}
+
+/* ====== 11. …even when the crew sends ONLY the venture tombstone ========= */
+{
+  await fold(S1, [
+    rec('venture', 'v-lone', venturePayload('v-lone', 'Lone')),
+    rec('milestone', 'm-lone', { id: 'm-lone', ventureId: 'v-lone', title: 'LONE CHIP', on: '2026-04-01', done: false, countFrom: '2026-01-01T00:00:00.000Z' }),
+  ])
+  const st = await fold(S1, [rec('venture', 'v-lone', null, true)])
+  say(!st.ventures.some((v) => v.id === 'v-lone'), 'a lone venture tombstone still buries the venture')
+  say(!st.milestones.some((m) => m.id === 'm-lone'), 'and its board is cascaded locally rather than orphaned')
+  say(!st.markers.some((t) => /LONE CHIP/.test(t)), 'so no undeletable chip survives it')
+}
+
+/* ====== 12. a private copy is not the crew's to delete ================== */
+{
+  // v-left is private, formerShareId = S2. S2 may re-adopt it (checked below),
+  // but a tombstone from S2 must not destroy the copy kept on leaving.
+  const st = await fold(S2, [rec('venture', 'v-left', null, true)])
+  say(st.ventures.some((v) => v.id === 'v-left'),
+      'a crew cannot delete the private copy you kept on leaving')
+}
+
+/* ====== 13. the ledger's author is the registry's, not the payload's ===== */
+{
+  // dana really worked two hours; the entry is keyed by HER event id, which
+  // travels on the wire where every crewmate can read it
+  await fold(S1, [signed('work', 'ev-dana', { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 2, by: 'dana' }, 'dana')])
+
+  // mallory pushes under dana's key to zero it, signing dana's name
+  const st = await fold(S1, [signed('work', 'ev-dana', { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 0, by: 'dana' }, 'mallory')])
+  const row = st.work.find((w) => w.k === 'ev-dana')
+  say(row && row.h === 2, "a crewmate cannot erase another member's hours", `h=${row?.h}`)
+
+  // …nor sign someone else's name to work of their own
+  const st2 = await fold(S1, [signed('work', 'ev-mallory', { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 40, by: 'dana' }, 'mallory')])
+  const forged = st2.work.find((w) => w.k === 'ev-mallory')
+  say(forged && forged.by === 'mallory', 'work is credited to whoever the registry says wrote it', `by=${forged?.by}`)
+
+  // an unstamped row was not written by this app
+  const st3 = await fold(S1, [rec('work', 'ev-unstamped', { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 5, by: 'dana' })])
+  say(!st3.work.some((w) => w.k === 'ev-unstamped'), 'an unstamped ledger row is refused')
+
+  // …and the author may still correct their own entry
+  const st4 = await fold(S1, [signed('work', 'ev-dana', { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 3.5, by: 'dana' }, 'dana')])
+  const own = st4.work.find((w) => w.k === 'ev-dana')
+  say(own && own.h === 3.5, 'the author may still correct their own hours', `h=${own?.h}`)
+}
+
+/* ============================ 14. the LEGITIMATE paths still work ========= */
 {
   // the crew I am in may speak for its own venture, and hang things on it
   const st = await fold(S1, [
@@ -221,7 +302,7 @@ const venturePayload = (id, name) => ({
   // a crewmate's real work.
   const st = await fold(S1, [
     rec('thread', 't-ok', { id: 't-ok', ventureId: 'v-crew1', from: 'c-ok', to: 'c-keep' }),
-    rec('work', 'w-ok', { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 2.5, by: 'dana' }),
+    signed('work', 'w-ok', { ventureId: 'v-crew1', at: '2026-01-02T00:00:00.000Z', h: 2.5, by: 'dana' }, 'dana'),
     rec('card', 'c-full', { id: 'c-full', ventureId: 'v-crew1', type: 'task', title: 'Full', body: 'b', url: 'https://example.com', done: true, doneBy: 'dana', dueAt: '2026-03-01T18:00:00.000Z', parentId: 'c-ok', col: 1, row: 2, fx: 12.5, fy: 40, createdAt: '2026-01-01T00:00:00.000Z' }),
     rec('card', 'c-bare', { id: 'c-bare', ventureId: 'v-crew1', type: 'note', title: 'Bare', col: 0, row: 0, createdAt: '2026-01-01T00:00:00.000Z' }),
     rec('milestone', 'm-full', { id: 'm-full', ventureId: 'v-crew1', title: 'Full', on: '2026-04-01', done: true, doneAt: '2026-03-30T00:00:00.000Z', countFrom: '2026-01-01T00:00:00.000Z' }),
