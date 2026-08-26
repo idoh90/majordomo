@@ -64,6 +64,21 @@ export function sessionBudget(
 }
 
 export function sessionSets(w: Workout, m: MuscleId): number {
+  // A session logged exercise by exercise does not need its budget guessed and
+  // then divided: every set was written down against the exercise that held
+  // it, so each muscle is credited DIRECTLY. Roles are read per exercise, so a
+  // muscle taking the brunt in one movement and assisting in another gets both
+  // — and the per-muscle total legitimately exceeds the session's set count,
+  // which is the RP convention the landmarks are stated in (a bench set is one
+  // chest set AND a fraction of a triceps set).
+  if (w.exercises?.length) {
+    let sets = 0
+    for (const e of w.exercises) {
+      const role = e.primary.includes(m) ? 1 : e.secondary.includes(m) ? SECONDARY : 0
+      if (role > 0) sets += e.sets.length * role
+    }
+    return sets * hardness(w.effort)
+  }
   const role = w.primary.includes(m) ? 1 : w.secondary.includes(m) ? SECONDARY : 0
   const weight = w.primary.length + SECONDARY * w.secondary.length
   if (role === 0 || weight === 0) return 0

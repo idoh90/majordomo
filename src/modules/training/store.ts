@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import type { Workout } from './types'
+import type { CatalogueExercise, Workout } from './types'
 import { DEFAULT_PROFILE, type Profile } from './lib/nutrition'
 import { DEFAULT_SKIN } from '../../core/ui/skins'
 import { makeId } from '../../core/ids'
@@ -23,10 +23,17 @@ interface WorkoutState {
   weeklyGoal: number
   /** bodyweight/dimensions + nutrition tunables for the macro engine */
   profile: Profile
+  /** exercises the user wrote themselves, for anything the bundled catalogue
+   *  does not have. They sit alongside it in the picker and are the only half
+   *  of the catalogue that is records — the bundled half is code, identical on
+   *  every device, so it is never stored and never synced. */
+  customExercises: CatalogueExercise[]
   /** legacy/frozen passthrough — never read or written anymore; typed as a
    *  plain string so pre-pivot ids in old blobs/exports round-trip verbatim */
   skin: string
   addWorkout: (w: Workout) => void
+  addCustomExercise: (e: CatalogueExercise) => void
+  deleteCustomExercise: (id: string) => void
   updateWorkout: (id: string, patch: Partial<Omit<Workout, 'id'>>) => void
   deleteWorkout: (id: string) => void
   clearAll: () => void
@@ -37,6 +44,9 @@ interface WorkoutState {
 }
 
 const byDateDesc = (a: Workout, b: Workout) => b.performedAt.localeCompare(a.performedAt)
+/** the picker reads them alphabetically, so the store holds them that way —
+ *  the sync applier owes the same order by hand (registry.ts) */
+export const byName = (a: CatalogueExercise, b: CatalogueExercise) => a.name.localeCompare(b.name)
 
 export const useWorkoutStore = create<WorkoutState>()(
   persist(
@@ -44,6 +54,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       workouts: [],
       weeklyGoal: DEFAULT_WEEKLY_GOAL,
       profile: DEFAULT_PROFILE,
+      customExercises: [],
       skin: DEFAULT_SKIN,
       addWorkout: (w) => set((s) => ({ workouts: [...s.workouts, w].sort(byDateDesc) })),
       updateWorkout: (id, patch) =>
@@ -73,6 +84,14 @@ export const useWorkoutStore = create<WorkoutState>()(
           workouts.map((w) => w.id),
         )
       },
+      addCustomExercise: (e) =>
+        set((s) => ({ customExercises: [...s.customExercises, e].sort(byName) })),
+      // no surface calls this yet: a delete path has to exist alongside the
+      // tombstone it owes, not be added later on top of records already synced
+      deleteCustomExercise: (id) => {
+        set((s) => ({ customExercises: s.customExercises.filter((e) => e.id !== id) }))
+        noteDeleted('grounds', 'exercise', [id])
+      },
       setWeeklyGoal: (goal) =>
         set({ weeklyGoal: Math.max(0, Math.min(MAX_WEEKLY_GOAL, Math.round(goal))) }),
       setProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
@@ -84,15 +103,19 @@ export const useWorkoutStore = create<WorkoutState>()(
       // fulfils) — additive, so older blobs/exports just come through unlinked
       version: 5,
       storage: createJSONStorage(() => localStorage),
+      // customExercises needs no version bump: an older blob simply lacks the
+      // key and persist's shallow merge leaves the initializer standing. Only
+      // a CHANGED meaning needs a migration.
       partialize: (s) => ({
         workouts: s.workouts,
         weeklyGoal: s.weeklyGoal,
         profile: s.profile,
+        customExercises: s.customExercises,
         skin: s.skin,
       }),
       migrate: (persisted) => {
         const p = (persisted ?? {}) as Partial<
-          Pick<WorkoutState, 'workouts' | 'weeklyGoal' | 'profile' | 'skin'>
+          Pick<WorkoutState, 'workouts' | 'weeklyGoal' | 'profile' | 'customExercises' | 'skin'>
         >
         return {
           workouts: (p.workouts ?? []).map((w) =>
@@ -103,6 +126,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           weeklyGoal: p.weeklyGoal ?? DEFAULT_WEEKLY_GOAL,
           // merge so older exports missing new tunables still get sane defaults
           profile: { ...DEFAULT_PROFILE, ...(p.profile ?? {}) },
+          customExercises: Array.isArray(p.customExercises) ? p.customExercises : [],
           skin: typeof p.skin === 'string' ? p.skin : DEFAULT_SKIN,
         }
       },

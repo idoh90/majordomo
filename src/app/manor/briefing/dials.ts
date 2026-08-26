@@ -16,7 +16,7 @@ import { useStudyStore } from '../../../modules/study/store'
 import { ALL_MUSCLE_IDS, muscleLabel } from '../../../modules/training/data/muscles'
 import { HOT_THRESHOLD } from '../../../modules/training/lib/recovery'
 import { computeStrains, readiness, type StrainMap } from '../../../modules/training/lib/strain'
-import { sessionSets } from '../../../modules/training/lib/volume'
+import { sessionBudget } from '../../../modules/training/lib/volume'
 import { useWorkoutStore } from '../../../modules/training/store'
 import { isLift } from '../../../modules/training/types'
 import { fulfilledHoursBetween as benchHoursBetween } from '../../../modules/workshop/lib'
@@ -304,8 +304,12 @@ export function useDials(facts: BriefFacts): Dial[] {
           const t = new Date(x.performedAt).getTime()
           return t >= w.start.getTime() && t < w.end.getTime()
         })
+        // the session's own count, not the sum of its per-muscle credits: a
+        // session logged exercise by exercise credits a bench set to chest AND
+        // (halved) to triceps, which is right per muscle and would read as
+        // double the sets actually done if added up across the body
         let sets = 0
-        for (const x of inWeek) for (const m of ALL_MUSCLE_IDS) sets += sessionSets(x, m)
+        for (const x of inWeek) sets += sessionBudget(x)
         return { label: w.label, v: Math.round(sets) }
       })
       const volNow = volPts[volPts.length - 1].v

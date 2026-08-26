@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "audit": "node scripts/audit.mjs",
     "check:manor": "node scripts/manor-harness.mjs",
+    "vendor:exercises": "node scripts/vendor-exercises.mjs",
     "bell:probe": "node scripts/bell-probe.mjs"
   },
   "dependencies": {
