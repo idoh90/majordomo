@@ -5,7 +5,11 @@ import { areaOn, useBriefPrefs } from './prefs'
 
 /** which clause belongs to which wing, and in what order the brief writes them */
 export const AREA_GROUPS: { wing: string; color: string; areas: BriefAreaId[] }[] = [
-  { wing: voice.modules.watch.name, color: 'var(--color-w-watch)', areas: ['shifts', 'sleep'] },
+  { wing: voice.modules.watch.name, color: 'var(--color-w-watch)', areas: ['shifts'] },
+  // THE NIGHT is not a wing — it has no tab and no screen — but it owns two
+  // clauses and three instruments, and burying them under the Watch is what
+  // made sleep invisible to anyone who has never stood a shift.
+  { wing: voice.night.name, color: 'var(--color-w-sleep)', areas: ['sleep', 'rest'] },
   {
     wing: voice.modules.training.name,
     color: 'var(--color-w-grounds)',

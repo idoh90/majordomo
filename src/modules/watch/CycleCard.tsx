@@ -9,7 +9,12 @@ import type { CycleStats } from './lib'
  * the week's hundred and sixty-eight hours actually went.
  */
 export function CycleCard({ stats }: { stats: CycleStats }) {
-  const total = stats.onDutyH + stats.pencilledH + stats.ownH
+  // sleep is ONE band on the week's 168, but it is two claims: hours the
+  // estate pencilled after a night watch, and hours somebody actually slept.
+  // The figure adds them; the caption says which is which whenever both are
+  // there, so the bar can never quietly present a plan as a record.
+  const sleepH = stats.pencilledH + stats.sleptH
+  const total = stats.onDutyH + sleepH + stats.ownH
   const pct = (h: number) => (total > 0 ? (h / total) * 100 : 0)
   const posted = stats.nights + stats.days
 
@@ -28,7 +33,15 @@ export function CycleCard({ stats }: { stats: CycleStats }) {
             <Figure label={voice.watch.cycle.days} value={String(stats.days)} />
             <Figure
               label={voice.watch.cycle.pencilled}
-              value={`${stats.pencilledH.toFixed(1)} h`}
+              value={`${sleepH.toFixed(1)} h`}
+              note={
+                stats.sleptH > 0
+                  ? voice.watch.cycle.sleepSplit({
+                      sleptH: stats.sleptH,
+                      pencilledH: stats.pencilledH,
+                    })
+                  : undefined
+              }
             />
             <Figure
               label={voice.watch.cycle.turnaround}
@@ -44,7 +57,7 @@ export function CycleCard({ stats }: { stats: CycleStats }) {
               <span style={{ width: `${pct(stats.onDutyH)}%`, background: 'var(--color-w-watch)' }} />
               <span
                 style={{
-                  width: `${pct(stats.pencilledH)}%`,
+                  width: `${pct(sleepH)}%`,
                   background: 'color-mix(in srgb, var(--color-ink-dim) 55%, transparent)',
                 }}
               />
@@ -60,7 +73,7 @@ export function CycleCard({ stats }: { stats: CycleStats }) {
               <Key
                 color="color-mix(in srgb, var(--color-ink-dim) 55%, transparent)"
                 label={voice.watch.cycle.pencilled}
-                h={stats.pencilledH}
+                h={sleepH}
               />
               <Key
                 color="color-mix(in srgb, var(--color-positive) 45%, transparent)"
@@ -75,6 +88,7 @@ export function CycleCard({ stats }: { stats: CycleStats }) {
               nights: stats.nights,
               days: stats.days,
               pencilledH: stats.pencilledH,
+              sleptH: stats.sleptH,
               turnaroundH: stats.turnaroundH,
               ownH: stats.ownH,
             })}
@@ -85,7 +99,17 @@ export function CycleCard({ stats }: { stats: CycleStats }) {
   )
 }
 
-function Figure({ label, value, alarm }: { label: string; value: string; alarm?: boolean }) {
+function Figure({
+  label,
+  value,
+  alarm,
+  note,
+}: {
+  label: string
+  value: string
+  alarm?: boolean
+  note?: string
+}) {
   return (
     <div className="min-w-0">
       <div className="text-[9px] uppercase tracking-[0.16em] text-ink-faint">{label}</div>
@@ -95,6 +119,7 @@ function Figure({ label, value, alarm }: { label: string; value: string; alarm?:
       >
         {value}
       </div>
+      {note && <div className="mt-1 text-[10px] leading-snug text-ink-faint">{note}</div>}
     </div>
   )
 }

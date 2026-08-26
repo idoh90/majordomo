@@ -2,6 +2,9 @@ import { useMemo } from 'react'
 import { addDays, localDayKey, startOfLocalDay, startOfWeek } from '../../../core/dates'
 import { weeklyHoursSeries } from '../../../core/events/lib'
 import { useEventsStore } from '../../../core/events/store'
+import { debtSeries, fmtHM, hhmmOfMinutes, nightlySeries } from '../../../core/sleep/lib'
+import { useSleepStore } from '../../../core/sleep/store'
+import { useSleepStats } from '../../../core/sleep/useSleep'
 import { useShellStore } from '../../../core/store/shell'
 import { useNow } from '../../../core/useNow'
 import { voice } from '../../../core/voice'
@@ -34,11 +37,18 @@ import { useWorkshopStore } from '../../../modules/workshop/store'
  * theirs and nothing re-ranks it.
  */
 
-export type DialKind = 'line' | 'bars' | 'pace' | 'diverge' | 'body'
+export type DialKind = 'line' | 'bars' | 'pace' | 'diverge' | 'body' | 'band'
 
 export interface DialPoint {
   label: string
   v: number
+  /**
+   * The bottom of a 'band' point — a bar drawn between two values instead of
+   * up from the floor. THE NIGHT's body clock is the reason it exists: a
+   * night is a stretch of time, not a height, and drawing it as a column from
+   * zero would say nothing about WHEN it happened.
+   */
+  lo?: number
 }
 
 export interface Dial {
@@ -68,6 +78,9 @@ export interface Dial {
   urgency: number
   /** how a scrubbed value prints */
   fmt: (v: number) => string
+  /** …and how a scrubbed POINT prints, when the value alone is not the answer.
+   *  A band's read-out is a stretch of time, not a height. */
+  fmtPoint?: (p: DialPoint) => string
   /** the body map's only payload */
   strains?: StrainMap
 }
@@ -144,6 +157,8 @@ export function useDials(facts: BriefFacts): Dial[] {
   const weekStart = useShellStore((s) => s.weekStart)
 
   const workouts = useWorkoutStore((s) => s.workouts)
+  const sleepStats = useSleepStats()
+  const sleepNotes = useSleepStore((s) => s.notes)
   const studySessions = useStudyStore((s) => s.sessions)
   const exams = useStudyStore((s) => s.exams)
   const subjects = useStudyStore((s) => s.subjects)
@@ -460,35 +475,147 @@ export function useDials(facts: BriefFacts): Dial[] {
         )
       }
 
-      const nights = dayBuckets(nowDate, 7)
-      const sleepPts: DialPoint[] = nights.map((b) => ({
-        label: b.label,
-        v:
-          events
-            .filter((e) => e.kind === 'sleep')
-            .reduce((t, e) => t + overlapMs(e, b.start.getTime(), b.end.getTime()), 0) / 3_600_000,
+    }
+
+    /* ---- THE NIGHT ------------------------------------------------------
+       Sleep used to be one dial under the Watch, drawn by slicing every
+       'sleep' block across the calendar days it touched and gated on whether
+       any SHIFT had ever been posted. Both were wrong once sleep became
+       something a person writes down: a night belongs to the morning it ends
+       on, not to two half-days, and someone who has never stood a watch still
+       sleeps. The dial id is unchanged so a board that already carries it
+       keeps it. */
+    const NIGHT = voice.night.name
+    const NC = 'var(--color-w-sleep)'
+    const sl = facts.sleep
+
+    if (sl && sleepStats.covered > 0) {
+      const NIGHTS = sleepStats.windowNights
+      const points = nightlySeries(events, sleepNotes, nowH, NIGHTS)
+      const target = sleepStats.targetH
+      const dayLabel = (d: Date, i: number) =>
+        i === NIGHTS - 1 ? 'LAST NIGHT' : `${DAY[d.getDay()]} ${d.getDate()}`
+
+      // a 'band' rather than plain bars for one reason: a night nobody wrote
+      // down has NO bar at all. A zero-height bar on a bar chart is a claim
+      // that someone slept nothing, and the gaps in this chart are the whole
+      // reason the averages below it say what they averaged over.
+      const hourPts: DialPoint[] = points.map((p, i) => ({
+        label: dayLabel(p.day, i),
+        v: p.hours,
+        lo: p.has ? 0 : undefined,
       }))
-      if (sleepPts.some((p) => p.v > 0)) {
-        const TARGET = 8
+      const lastPt = points[points.length - 1]
+      push(
+        'sleep',
+        NIGHT,
+        NC,
+        {
+          kind: 'band',
+          points: hourPts,
+          min: 0,
+          max: Math.max(9, target, ...hourPts.map((p) => p.v)) * 1.12,
+          rule: target > 0 ? { v: target, label: 'TARGET' } : undefined,
+          headV: lastPt.has ? fmtHM(lastPt.hours) : '—',
+          tone: !lastPt.has ? 'dim' : target > 0 && lastPt.hours >= target ? 'good' : 'dim',
+          urgency:
+            sleepStats.covered7 >= 3 && target > 0 && target - sleepStats.avg7H >= 1 ? 5 : 2,
+          fmt: h1,
+          fmtPoint: (p) => (p.lo === undefined ? voice.night.stats.notWritten : fmtHM(p.v)),
+        },
+        V.dial.sleep({
+          last: lastPt.has ? lastPt.hours : null,
+          avg: sleepStats.avgH,
+          target,
+          covered: sleepStats.covered,
+          window: NIGHTS,
+        }),
+      )
+
+      if (target > 0) {
+        const debt = debtSeries(points, target)
+        const debtPts: DialPoint[] = points.map((p, i) => ({
+          label: dayLabel(p.day, i),
+          v: debt[i],
+        }))
+        const owed = debt[debt.length - 1]
         push(
-          'sleep',
-          WATCH,
-          WC,
+          'sleepdebt',
+          NIGHT,
+          NC,
           {
-            kind: 'bars',
-            points: sleepPts,
+            kind: 'line',
+            points: debtPts,
             min: 0,
-            max: Math.max(10, ...sleepPts.map((p) => p.v)) * 1.1,
-            rule: { v: TARGET, label: 'TARGET' },
-            headV: h1(sleepPts[sleepPts.length - 1].v),
-            tone: sleepPts[sleepPts.length - 1].v >= TARGET ? 'good' : 'dim',
-            urgency: 2,
+            max: Math.max(2, target, ...debt) * 1.15,
+            rule: { v: target, label: 'A NIGHT' },
+            headV: owed < 0.1 ? 'nothing' : fmtHM(owed),
+            tone: owed < 1 ? 'good' : owed >= target ? 'warn' : 'dim',
+            urgency: owed >= target ? 5 : owed >= 1 ? 3 : 1,
             fmt: h1,
           },
-          V.dial.sleep({
-            last: sleepPts[sleepPts.length - 1].v,
-            avg: mean(sleepPts.map((p) => p.v)),
-            target: TARGET,
+          V.dial.sleepdebt({
+            now: owed,
+            target,
+            covered: sleepStats.covered,
+            window: NIGHTS,
+          }),
+        )
+      }
+
+      // THE BODY CLOCK — each night as the stretch of time it actually was,
+      // measured against the middle of a usual night rather than against the
+      // clock face. That is what makes it readable for someone on nights:
+      // 09:00 → 15:00 and 23:30 → 07:10 are the same SHAPE, and this chart
+      // shows the shape moving instead of wrapping around midnight.
+      if (sleepStats.regularity !== null && sleepStats.usual) {
+        const usualMid = sleepStats.usual.midMin
+        const clockPts: DialPoint[] = points.map((p, i) => {
+          const label = dayLabel(p.day, i)
+          if (!p.row) return { label, v: 0, lo: undefined }
+          const dayStart = startOfLocalDay(p.row.wake).getTime()
+          const bedMin = (p.row.bed.getTime() - dayStart) / 60_000
+          const wakeMin = (p.row.wake.getTime() - dayStart) / 60_000
+          // negated so LATER draws LOWER, the way every hour rail in this app
+          // already runs — a sleep chart with midnight at the top reads upside
+          // down beside the week grid it sits under
+          return { label, v: -(bedMin - usualMid) / 60, lo: -(wakeMin - usualMid) / 60 }
+        })
+        const reach = Math.max(
+          5,
+          ...clockPts.map((p) => Math.max(Math.abs(p.v), Math.abs(p.lo ?? 0))),
+        )
+        const clockFace = (offsetH: number) => hhmmOfMinutes(usualMid - offsetH * 60)
+        push(
+          'sleepclock',
+          NIGHT,
+          NC,
+          {
+            kind: 'band',
+            points: clockPts,
+            min: -reach,
+            max: reach,
+            rule: { v: 0, label: 'USUAL' },
+            headV: String(sleepStats.regularity),
+            tone:
+              sleepStats.regularity >= 70
+                ? 'good'
+                : sleepStats.regularity < 45
+                  ? 'warn'
+                  : 'dim',
+            urgency: sleepStats.regularity < 45 ? 4 : 1,
+            fmt: clockFace,
+            fmtPoint: (p) =>
+              p.lo === undefined
+                ? voice.night.stats.notWritten
+                : `${clockFace(p.v)} \u2192 ${clockFace(p.lo)}`,
+          },
+          V.dial.sleepclock({
+            regularity: sleepStats.regularity,
+            driftMin: sleepStats.driftMin,
+            usualBed: hhmmOfMinutes(sleepStats.usual.bedMin),
+            usualWake: hhmmOfMinutes(sleepStats.usual.wakeMin),
+            covered: sleepStats.covered,
           }),
         )
       }

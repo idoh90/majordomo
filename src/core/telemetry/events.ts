@@ -23,6 +23,8 @@ export type TelemetryEvent =
   | 'workout_logged'
   /** a calendar block created by hand on the Manor (grid press or QUICK ADD) */
   | 'event_created'
+  /** a night was written down by hand (the night sheet's own save) */
+  | 'sleep_logged'
   | 'session_booked'
   | 'session_fulfilled'
   /** DOWN TOOLS actually wrote a session (short/idle/sandbox stops do not count) */

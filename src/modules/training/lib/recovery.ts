@@ -23,8 +23,16 @@ export interface RecoveryRow {
   settlesAt: number | null
 }
 
-export function recoveryOutlook(workouts: Workout[], now: number, limit = 3): RecoveryRow[] {
-  const strains = computeStrains(workouts, now)
+export function recoveryOutlook(
+  workouts: Workout[],
+  now: number,
+  /** THE NIGHT's pull on the recovery clock — see core/sleep. Under-slept
+   *  weeks push every settles-at later, which is the whole point of the
+   *  coupling: the card is a promise about when you can train again. */
+  scale = 1,
+  limit = 3,
+): RecoveryRow[] {
+  const strains = computeStrains(workouts, now, scale)
   const hot = (Object.keys(strains) as MuscleId[])
     .filter((m) => strains[m] >= HOT_THRESHOLD)
     .sort((a, b) => strains[b] - strains[a])
@@ -35,7 +43,7 @@ export function recoveryOutlook(workouts: Workout[], now: number, limit = 3): Re
   const pending = new Set(hot)
   for (let h = 1; h <= SCAN_HOURS && pending.size > 0; h++) {
     const t = now + h * HOUR_MS
-    const s = computeStrains(workouts, t)
+    const s = computeStrains(workouts, t, scale)
     for (const m of [...pending]) {
       if (s[m] < HOT_THRESHOLD) {
         settled.set(m, t)

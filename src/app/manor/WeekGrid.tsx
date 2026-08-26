@@ -10,6 +10,7 @@ import {
   type ClippedEvent,
   type ColumnWindow,
 } from '../../core/events/lib'
+import { isPencilledNight } from '../../core/sleep/lib'
 import { useEventsStore } from '../../core/events/store'
 import { localDayKey } from '../../core/dates'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
@@ -1381,7 +1382,12 @@ const EventBlock = memo(function EventBlock({
 }) {
   const e = clip.event
   const meta = KIND_META[e.kind]
-  const isRest = e.kind === 'sleep'
+  /* The hatch has always meant "the estate drew this, nobody confirmed it"
+     (see .booked-hatch in core/ui/index.css). Until sleep could be written
+     down, every sleep block qualified. Now one that was actually slept is a
+     record like any other and draws solid — which is the whole visual
+     difference between a plan and a fact on this calendar. */
+  const pencilled = isPencilledNight(e)
   /* A mirror from an external calendar is shown, never handled: no drag, no
      resize, no long-press — one lock here covers all three gestures because
      mobile renders this same block. Tap still opens the popover/sheet, which
@@ -1448,7 +1454,7 @@ const EventBlock = memo(function EventBlock({
       onPointerLeave={resizable ? () => setNearEnd(false) : undefined}
       className={[
         'booked booked-interactive group absolute left-[3px] right-[3px] z-[2] select-none overflow-hidden rounded-[7px] p-0 text-left',
-        isRest && 'booked-hatch',
+        pencilled && 'booked-hatch',
         // the second half of a block cut by midnight is the quieter one — it
         // already happened, and two equally loud halves read as two events
         clip.continuesBefore && 'booked-cut-before booked-dim',
@@ -1728,6 +1734,25 @@ function EventPopover({
         <div className="mt-3 text-[11px] italic leading-relaxed text-ink-dim">
           {voice.calendars.abroadLine}
         </div>
+      )}
+      {/* A night is edited in its own sheet, not in the generic time editor:
+          the hours are only half of it (the rating and the time awake live
+          beside them), and a pencilled block needs confirming rather than
+          correcting. The generic Edit stays available underneath for anyone
+          who only wants to drag the hours. */}
+      {!isAbroad(e) && e.kind === 'sleep' && (
+        <button
+          type="button"
+          onClick={() => useManorUi.getState().requestNight(localDayKey(en))}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border py-1.5 font-display text-[11.5px] font-semibold tracking-[0.14em] transition-colors"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--color-w-sleep) 50%, transparent)',
+            color: 'var(--color-w-sleep)',
+          }}
+        >
+          <span aria-hidden>☾</span>
+          {isPencilledNight(e) ? voice.night.prompt.pencilCta : voice.night.openLabel}
+        </button>
       )}
       {!isAbroad(e) && (
         <>

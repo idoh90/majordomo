@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { dayNameLabel } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
+import { useRecoveryScale } from '../../core/sleep/useSleep'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
 import { BriefingPanel } from '../../core/ui/BriefingPanel'
@@ -29,9 +30,10 @@ export function useGroundsBriefingFacts(given?: StrainMap): GroundsBriefingFacts
   const events = useEventsStore((s) => s.events)
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
+  const scale = useRecoveryScale()
 
   const nowH = Math.floor(now / 3_600_000) * 3_600_000
-  const own = useMemo(() => computeStrains(workouts, nowH), [workouts, nowH])
+  const own = useMemo(() => computeStrains(workouts, nowH, scale), [workouts, nowH, scale])
   const strains = given ?? own
 
   const nowDate = new Date(now)

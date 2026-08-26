@@ -10,6 +10,7 @@ import type { MuscleId, Workout } from '../../types'
 import { HOT_THRESHOLD } from '../../lib/recovery'
 import { MAX_STRAIN, type StrainMap } from '../../lib/strain'
 import { strainToColor } from '../../lib/strainColor'
+import { SleepRecoveryNote } from './SleepRecoveryNote'
 import { trailingVolume, volumeColor, volumeStatus } from '../../lib/volume'
 
 /**
@@ -152,6 +153,10 @@ export function MuscleLedger({
       <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
         {voice.grounds.ledger.note}
       </p>
+      {/* …and, when it is doing anything, what sleep is doing to the strain
+          column above. This panel is the one that states the figures, so it
+          is the one that owes the reason they moved. */}
+      <SleepRecoveryNote />
     </section>
   )
 }

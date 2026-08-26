@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useShellStore } from '../../core/store/shell'
 import { useNow } from '../../core/useNow'
 import { useEventsStore } from '../../core/events/store'
+import { useRecoveryScale } from '../../core/sleep/useSleep'
 import { eventsInRange, hoursByKind, seamStart, weekColumns } from '../../core/events/lib'
-import { addDays, localDayKey } from '../../core/dates'
+import { addDays, localDayKey, startOfLocalDay } from '../../core/dates'
 import { Collapsible } from '../../core/ui/Collapsible'
 import { CollapseChevron } from '../../core/ui/CollapseToggle'
 import { SegmentedControl } from '../../core/ui/SegmentedControl'
@@ -16,6 +17,9 @@ import { TheBriefing } from './briefing/TheBriefing'
 import { BriefingStrip } from './BriefingStrip'
 import { KIND_META } from './kinds'
 import { MonthView, monthCells, monthLabel } from './MonthView'
+import { NightPrompt, offerMorning } from './night/NightPrompt'
+import { NightSheet } from './night/NightSheet'
+import { NightUpkeep } from './night/NightUpkeep'
 import { draftConflictLine } from './nearWatch'
 import { dayStrains } from './strain'
 import { useManorUi } from './uiStore'
@@ -50,6 +54,22 @@ export function ManorScreen() {
       return 'week'
     })
   }, [quickAddRequested])
+
+  // THE NIGHT's sheet. `null` is closed; a Date is the morning it opens on,
+  // so every door into it (the button, the morning offer, a tap on a sleep
+  // block) says WHICH night it means rather than guessing after the fact.
+  const [nightDay, setNightDay] = useState<Date | null>(() =>
+    import.meta.env.DEV && new URLSearchParams(window.location.search).has('night')
+      ? startOfLocalDay(new Date())
+      : null,
+  )
+  const nightRequest = useManorUi((s) => s.nightRequest)
+  useEffect(() => {
+    if (!nightRequest) return
+    const [y, m, d] = nightRequest.split('-').map(Number)
+    if (y && m && d) setNightDay(new Date(y, m - 1, d))
+    useManorUi.getState().clearNightRequest()
+  }, [nightRequest])
 
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -94,9 +114,10 @@ export function ManorScreen() {
   // felt. Rounded to the hour so the minute tick doesn't re-run the model.
   const workouts = useWorkoutStore((s) => s.workouts)
   const nowH = Math.floor(now / 3_600_000) * 3_600_000
+  const sleepScale = useRecoveryScale()
   const weekStrain = useMemo(
-    () => (workouts.length ? dayStrains(workouts, columns, nowH) : null),
-    [workouts, columns, nowH],
+    () => (workouts.length ? dayStrains(workouts, columns, nowH, sleepScale) : null),
+    [workouts, columns, nowH, sleepScale],
   )
   const monthStrain = useMemo(() => {
     if (mode !== 'month' || workouts.length === 0) return null
@@ -105,9 +126,10 @@ export function ManorScreen() {
       workouts,
       days.map((d) => ({ start: seamStart(d), end: seamStart(addDays(d, 1)) })),
       nowH,
+      sleepScale,
     )
     return new Map(days.map((d, i) => [localDayKey(d), scored[i]]))
-  }, [mode, anchor, weekStart, workouts, nowH])
+  }, [mode, anchor, weekStart, workouts, nowH, sleepScale])
 
   const nav = (dir: 1 | -1) =>
     setAnchor((a) =>
@@ -165,6 +187,26 @@ export function ManorScreen() {
             >
               + {voice.manor.quickAddLabel}
             </button>
+            {/* THE NIGHT's standing door. The morning offer is dismissible and
+                switchable off, so this is what keeps the system reachable at
+                all: a way in that is always there and never asks for anything.
+                It opens on the morning the offer WOULD have asked about, and
+                falls back to today when now is not a time to be asked. */}
+            <button
+              type="button"
+              onClick={() => setNightDay(offerMorning(now) ?? startOfLocalDay(new Date(now)))}
+              title={voice.night.name}
+              className="flex h-11 items-center gap-1.5 rounded-lg border px-3 font-display text-[12.5px] font-semibold tracking-[0.18em] transition-colors md:h-8"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--color-w-sleep) 45%, transparent)',
+                color: 'var(--color-w-sleep)',
+              }}
+            >
+              <span aria-hidden className="text-[13px] leading-none">
+                ☾
+              </span>
+              {voice.night.button}
+            </button>
             {/* an empty week can be rehearsed too: "next week from scratch" is a
                 real use case, and the Difference panel starts at 0.0 → 0.0 */}
             <button
@@ -198,14 +240,19 @@ export function ManorScreen() {
           {voice.manor.whatIf.banner}
         </div>
       ) : (
-        <BriefingStrip
-          weekEvents={weekEvents}
-          offWeekLabel={
-            now >= columns[0].start.getTime() && now < columns[6].end.getTime()
-              ? null
-              : weekLabel
-          }
-        />
+        <>
+          <BriefingStrip
+            weekEvents={weekEvents}
+            offWeekLabel={
+              now >= columns[0].start.getTime() && now < columns[6].end.getTime()
+                ? null
+                : weekLabel
+            }
+          />
+          {/* now-relative, like the heads-ups above it — paging to another
+              week must not change which morning is being asked about */}
+          <NightPrompt onOpen={setNightDay} />
+        </>
       )}
 
       {mode === 'month' ? (
@@ -278,6 +325,13 @@ export function ManorScreen() {
           inside the briefing rows, which is a poor home for anything
           load-bearing. */}
       {CONSOLES.map((c) => c.Upkeep && <c.Upkeep key={c.id} />)}
+      {/* THE NIGHT is not a wing and has no ConsoleModule, so its own sweep
+          is mounted here beside theirs */}
+      <NightUpkeep />
+
+      {nightDay && (
+        <NightSheet open initialDay={nightDay} onClose={() => setNightDay(null)} />
+      )}
 
       {/* THE BRIEFING — one written brief in the wings' own colours, four
           instruments the reader can swap, and the shelf of the rest. It reads

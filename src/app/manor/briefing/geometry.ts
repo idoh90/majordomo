@@ -1,7 +1,7 @@
 import type { Dial } from './dials'
 
 /**
- * The instrument's plot geometry — one function, four chart shapes.
+ * The instrument's plot geometry — one function, five chart shapes.
  *
  * The viewBox is fixed at 300 × 110 and drawn with `preserveAspectRatio="none"`,
  * so the card can be any width and the paths never need recomputing. That has
@@ -138,7 +138,20 @@ export function plot(d: Dial, scrubIdx: number | null): Plot {
       const v = d.points[i].v
       const x = PL + slot * i + (slot - bw) / 2
       const active = scrubIdx === null ? i === n - 1 : scrubIdx === i
-      if (d.kind === 'diverge') {
+      if (d.kind === 'band') {
+        // a stretch between two values on the same axis. A point with no `lo`
+        // is a night with nothing on file: it draws NOTHING rather than a bar
+        // sitting on the floor, because a floor reading is a claim about a
+        // night that was never written down.
+        const lo = d.points[i].lo
+        if (lo === undefined) {
+          p.bars.push({ x, y: PT, w: bw, h: 0, active, negative: false })
+          continue
+        }
+        const top = yOf(d, Math.max(v, lo))
+        const bottom = yOf(d, Math.min(v, lo))
+        p.bars.push({ x, y: top, w: bw, h: Math.max(2, bottom - top), active, negative: false })
+      } else if (d.kind === 'diverge') {
         const h = Math.max(2, (Math.abs(v) / (d.max || 1)) * (PH / 2))
         p.bars.push({ x, y: v >= 0 ? mid - h : mid, w: bw, h, active, negative: v < 0 })
       } else {
@@ -162,7 +175,14 @@ export function plot(d: Dial, scrubIdx: number | null): Plot {
       const slot = PW / n
       leftF = (PL + slot * scrubIdx + slot / 2) / W
       const bar = p.bars[scrubIdx]
-      topY = bar.negative ? bar.y + bar.h : bar.y
+      topY =
+        d.kind === 'band'
+          ? bar.h === 0
+            ? PT + PH
+            : bar.y + bar.h / 2
+          : bar.negative
+            ? bar.y + bar.h
+            : bar.y
     }
     p.scrubLeft = `${(leftF * 100).toFixed(2)}%`
     p.scrubTop = `${((topY / H) * 100).toFixed(2)}%`
