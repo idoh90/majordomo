@@ -5,6 +5,7 @@ import { Sheet } from '../../core/ui/Sheet'
 import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
 import { useEventsStore } from '../../core/events/store'
+import { track } from '../../core/telemetry'
 import { voice } from '../../core/voice'
 import { BenchControl } from './bench'
 import {
@@ -2205,6 +2206,7 @@ function HangCardSheet({
       ) {
         store.placeCard(made.id, under, placeAt.index)
       }
+      track('card_added', { kind: type })
       butler(type === 'title' ? voice.workshop.toast.titleHung : voice.workshop.toast.cardHung)
     }
     onClose()

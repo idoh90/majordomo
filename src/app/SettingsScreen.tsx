@@ -11,6 +11,7 @@ import { localDayKey } from '../core/dates'
 import { useAuthStore } from '../core/auth/store'
 import { useShellStore } from '../core/store/shell'
 import { offReason } from '../core/sync/gate'
+import { disableTelemetry } from '../core/telemetry'
 import { ConfirmDialog } from '../core/ui/ConfirmDialog'
 import { Sheet } from '../core/ui/Sheet'
 import { SKINS, SKIN_IDS } from '../core/ui/skins'
@@ -183,6 +184,18 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
                 blurb={voice.backup.estate.importBlurb}
                 onClick={() => setEstateOpen(true)}
               />
+            </Section>
+
+            <Section title={voice.settings.groupLegal}>
+              <LinkRow label={voice.settings.termsLabel} blurb={voice.settings.termsBlurb} href="/terms" />
+              <Divider />
+              <LinkRow
+                label={voice.settings.privacyLabel}
+                blurb={voice.settings.privacyBlurb}
+                href="/privacy"
+              />
+              <Divider />
+              <AnalyticsToggle />
             </Section>
 
             <Section title={voice.settings.groupGrounds}>
@@ -469,6 +482,54 @@ function Nudge({
         />
       </svg>
     </button>
+  )
+}
+
+/**
+ * A Row that is a link, because these targets are PAGES (/terms, /privacy),
+ * not sheets — a real anchor gives the browser its own affordances (new tab,
+ * copy address) that a button faking a navigation would take away. Same
+ * classes as Row so the two read as one list.
+ */
+function LinkRow({ label, blurb, href }: { label: string; blurb?: string; href: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener"
+      className="group flex min-h-11 w-full items-center gap-3 py-2 text-left"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13.5px] text-ink transition-colors group-hover:text-accent">
+          {label}
+        </span>
+        {blurb && (
+          <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-faint">{blurb}</span>
+        )}
+      </span>
+      <span aria-hidden className="flex-none text-ink-faint transition-colors group-hover:text-accent">
+        <ChevronIcon />
+      </span>
+    </a>
+  )
+}
+
+/** the usage-analytics switch. Turning it OFF goes through disableTelemetry —
+ *  one last `telemetry_off`, a flush, then silence; turning it back on is just
+ *  the flag, and counting resumes on the next action. */
+function AnalyticsToggle() {
+  const off = useShellStore((s) => s.telemetryOff)
+  const setOff = useShellStore((s) => s.setTelemetryOff)
+  return (
+    <Toggle
+      label={voice.settings.analyticsToggle}
+      blurb={voice.settings.analyticsBlurb}
+      on={!off}
+      onChange={(next) => {
+        if (next) setOff(false)
+        else disableTelemetry()
+      }}
+    />
   )
 }
 

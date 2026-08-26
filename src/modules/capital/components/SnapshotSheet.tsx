@@ -7,6 +7,7 @@ import type { Snapshot } from '../types'
 import { latestSnapshot, netWorthOf } from '../lib/networth'
 import { accountLiveValueILSStrict, isPriced } from '../lib/holdings'
 import { ASSET_CLASSES } from '../lib/money'
+import { track } from '../../../core/telemetry'
 import { voice } from '../../../core/voice'
 import { Amount } from './Amount'
 
@@ -114,6 +115,7 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
       ? { id: editing.id, takenAt: editing.takenAt, balances: stamped }
       : { id: sameDay ? latest.id : makeId(), takenAt: new Date().toISOString(), balances: stamped }
     saveSnapshot(snap)
+    track('snapshot_saved')
     onClose()
   }
 

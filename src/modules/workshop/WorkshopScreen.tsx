@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { Hinted } from '../../core/ui/Hint'
 import { Sheet } from '../../core/ui/Sheet'
 import { useNow } from '../../core/useNow'
+import { track } from '../../core/telemetry'
 import { voice } from '../../core/voice'
 import { WorkshopBriefing } from './Briefing'
 import { Board } from './Board'
@@ -533,6 +534,7 @@ function Desk({
   const fulfill = (id: string, f: SessionMeta['fulfillment'], doneH?: number) => {
     useWorkshopStore.getState().fulfill(id, f, doneH)
     setPartialFor(null)
+    track('session_fulfilled', { wing: 'workshop', outcome: f })
     butler(
       f === 'done'
         ? voice.workshop.toast.markedDone
@@ -1125,6 +1127,7 @@ function BookBenchSheet({
     useWorkshopStore.getState().setSessionMeta(ev.id, {
       fulfillment: past ? 'done' : 'planned',
     })
+    track('session_booked', { wing: 'workshop' })
     butler(past ? voice.workshop.toast.logged : voice.workshop.toast.onBooks)
     onClose()
   }

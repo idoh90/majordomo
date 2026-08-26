@@ -57,7 +57,11 @@ technical version.
   `api/` is Node and the app is a browser — `@types/node` declares `fetch`/`Request`
   as globals and collides with the DOM lib, so the main tsconfig pins `"types": []`
   and the server's config pins `"types": ["node"]`. A function that only fails at
-  deploy time is a function nobody typechecked.
+  deploy time is a function nobody typechecked. The build ends with the **brand
+  gate** (`scripts/check-brand.mjs`): dist must carry no Batman-era strings beyond
+  the three legacy wire keys. It skips itself loudly under `VITE_FOUNDER_SKIN=1`
+  (a founder bundle is not a shippable bundle); Vercel never sets the flag, so
+  every production build is gated.
 - `npm run lint` — ESLint, **import-boundary rules only** (no style rules).
   Scoped to `src`; `api/` is outside it (nothing there may import the app anyway).
 - `npm run vendor:exercises` — regenerates the exercise catalogue
@@ -142,15 +146,10 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   anywhere under `src/`, is still a bug.
 - **`vercel.json` rationale** (the schema rejects `comment` keys, so it lives here):
   hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
-  cached** or the app can't learn it's stale; `noindex` + frame/sniff headers
-  because this is a personal estate, not a public product. `public/robots.txt`
-  says the same thing from the filesystem, where it is legible without inspecting
-  a response. **That `X-Robots-Tag` is APP-scoped, and it is written on `/(.*)`.**
-  The app owns the apex today, so the two coincide; the day a landing page wants
-  `majordomocal.com`, a blanket noindex on that origin becomes a waitlist page
-  Google cannot index. Whichever way that split goes — landing on the apex with the
-  app moved to `app.majordomocal.com`, or the landing at `join.`— the header and
-  `robots.txt` move WITH THE APP, and so do the two absolute-URL sites above.
+  cached** or the app can't learn it's stale; frame/sniff/referrer headers on
+  everything. The pre-landing `X-Robots-Tag: noindex` is GONE — the site is a
+  public product now, `index.html` says `index, follow`, and `public/robots.txt`
+  + `public/sitemap.xml` (which lists `/`, `/privacy`, `/terms`) agree.
 - **The CSP is there for the supply chain, not for injection.** There is no
   HTML-injection route in this codebase — no `dangerouslySetInnerHTML`, no
   `innerHTML`, no `eval` — so the policy is not defending against user content.
@@ -159,7 +158,8 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   session lives, by deliberate design) and post it somewhere. `script-src 'self'`
   makes that post fail. Keep `connect-src` as the list of origins the app
   genuinely talks to — Supabase over both `https:` and `wss:` (realtime is a
-  WebSocket), Twelve Data, Frankfurter — and **add to it only when a real feature
+  WebSocket), Twelve Data, Frankfurter, and `eu.i.posthog.com` (the telemetry
+  outbox; see TELEMETRY below) — and **add to it only when a real feature
   needs it**, since every entry is a place data could go. `style-src` carries
   `'unsafe-inline'` because React writes `style` attributes all over this app;
   that is a style hole, not a script hole. If the build ever gains an inline
@@ -248,6 +248,75 @@ describe it as existing.
   was metered so the probe can say so; the standing fix is B6's reserve-before-spend.
   Until the tables exist at all, every ring is refused — which is the correct
   direction for that error to run: a broken meter is not an unlimited allowance.
+
+## The consent door & the legal pages (launch, Aug 2026)
+
+The commercial launch's legal seam: `/terms` + `/privacy` (real prerendered pages),
+one **consent door**, and the acceptance stamp that gates telemetry.
+
+- **The door** (`src/app/ConsentDoor.tsx`) renders INSTEAD of the shell — `App()` in
+  `App.tsx` is now a two-line gate over a private `Shell()` (a component split, not an
+  early return, because Shell opens with hooks). It shows whenever the device's
+  `termsAccepted` stamp in the shell store is below **`TERMS_VERSION`**
+  (`core/store/shell.ts`). It is the app's ONE deliberate wall (the sign-in door
+  stays a door); pressing AGREE & ENTER stamps `termsAccepted`/`termsAcceptedAt`.
+  Per-device and never synced, like `onboarded` — sign-in is optional, so consent
+  cannot hang on an account. In DEV the door only answers `?consent` (the Manor
+  harness and every screenshot param drive bare URLs); in production it is
+  unconditional, so existing estates meet it once as an interstitial.
+- **A material change to /terms or /privacy = bump `TERMS_VERSION`** — that is the
+  whole re-acceptance mechanism. Also update each document's "Last updated" line
+  (`src/landing/voice.ts`).
+- **The legal pages follow the /privacy pattern exactly**: root `terms.html` /
+  `privacy.html` → rollup `input` in `vite.config.ts` → `entry-*.tsx` client entry →
+  `TermsPage`/`PrivacyPage` over the shared `LegalPage` shell → copy in
+  `src/landing/voice.ts` → prerendered by `scripts/prerender.mjs`. **Adding a landing
+  route means touching four fail-loud lists**: the rollup `input`, the prerender
+  route loop, `entry-server.tsx` (union + meta), and `audit.mjs` `ROUTES` — plus
+  `public/sitemap.xml` and the landing footer. The html must carry `__SITE_ORIGIN__`
+  in its canonical or the build throws.
+- **The SW must not answer for the legal pages**: `/privacy` and `/terms` are in
+  `navigateFallbackDenylist` (vite.config.ts) so an installed app's navigation gets
+  the document, not the precached shell. A new legal route needs the same entry.
+- **The legal copy carries honesty invariants** (stated in a comment block above it
+  in `src/landing/voice.ts`): the public pages stay tracker-free (Vercel aggregate
+  counts only); app analytics are named actions only; deletion is a mailbox
+  (`majordomocal@gmail.com` — `FALLBACK_CONTACT` in `site.config.ts`, duplicated in
+  `scripts/prerender.mjs`, both overridden by a `CONTACT_EMAIL` Vercel env var)
+  because no in-app deletion exists. Do not edit the documents into promising
+  machinery the app does not have.
+
+## Telemetry (`src/core/telemetry/`)
+
+Anonymous usage counts to PostHog **EU** — hand-rolled (no SDK) so every byte that
+leaves is auditable in one file against the Privacy Policy's promises.
+
+- **Named actions only, never estate contents.** The event vocabulary is the closed
+  union in `core/telemetry/events.ts` (~18 names: `app_open`, `wing_open`,
+  `workout_logged`, …). No amounts, titles, notes, body stats, or record text may
+  ride as properties. Adding an event = add to the union, then instrument a
+  **SUBMIT HANDLER, never a store action** — heal passes, onboarding seeds, `?demo`
+  fixtures and sync all drive store actions, and housekeeping must never count as
+  usage. (This is why `refreshPrices`, the events-store actions, and
+  `planWatchPost` are NOT instrumented.)
+- **The predicate** (all must hold before anything is sent — or even written):
+  production build · `VITE_POSTHOG_KEY` present (set in Vercel for **Production
+  only**, so previews and DEV are silent; the key is public-by-design, same class
+  as the anon key) · `termsAccepted >= TERMS_VERSION` · settings switch not off
+  (`telemetryOff` in the shell store; settings → THE FINE PRINT) · no Global
+  Privacy Control signal.
+- **`majordomo-telemetry`** is a raw localStorage key ({deviceId, lastUserId,
+  sessionId, outbox}) created **lazily on the first allowed capture** — never
+  before consent, partly because `hasEstate()` matches any `majordomo*` key and a
+  pre-consent write would walk a bounced stranger past the landing. Deliberately
+  absent from `ESTATE_KEYS` (an export must not carry a device identity) and from
+  sync. Events queue in an outbox (cap 200) and drain on boot/online/visibility —
+  offline usage counts, later. `visibilitychange→hidden` drains via `sendBeacon`
+  with an optimistic clear (a rarely lost event beats a duplicate).
+- **Identity**: `distinct_id` = the random device id; a genuine sign-in (detected
+  via the persisted `lastUserId`, because OAuth makes every real sign-in look like
+  a boot restore) sends `$identify` to merge into the Supabase user id. Email never.
+- Owner-side setup and the dashboard recipes live in `docs/telemetry-dashboards.md`.
 
 ## Stack
 
@@ -733,6 +802,8 @@ auto-enter Training so they land on the right screen.
   holdings with cached quotes so the board renders without a key), **and** the
   Manor's "brutal week" (4 night watches + sleep + training + study + payday,
   plus a quieter next week) — screenshot aid
+- `?consent` — shows the consent door (DEV never shows it unprompted; accepting
+  stamps the shell store, so clear `majordomo-shell` to see it again)
 - `?manor=month` — opens the Manor in month view · `window.__events` — events store
 - `?console=training|capital` — start the shell inside that console
 - `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by

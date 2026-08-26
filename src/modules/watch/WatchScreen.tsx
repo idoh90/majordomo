@@ -4,6 +4,7 @@ import { useEventsStore } from '../../core/events/store'
 import { hoursOf } from '../../core/events/lib'
 import { useNavStore } from '../../core/store/nav'
 import { useShellStore } from '../../core/store/shell'
+import { track } from '../../core/telemetry'
 import { useNow } from '../../core/useNow'
 import { Hinted } from '../../core/ui/Hint'
 import { voice } from '../../core/voice'
@@ -84,6 +85,9 @@ export function WatchScreen() {
       return false
     }
     for (const e of plan.events) addEvent(e)
+    // counted here, not in planWatchPost — the setup interview posts through
+    // the same plan, and the butler seeding a week is not the household using it
+    track('watch_posted')
     butler(plan.message)
     setPickedDay(null)
     return true

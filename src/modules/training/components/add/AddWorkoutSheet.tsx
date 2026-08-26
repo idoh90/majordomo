@@ -13,6 +13,7 @@ import { makeId, useWorkoutStore } from '../../store'
 import { linkedEventIds, rankTrainingEventMatches } from '../../lib/fulfillment'
 import { useEventsStore } from '../../../../core/events/store'
 import { relativeDayLabel, timeLabel } from '../../../../core/dates'
+import { track } from '../../../../core/telemetry'
 import { voice } from '../../../../core/voice'
 import { Sheet } from '../../../../core/ui/Sheet'
 import type { BlockLink } from './BlockLinkNote'
@@ -520,7 +521,13 @@ export function AddWorkoutSheet({
       eventId,
     }
     if (editing) updateWorkout(editing.id, base)
-    else addWorkout({ ...base, id: makeId(), createdAt: new Date().toISOString() })
+    else {
+      addWorkout({ ...base, id: makeId(), createdAt: new Date().toISOString() })
+      // new sessions only — an edit is bookkeeping, not another workout
+      track('workout_logged', {
+        kind: draft.method === 'run' ? 'run' : draft.method === 'sport' ? 'sport' : 'lift',
+      })
+    }
     onClose()
   }
 

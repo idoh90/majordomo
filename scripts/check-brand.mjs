@@ -15,6 +15,15 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
+/* Wired into `npm run build` now, which runs on the founder machine too —
+   where .env.local sets the flag and the founder bundle's strings are IN dist
+   on purpose. Skip loudly there; Vercel never sets the flag, so every
+   production build stays gated. */
+if (process.env.VITE_FOUNDER_SKIN === '1') {
+  console.log('check-brand: SKIPPED — VITE_FOUNDER_SKIN=1 (founder build; not a shippable bundle).')
+  process.exit(0)
+}
+
 const DIST = join(process.cwd(), 'dist')
 const ALLOWED = ['batman-workouts', 'batman-shell', 'batman-capital']
 const BANNED = /batman|gotham|wayne|batcomputer|dark\s*knight/gi

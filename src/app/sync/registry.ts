@@ -67,6 +67,9 @@ const shellSource: SyncSource = {
   wing: 'shell',
   toRecords: () => {
     const s = useShellStore.getState()
+    // deliberately NOT here: onboarded, panelTips, wingOrder/wingsOff,
+    // termsAccepted/termsAcceptedAt, telemetryOff — facts about a device,
+    // not the estate (consent especially: each browser answers its own door)
     return [rec('shell', 'pref', 'skin', s.skin), rec('shell', 'pref', 'weekStart', s.weekStart)]
   },
   subscribe: (onChange) => useShellStore.subscribe(onChange),

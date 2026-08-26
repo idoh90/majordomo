@@ -1541,6 +1541,36 @@ export interface VoicePack {
     /** the same, signed in: "on this device" stops being true */
     clearWorkoutsBodySynced: (n: number) => string
     clearWorkoutsYes: string
+    /** the legal section: the documents, and the analytics switch */
+    groupLegal: string
+    termsLabel: string
+    /** both blurbs say the row leaves the app — these are pages, not sheets */
+    termsBlurb: string
+    privacyLabel: string
+    privacyBlurb: string
+    /** the usage-analytics opt-out. The blurb must restate the door's promise:
+     *  counts of features used, never the contents of any record. */
+    analyticsToggle: string
+    analyticsBlurb: string
+  }
+  /**
+   * The consent door — the one deliberate wall in an app of doors. Shown
+   * before the shell whenever this device has not accepted the current
+   * TERMS_VERSION; one reading, one button, no dismiss. The analytics line
+   * is the disclosure the Privacy Policy's usage-analytics section stands on,
+   * so the two must never drift apart in substance.
+   */
+  consent: {
+    title: string
+    /** what the house keeps and what pressing the button means — this line IS
+     *  the clickwrap, so it must say that entering is agreeing */
+    body: string
+    /** the one-line analytics disclosure: anonymous feature counts, never
+     *  record contents, and where the off-switch lives */
+    analyticsLine: string
+    termsLink: string
+    privacyLink: string
+    agree: string
   }
   /**
    * The first-time setup — the butler, scripted.
