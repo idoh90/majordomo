@@ -119,6 +119,31 @@ async function drainShare(shareId: string): Promise<void> {
 
 /* ------------------------------------------------------------------ pull */
 
+/**
+ * Pull the roster down and cache it — labels, ranks and standings, so all
+ * three render offline.
+ *
+ * Its own function because the RANK GATE reads this cache, and until it did,
+ * only a successful pull ever refreshed it. A push refused for want of rank
+ * aborted the cycle before the pull ran, so the device could never learn it had
+ * been demoted: it went on believing it was a hand, went on offering an
+ * editable board, and retried the same doomed push every cycle, for good.
+ */
+async function refreshRoster(shareId: string): Promise<void> {
+  const members = await listMembers(shareId)
+  if (members.length === 0) return
+  useWorkshopStore.getState().setMembers(
+    shareId,
+    members.map((m) => ({
+      userId: m.userId,
+      label: m.label,
+      joinedAt: m.joinedAt,
+      role: m.role,
+      status: m.status,
+    })),
+  )
+}
+
 /** how many of this crew's records this device is currently holding */
 function localCount(shareId: string): number {
   const prefix = `${shareWing(shareId)}/`
@@ -207,20 +232,7 @@ async function pullOne(shareId: string): Promise<void> {
     }
   }
 
-  // roster + code refresh — cached so labels, ranks and the code render offline
-  const members = await listMembers(shareId)
-  if (members.length > 0) {
-    useWorkshopStore.getState().setMembers(
-      shareId,
-      members.map((m) => ({
-        userId: m.userId,
-        label: m.label,
-        joinedAt: m.joinedAt,
-        role: m.role,
-        status: m.status,
-      })),
-    )
-  }
+  await refreshRoster(shareId)
   // The share row is read on EVERY pull, not just the first. The code and the
   // keeper never change, but the door policy does, and no realtime channel
   // watches `shares` — without this a crew shut to applications would go on
@@ -339,15 +351,24 @@ async function cycle(): Promise<void> {
       try {
         await drainShare(id)
       } catch (e) {
-        // a push refused wholesale usually means we are no longer on the
-        // roster (kicked mid-flight) — check, and step out gracefully
+        // A push refused wholesale means the registry disagrees with something
+        // this device believes. Two cases, and NEITHER may take the cycle down
+        // with it: rethrowing skipped the pull for every OTHER crew as well,
+        // and the pull is the only thing that could have taught this device
+        // what it got wrong.
         const still = await listMemberships().catch(() => null)
         if (still && !still.active.includes(id)) {
+          // no longer on the roster — kicked or removed mid-flight
           useWorkshopStore.getState().adoptPrivateCopy(id)
           useShareStore.getState().dropShare(id)
           ensureSources()
         } else {
-          throw e
+          // still a member, so the likeliest answer is that the RANK changed
+          // under us. Refresh the roster then and there: the rank gate reads
+          // that cache, and without this it would keep retrying a push the
+          // registry will refuse every time.
+          await refreshRoster(id).catch(() => {})
+          useShareStore.getState().setError(message(e))
         }
       }
     }

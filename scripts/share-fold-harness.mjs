@@ -23,6 +23,11 @@
  *   npm run dev &
  *   npm run check:share
  *
+ * The invite-link section additionally needs a configured registry (any
+ * non-empty VITE_SUPABASE_* values in .env.local — nothing is called). Without
+ * one the join gate returns early, so those checks are SKIPPED with a note
+ * rather than passed for the wrong reason.
+ *
  * Browser: uses CHROME_PATH if set, else Playwright's own resolution.
  * Point it elsewhere with SHARE_BASE=https://…
  */
@@ -327,6 +332,63 @@ const venturePayload = (id, name) => ({
   const v = st.ventures.find((x) => x.id === 'v-left')
   say(v.shareId === S2, 'rejoining re-adopts the venture that crew held', `shareId=${v.shareId}`)
   say(v.name === 'Back In', 'and the crew speaks for its face again', `name=${v.name}`)
+}
+
+/* ====== 15. the crew's OTHER front door: a link from a stranger ==========
+ * `?join=` is attacker-supplied text that gets PERSISTED. A code containing a
+ * malformed percent-escape made `decodeURIComponent` throw during render — and
+ * because the value was stored raw, on every render after that too. The app
+ * sat on its recovery screen for good, and that screen's only remedy did not
+ * clear the mailbox holding the poison. */
+{
+  const ctx2 = await browser.newContext({ viewport: { width: 1100, height: 800 } })
+  const p2 = await ctx2.newPage()
+  const errs = []
+  p2.on('pageerror', (e) => errs.push(String(e).split('\n')[0]))
+  await p2.addInitScript(() => {
+    localStorage.setItem('majordomo-shell', JSON.stringify({
+      version: 4,
+      state: { skin: 'midnight', weekStart: 1, onboarded: true, panelTips: true,
+               wingOrder: [], wingsOff: [], deskNoticeSeen: true, crewName: 'Rook' },
+    }))
+  })
+  // ARMING CHECK FIRST. The join gate returns early when the registry is not
+  // configured, so without this every assertion below would pass for the wrong
+  // reason — nothing is stored, so nothing can go wrong. Said out loud rather
+  // than skipped quietly: a green run that measured nothing is worse than a
+  // red one.
+  await p2.goto(`${BASE}/?join=ABCD2345`, { waitUntil: 'networkidle' })
+  await p2.waitForTimeout(800)
+  let body = await p2.evaluate(() => document.body.innerText)
+  const armed = /AN INVITATION/.test(body) && /ABCD-2345/.test(body)
+  if (!armed) {
+    console.log(
+      '\n  SKIPPED: the invite-link checks need a configured registry.\n' +
+        '  Put VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local and\n' +
+        '  restart the dev server; any non-empty values will do, nothing is called.\n',
+    )
+    await ctx2.close()
+  } else {
+  say(true, 'a real invitation opens', 'the link checks below are armed')
+  // the probe left its own invitation in the mailbox — clear it, or the next
+  // assertion reads the probe's code rather than the crafted one's absence
+  await p2.evaluate(() => localStorage.removeItem('majordomo-share'))
+
+  await p2.goto(`${BASE}/?join=%3Fjoin%3D%25`, { waitUntil: 'networkidle' })
+  await p2.waitForTimeout(800)
+  body = await p2.evaluate(() => document.body.innerText)
+  say(!/estate did not open/i.test(body), 'a crafted invite link does not brick the app', errs.join(' | '))
+  const stored = await p2.evaluate(() =>
+    JSON.parse(localStorage.getItem('majordomo-share') || '{}')?.state?.invite ?? null)
+  say(stored === null, 'and a parameter that is not a code is not kept', `invite=${JSON.stringify(stored)}`)
+
+  await p2.reload({ waitUntil: 'networkidle' })
+  await p2.waitForTimeout(600)
+  body = await p2.evaluate(() => document.body.innerText)
+  say(!/estate did not open/i.test(body), 'nor on the reload that used to make it permanent')
+
+  await ctx2.close()
+  }
 }
 
 await browser.close()

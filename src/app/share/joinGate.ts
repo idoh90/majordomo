@@ -1,5 +1,6 @@
 import { armed } from '../../core/sync/gate'
 import { useShareStore } from '../../core/sync/shareStore'
+import { CODE_LEN, normalizeCode } from '../../modules/workshop/joinCode'
 
 /**
  * The ?join=CODE door — the first URL param the app honours in production.
@@ -49,7 +50,14 @@ export function initJoinGate(): void {
   // very redirect that was carrying their answer.
   if (useShareStore.getState().pendingJoin) return
 
-  useShareStore.getState().setInvite(code.trim())
+  // Stored CANONICAL, never raw. What arrives here is a query parameter — a
+  // stranger's text — and it used to be persisted verbatim, so anything that
+  // later choked on it choked again on every boot. A parameter that is not a
+  // code is not an invitation, and is dropped rather than kept.
+  const canonical = normalizeCode(code)
+  if (canonical.length !== CODE_LEN) return
+
+  useShareStore.getState().setInvite(canonical)
   // NOTE: the login door is deliberately NOT opened here any more. Being asked
   // to sign in before being told what for is the wall this house does not put
   // up; the invitation asks first, and sign-in follows accepting.

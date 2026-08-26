@@ -23,7 +23,26 @@ import { serializeEstate, ESTATE_KEYS } from '../core/backup'
  * is the only thing that survives the button below it.
  */
 
-const KEYS: readonly string[] = ESTATE_KEYS
+/**
+ * What "clear this device and start again" clears.
+ *
+ * The estate, and ALSO the device-local bookkeeping beside it. That second
+ * half was missing, and it made the button a broken promise: a poisoned sync
+ * mailbox — an invitation code that threw when it was drawn, say — survived
+ * the wipe, so the user destroyed every workout, event and venture they had
+ * and the app still would not open. Anything that can stop the app booting has
+ * to be inside the remedy for the app not booting.
+ *
+ * These are deliberately NOT part of the estate (they are not exported, and
+ * one device's queue is meaningless on another), which is exactly why they had
+ * to be named separately here.
+ */
+const KEYS: readonly string[] = [
+  ...ESTATE_KEYS,
+  'majordomo-sync',
+  'majordomo-share',
+  'majordomo-briefing',
+]
 
 const shell: React.CSSProperties = {
   minHeight: '100vh',

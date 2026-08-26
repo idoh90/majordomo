@@ -27,7 +27,20 @@ const LINK = /[?&]join=([^&#\s]+)/i
  */
 export function normalizeCode(raw: string): string {
   const link = LINK.exec(raw)
-  const body = link ? decodeURIComponent(link[1]) : raw
+  let body = raw
+  if (link) {
+    try {
+      body = decodeURIComponent(link[1])
+    } catch {
+      // `decodeURIComponent` THROWS on a malformed percent-escape, and this
+      // string is whoever-sent-the-link's to choose. It threw during render —
+      // and since the offending code was persisted, on every render after that
+      // too, so a link from a stranger put the app permanently on its recovery
+      // screen. Undecodable is simply not a link: fall through to the raw text
+      // and let the alphabet filter below have what is left of it.
+      body = link[1]
+    }
+  }
   return body.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, CODE_LEN)
 }
 

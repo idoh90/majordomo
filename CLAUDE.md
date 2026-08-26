@@ -86,10 +86,13 @@ technical version.
   drives the real crew fold in a real page with FORGED records — a record's kind,
   id and payload are all whatever the pusher says they are — and asserts that a
   crew can touch only what it owns, while everything it legitimately may do still
-  works. Needs `npm run dev` up. **Run it after touching `shareSource.ts` or
-  `core/sync/merge.ts`.** Against the pre-fix fold it scores 6/19: a crew could
-  annex a venture it had never contained and post milestones onto the owner's
-  calendar, and nothing about reading the code showed it.
+  works. Needs `npm run dev` up; its invite-link section additionally needs a
+  configured registry (any non-empty `VITE_SUPABASE_*` in `.env.local` — nothing
+  is called), and SAYS SO and skips rather than passing for the wrong reason when
+  there is none. **Run it after touching `shareSource.ts`, `core/sync/merge.ts`
+  or the join gate.** Against the pre-fix fold it scores 6/19: a crew could annex
+  a venture it had never contained and post milestones onto the owner's calendar,
+  and nothing about reading the code showed it.
 - No test runner **for the app at large**; verification is done in the browser. The
   Manor, the registry and the share fold are the three exceptions, and for the same reason: their
   contracts are numeric or adversarial and therefore enforceable, and "looks
@@ -557,6 +560,15 @@ editor by hand, IN FULL, like every migration here — the whole ritual, and the
 - **The share row is read on EVERY pull now**, not just the first: no realtime channel
   watches `shares`, so a crew shut to applications would otherwise go on reading
   "open" on every device but the keeper's.
+- **A `?join=` link is a STRANGER'S TEXT and is stored CANONICAL, never raw.**
+  It used to be persisted verbatim, and `normalizeCode`'s link-parsing called
+  `decodeURIComponent` unguarded — so `?join=%3Fjoin%3D%25` threw during render,
+  and kept throwing on every boot because the poison was in localStorage. The app
+  sat on its recovery screen for good, and that screen's "clear this device"
+  wiped only `ESTATE_KEYS` — so the remedy destroyed every record on the device
+  and did not fix the crash. Three layers now: `normalizeCode` cannot throw, the
+  gate stores only a well-formed code (anything else is dropped), and the
+  recovery wipe covers the device-local bookkeeping blobs too.
 - **A `?join=` link OFFERS a crew; it does not enrol you in one.** The code lands
   in `useShareStore.invite` (persisted, un-accepted) and `app/share/InviteDoor.tsx`
   shows it; only ACCEPT moves it to `pendingJoin`, which is what the service
