@@ -1594,6 +1594,8 @@ export const majordomoPack: VoicePack = {
           'Choose the name crews should see first, sir. The house will not put your email address on a stranger’s screen.',
         renamed: 'Noted. Every crew has been told.',
         rotated: 'A new code, sir. The old one is retired; the crew is untouched.',
+        notStored:
+          'This crew sends more than the device will hold, sir. Nothing of yours was lost, and nothing new was taken in.',
       },
       errorLine: (msg) => `The crew registry demurred: ${msg}`,
     },

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '../../core/auth/store'
+import { announceName } from '../../modules/workshop/share'
 import { useShellStore } from '../../core/store/shell'
 import { useShareStore } from '../../core/sync/shareStore'
 import { Sheet } from '../../core/ui/Sheet'
@@ -72,7 +73,14 @@ export function InviteDoor() {
   const accept = () => {
     const chosen = name.trim()
     if (!chosen) return
+    // The field asks about THIS crew and writes the device's name for ALL of
+    // them, which is the honest simplification — but the other two rename
+    // sites announce, and this one did not. So a name typed for one incoming
+    // crew became what settings claimed every crew saw, while every existing
+    // roster still showed the old one; and the next save anywhere pushed it
+    // to crews the user had deliberately kept under another name.
     useShellStore.getState().setCrewName(chosen)
+    void announceName()
     setLodgedBefore(Object.keys(useShareStore.getState().applications).length)
     useShareStore.getState().setError(null)
     useShareStore.getState().setPendingJoin(invite ?? '')

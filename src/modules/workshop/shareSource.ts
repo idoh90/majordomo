@@ -66,6 +66,26 @@ const byOrder = (a: { order: number }, b: { order: number }) => a.order - b.orde
  */
 
 const str = (v: unknown): v is string => typeof v === 'string'
+/**
+ * A string, and not an essay.
+ *
+ * Nothing bounded any of these, and the store's persist wrapper writes to
+ * localStorage synchronously inside `setState` — so a crewmate could hand this
+ * device a single card whose body was most of the origin's whole storage
+ * budget, and the write that failed took the fold down with it.
+ *
+ * The ceilings are deliberately far above anything a person types: the point
+ * is to make one record cheap to reject, not to have an opinion about how long
+ * a note may be. Nothing the board can produce comes near them, which is the
+ * property the whole gate depends on — a check that eats a crewmate's real
+ * work is its own bug.
+ */
+const text = (v: unknown, max: number): boolean => str(v) && v.length <= max
+const NAME = 400
+const TITLE = 4_000
+const BODY = 200_000
+const URL_ = 8_000
+const ID = 400
 const bool = (v: unknown): v is boolean => typeof v === 'boolean'
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 /** an instant `new Date()` can actually read — every ISO field is one */
@@ -77,7 +97,7 @@ const CARD_TYPES = new Set<string>(['title', 'note', 'task', 'link'])
 
 const SHAPES: Record<string, (p: Record<string, unknown>) => boolean> = {
   venture: (p) =>
-    str(p.name) &&
+    text(p.name, NAME) &&
     str(p.status) &&
     STATUSES.has(p.status) &&
     num(p.goalH) &&
@@ -85,31 +105,32 @@ const SHAPES: Record<string, (p: Record<string, unknown>) => boolean> = {
     iso(p.createdAt) &&
     opt(p.shippedAt, iso),
   card: (p) =>
-    str(p.ventureId) &&
+    text(p.ventureId, ID) &&
     str(p.type) &&
     CARD_TYPES.has(p.type) &&
-    str(p.title) &&
+    text(p.title, TITLE) &&
     num(p.col) &&
     num(p.row) &&
     iso(p.createdAt) &&
-    opt(p.body, str) &&
-    opt(p.url, str) &&
+    opt(p.body, (x) => text(x, BODY)) &&
+    opt(p.url, (x) => text(x, URL_)) &&
     opt(p.done, bool) &&
-    opt(p.doneBy, str) &&
+    opt(p.doneBy, (x) => text(x, ID)) &&
     opt(p.dueAt, iso) &&
-    opt(p.parentId, str) &&
+    opt(p.parentId, (x) => text(x, ID)) &&
     opt(p.fx, num) &&
     opt(p.fy, num),
-  thread: (p) => str(p.ventureId) && str(p.from) && str(p.to),
+  thread: (p) => text(p.ventureId, ID) && text(p.from, ID) && text(p.to, ID),
   milestone: (p) =>
-    str(p.ventureId) &&
-    str(p.title) &&
+    text(p.ventureId, ID) &&
+    text(p.title, TITLE) &&
     // the one that bricked the app: a day key must be a day this app can read
     isDayKey(p.on) &&
     bool(p.done) &&
     iso(p.countFrom) &&
     opt(p.doneAt, iso),
-  work: (p) => str(p.ventureId) && iso(p.at) && num(p.h) && p.h >= 0 && str(p.by),
+  work: (p) =>
+    text(p.ventureId, ID) && iso(p.at) && num(p.h) && p.h >= 0 && text(p.by, ID),
 }
 
 /**

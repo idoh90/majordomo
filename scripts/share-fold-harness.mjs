@@ -287,6 +287,31 @@ const venturePayload = (id, name) => ({
   say(own && own.h === 3.5, 'the author may still correct their own hours', `h=${own?.h}`)
 }
 
+/* ====== 13b. a record that is a payload rather than a note ================
+ * Nothing bounded any string field, and the store's persist wrapper writes to
+ * localStorage synchronously inside setState — so one card could be most of
+ * the origin's whole storage budget, and the write that failed took the fold
+ * down with it. The ceilings are far above anything a person types; these
+ * check that the gate has one at all, and that ordinary length still passes. */
+{
+  const big = 'x'.repeat(250_000)
+  const st = await fold(S1, [
+    rec('card', 'c-huge', { id: 'c-huge', ventureId: 'v-crew1', type: 'note', title: 'Huge', body: big, col: 0, row: 0, createdAt: '2026-01-01T00:00:00.000Z' }),
+    rec('milestone', 'm-huge', { id: 'm-huge', ventureId: 'v-crew1', title: big, on: '2026-02-01', done: false, countFrom: '2026-01-01T00:00:00.000Z' }),
+  ])
+  say(!st.cards.some((c) => c.id === 'c-huge'), 'a card body the size of the estate is refused')
+  say(!st.milestones.some((m) => m.id === 'm-huge'), 'and a milestone title nobody typed')
+}
+{
+  // …and a long-but-human note still lands. The gate must not have an opinion
+  // about how long a real note may be.
+  const long = 'a real note. '.repeat(600) // ~7.8 KB
+  const st = await fold(S1, [
+    rec('card', 'c-long', { id: 'c-long', ventureId: 'v-crew1', type: 'note', title: 'Long', body: long, col: 0, row: 0, createdAt: '2026-01-01T00:00:00.000Z' }),
+  ])
+  say(st.cards.some((c) => c.id === 'c-long'), 'a long note somebody actually wrote still lands')
+}
+
 /* ============================ 14. the LEGITIMATE paths still work ========= */
 {
   // the crew I am in may speak for its own venture, and hang things on it

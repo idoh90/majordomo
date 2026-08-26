@@ -1396,6 +1396,8 @@ export interface VoicePack {
         renamed: string
         /** a new code was drawn; nobody was turned out */
         rotated: string
+        /** the crew's records would not fit on this device */
+        notStored: string
       }
       /** transport trouble, in the user's words */
       errorLine: (msg: string) => string

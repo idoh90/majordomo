@@ -45,17 +45,25 @@ export function initJoinGate(): void {
 
   if (!armed()) return
 
-  // An invite already accepted and still in flight wins: someone who said yes,
-  // signed in, and came back must not be asked the same question again by the
-  // very redirect that was carrying their answer.
-  if (useShareStore.getState().pendingJoin) return
-
   // Stored CANONICAL, never raw. What arrives here is a query parameter — a
   // stranger's text — and it used to be persisted verbatim, so anything that
   // later choked on it choked again on every boot. A parameter that is not a
   // code is not an invitation, and is dropped rather than kept.
   const canonical = normalizeCode(code)
   if (canonical.length !== CODE_LEN) return
+
+  // An invite already accepted and still in flight wins — but only when it is
+  // THE SAME ONE. Someone who said yes, signed in and came back must not be
+  // asked the same question again by the very redirect that was carrying their
+  // answer; that is what this guard is for.
+  //
+  // It used to skip on any held code at all, and the param is stripped above
+  // whatever happens, so a SECOND invitation from someone else vanished:
+  // no sheet, no message, and nothing left in the address bar to reload. A
+  // held code is cleared only by a sync cycle, which needs a session — and in
+  // a house where signing in is a door and never a wall, that can be never.
+  const held = useShareStore.getState().pendingJoin
+  if (held && normalizeCode(held) === canonical) return
 
   useShareStore.getState().setInvite(canonical)
   // NOTE: the login door is deliberately NOT opened here any more. Being asked

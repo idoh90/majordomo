@@ -4,6 +4,7 @@ import { applyQuietly as personalApplyQuietly, createEngine } from '../../core/s
 import { armed } from '../../core/sync/gate'
 import { shareRecordKey, shareWing } from '../../core/sync/shareIntent'
 import { useShareStore } from '../../core/sync/shareStore'
+import { voice } from '../../core/voice'
 import {
   countShareRecords,
   deleteShare,
@@ -205,7 +206,22 @@ async function pullOne(shareId: string): Promise<void> {
     // engine has no source for this crew yet (the venture only materializes
     // from this very fold)
     const src = shareSource(shareId)
-    applyQuietlyAll(() => src.apply(incoming))
+    /* THE FOLD CAN FAIL, and it must not take the cycle with it. Zustand's
+       persist wrapper writes to localStorage synchronously inside `setState`,
+       so a crew pushing more than this origin's storage budget makes the fold
+       THROW — and that throw used to unwind all the way into `cycle`'s catch,
+       abandoning every other crew's pull and every step after this one for as
+       long as the condition lasted.
+       Caught here, it is one crew's problem: the cursor is deliberately NOT
+       advanced (nothing landed, so nothing has been seen), the reason is said
+       out loud, and the rest of the cycle carries on. */
+    try {
+      applyQuietlyAll(() => src.apply(incoming))
+    } catch (e) {
+      useShareStore.getState().setError(voice.workshop.crew.toast.notStored)
+      console.error('[share] the fold failed for', shareId, e)
+      return
+    }
   }
 
   if (cursor) useShareStore.getState().setCursor(shareId, cursor)
@@ -391,9 +407,16 @@ async function cycle(): Promise<void> {
           memberships.add(joined.shareId)
         }
       } catch (e) {
-        // an unknown code is an answer, not an outage — stop retrying it
-        useShareStore.getState().setPendingJoin(null)
-        useShareStore.getState().setError(message(e))
+        /* An unknown code is an ANSWER and must stop being retried. Anything
+           else is an outage and must not: the catch used to clear the mailbox
+           for every failure, so a dropped connection — or this project's own
+           free-tier registry going to sleep, which makes its hostname stop
+           resolving entirely — threw away an accepted invitation and told the
+           user "no crew answers to that invitation; it may have been
+           withdrawn". The crew was fine. Only `join_share`'s own raise counts. */
+        const said = message(e)
+        if (/no such crew/i.test(said)) useShareStore.getState().setPendingJoin(null)
+        useShareStore.getState().setError(said)
       }
     }
 
