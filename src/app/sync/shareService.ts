@@ -6,6 +6,7 @@ import { shareRecordKey, shareWing } from '../../core/sync/shareIntent'
 import { useShareStore } from '../../core/sync/shareStore'
 import {
   countShareRecords,
+  deleteShare,
   getShare,
   joinShare,
   leaveShare,
@@ -218,15 +219,25 @@ async function pullOne(shareId: string): Promise<void> {
     useShareStore.getState().setUnkept(shareId, remote - localCount(shareId))
   }
 
-  // the venture was deleted FOR the crew and nothing of ours remains under
-  // this share: leave the roster quietly and forget the bookkeeping
+  // The venture was deleted FOR the crew and nothing of ours remains under this
+  // share. A crew with no venture is nothing, so the share is wound up — but
+  // HOW depends on who this device belongs to.
+  //
+  // The keeper cannot leave their own crew (0007 refuses it), and the old code
+  // tried anyway, swallowed the refusal, and dropped the bookkeeping regardless.
+  // That left the keeper on a roster for a crew they could no longer see, with
+  // no venture on the shelf to reach the Crew Room through, and therefore no way
+  // to disband it — an orphan crew, created by any hand who pressed delete.
+  // The keeper disbands instead: it is their crew and it is now empty.
   if (ventureTombs > 0) {
     const stillHere = useWorkshopStore
       .getState()
       .ventures.some((v) => v.shareId === shareId)
     if (!stillHere) {
       const me = useAuthStore.getState().userId
-      if (me) await leaveShare(shareId).catch(() => {})
+      const keeper = useShareStore.getState().owners[shareId]
+      if (me && keeper === me) await deleteShare(shareId).catch(() => {})
+      else if (me) await leaveShare(shareId).catch(() => {})
       useShareStore.getState().dropShare(shareId)
       return
     }
@@ -310,9 +321,12 @@ async function cycle(): Promise<void> {
       }
     }
     ensureSources()
-    for (const id of memberships) {
-      if (!localIds.includes(id)) useShareStore.getState().requestPull(id)
-    }
+    // NOTE: no `requestPull` for a membership with no local venture. Step 4
+    // pulls every membership regardless, so asking was already redundant — and
+    // it was worse than redundant: the request woke the loop, the loop found
+    // the venture still missing, and asked again. A crew whose venture never
+    // materialises (one just created, or one whose venture record the fold
+    // refuses) pinned the client in a ~400 ms cycle for as long as it was open.
 
     /* 1b — applications lodged with vetted crews. Three ends, all decided by
        the roster rather than by anything the keeper sends us: admitted (we are
