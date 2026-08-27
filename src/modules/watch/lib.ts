@@ -1,6 +1,7 @@
 import { addDays, atHour, startOfWeek, type WeekStart } from '../../core/dates'
 import { hoursOf, overlaps, rangeFree } from '../../core/events/lib'
 import type { CalendarEvent } from '../../core/events/types'
+import { isNightRecord, isPencilledNight } from '../../core/sleep/lib'
 import { voice } from '../../core/voice'
 
 // atHour / rangeFree moved to core when the Study became their second
@@ -212,8 +213,16 @@ export interface CycleStats {
   days: number
   /** hours on duty this week */
   onDutyH: number
-  /** recovery sleep the estate pencilled in this week */
+  /**
+   * Sleep this week that is still only a SUGGESTION — hours the estate drew
+   * after a night watch and nobody has confirmed. Split from `sleptH` because
+   * a plan and a record are not the same claim, and adding them into one
+   * figure is how a fortnight of pencil marks used to read as a fortnight of
+   * rest. (core/sleep/lib.ts owns the predicate both use.)
+   */
   pencilledH: number
+  /** …and sleep this week that was actually written down */
+  sleptH: number
   /** what is left of the week's 168 once duty and sleep are taken out */
   ownH: number
   /** shortest gap between the end of one watch and the start of the next */
@@ -242,9 +251,11 @@ export function cycleStats(
   const weekShifts = shifts.filter(inWeek)
   const nights = weekShifts.filter(isNightShift).length
   const onDutyH = weekShifts.reduce((t, e) => t + hoursOf(e), 0)
-  const pencilledH = events
-    .filter((e) => e.kind === 'sleep' && !e.allDay && inWeek(e))
+  const weekSleep = events.filter((e) => e.kind === 'sleep' && !e.allDay && inWeek(e))
+  const pencilledH = weekSleep
+    .filter(isPencilledNight)
     .reduce((t, e) => t + hoursOf(e), 0)
+  const sleptH = weekSleep.filter(isNightRecord).reduce((t, e) => t + hoursOf(e), 0)
 
   // the turnaround is a property of a PAIR, so it looks one watch further back
   // than the week does — a Monday watch's rest began last Sunday
@@ -261,7 +272,8 @@ export function cycleStats(
     days: weekShifts.length - nights,
     onDutyH,
     pencilledH,
-    ownH: Math.max(0, 168 - onDutyH - pencilledH),
+    sleptH,
+    ownH: Math.max(0, 168 - onDutyH - pencilledH - sleptH),
     turnaroundH,
   }
 }

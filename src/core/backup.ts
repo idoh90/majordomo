@@ -26,6 +26,7 @@ export const ESTATE_KEYS = [
   'majordomo-workshop',
   'majordomo-capital',
   'majordomo-watch',
+  'majordomo-sleep',
 ] as const
 
 /** pre-pivot keys: still adopted on first boot, so a backup carries them too */
@@ -183,6 +184,10 @@ const REQUIRED: Record<string, Record<string, FieldKind>> = {
     recurring: 'array',
   },
   'majordomo-watch': { templates: 'array' },
+  // targetH and coupling are deliberately absent: a blob written before either
+  // existed is still sound, and persist's shallow merge leaves the initializer
+  // standing. `notes` is the one field the app dereferences on boot.
+  'majordomo-sleep': { notes: 'object' },
 }
 
 /**
@@ -315,6 +320,7 @@ export const STORE_LABEL: Record<string, string> = {
   'majordomo-workshop': 'The Workshop',
   'majordomo-capital': 'The Ledger',
   'majordomo-watch': 'The Watch',
+  'majordomo-sleep': 'The Night',
   'batman-shell': 'Settings (legacy)',
   'batman-workouts': 'The Grounds (legacy)',
   'batman-capital': 'The Ledger (legacy)',

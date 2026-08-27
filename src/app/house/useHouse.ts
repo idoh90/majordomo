@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useEventsStore } from '../../core/events/store'
+import { useRecoveryScale } from '../../core/sleep/useSleep'
 import { useShellStore } from '../../core/store/shell'
 import { useNow } from '../../core/useNow'
 import { useCapitalStore } from '../../modules/capital/store'
@@ -41,6 +42,7 @@ export function useHouse(): HouseModel {
   const spendItems = useCapitalStore((s) => s.spendItems)
   const recurring = useCapitalStore((s) => s.recurring)
   const monthlyBudget = useCapitalStore((s) => s.monthlyBudget)
+  const sleepScale = useRecoveryScale()
 
   return useMemo(
     () =>
@@ -67,6 +69,7 @@ export function useHouse(): HouseModel {
         spendItems,
         recurring,
         monthlyBudget,
+        sleepScale,
         formatMoney: (n) => formatILS(n),
       }),
     // `now` is deliberately absent from these deps: nowH is the gate, and
@@ -95,6 +98,7 @@ export function useHouse(): HouseModel {
       spendItems,
       recurring,
       monthlyBudget,
+      sleepScale,
     ],
   )
 }

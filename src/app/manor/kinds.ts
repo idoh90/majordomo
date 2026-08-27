@@ -4,7 +4,10 @@ import { voice } from '../../core/voice'
 /** per-kind presentation: wing accent + chip label (colors are skin tokens) */
 export const KIND_META: Record<EventKind, { color: string; label: string }> = {
   shift: { color: 'var(--color-w-watch)', label: voice.kinds.shift },
-  sleep: { color: 'var(--color-ink-dim)', label: voice.kinds.sleep },
+  // THE NIGHT's own accent rather than plain dim ink: sleep is a first-class
+  // record now, and a block you wrote down deserves to be identifiable as one
+  // colour among the wings' rather than as absence of colour.
+  sleep: { color: 'var(--color-w-sleep)', label: voice.kinds.sleep },
   training: { color: 'var(--color-w-grounds)', label: voice.kinds.training },
   study: { color: 'var(--color-w-study)', label: voice.kinds.study },
   workshop: { color: 'var(--color-w-workshop)', label: voice.kinds.workshop },

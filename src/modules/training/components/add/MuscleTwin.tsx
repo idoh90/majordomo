@@ -3,6 +3,7 @@ import type { MuscleId, Workout } from '../../types'
 import { useShellStore } from '../../../../core/store/shell'
 import { SKINS } from '../../../../core/ui/skins'
 import { voice } from '../../../../core/voice'
+import { useRecoveryScale } from '../../../../core/sleep/useSleep'
 import { projectedStrains, selectionCounts, selectionShape, type DraftSession } from '../../lib/gymEffort'
 import { glowOpacity, strainToColor } from '../../lib/strainColor'
 import { BodySvg } from '../bodymap/BodySvg'
@@ -43,9 +44,10 @@ export function MuscleTwin({
   const skin = SKINS[useShellStore((s) => s.skin)]
   const twin = voice.grounds.muscleTwin
 
+  const scale = useRecoveryScale()
   const strains = useMemo(
-    () => projectedStrains(workouts, selection, draft, nowMs),
-    [workouts, selection, draft, nowMs],
+    () => projectedStrains(workouts, selection, draft, nowMs, scale),
+    [workouts, selection, draft, nowMs, scale],
   )
 
   const glowScale = skin.glowScale ?? 1

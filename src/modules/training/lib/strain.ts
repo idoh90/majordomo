@@ -93,6 +93,25 @@ const MUSCLE_RECOVERY: Record<MuscleId, number> = {
   forearms: 0.8, // τ≈24 h — daily use, recovers fastest
 }
 
+/**
+ * A muscle's recovery clock, with the estate's own pull on it.
+ *
+ * `scale` is THE NIGHT's recovery effect (core/sleep) — 1 when sleep has
+ * nothing to say, above 1 when the last week ran short. It multiplies the
+ * whole timeline rather than the magnitude, which is the honest shape of the
+ * claim: sleeping badly does not make a session hit harder, it makes the same
+ * session take longer to leave you.
+ *
+ * Every public entry point below takes it and defaults it to 1. The default is
+ * for the pure-math probes (window.__engine, the recovery scan's inner loop) —
+ * a SURFACE that leaves it out is a surface reading a different body from the
+ * one next to it, which is the bug this file has had to be commented against
+ * before. Read it from useRecoveryScale() and pass it.
+ */
+export function muscleClock(m: MuscleId, scale = 1): number {
+  return MUSCLE_RECOVERY[m] * scale
+}
+
 export const repStyleOf = (w: Pick<Workout, 'repStyle'>): RepStyle => w.repStyle ?? 'mixed'
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x))
@@ -165,12 +184,17 @@ export function muscleLoad(w: Workout, m: MuscleId): number {
 }
 
 /** Strain this single workout currently contributes to muscle `m`. */
-export function workoutContribution(w: Workout, m: MuscleId, nowMs: number): number {
+export function workoutContribution(
+  w: Workout,
+  m: MuscleId,
+  nowMs: number,
+  scale = 1,
+): number {
   const load = muscleLoad(w, m)
   if (load === 0) return 0
   const dt = hoursBetween(w.performedAt, nowMs)
   if (dt < -1) return 0 // future-dated
-  return load * recoveryEnvelope(Math.max(0, dt), repStyleOf(w), MUSCLE_RECOVERY[m], nearFailure(w))
+  return load * recoveryEnvelope(Math.max(0, dt), repStyleOf(w), muscleClock(m, scale), nearFailure(w))
 }
 
 /**
@@ -178,8 +202,8 @@ export function workoutContribution(w: Workout, m: MuscleId, nowMs: number): num
  * its own recovery curve — used for the detail sheet ("this workout is at 80 %
  * of its peak impact"). Independent of muscle; uses the primary recovery scale.
  */
-export function workoutActivity(w: Workout, nowMs: number): number {
-  const factor = w.primary.length ? MUSCLE_RECOVERY[w.primary[0]] : 1
+export function workoutActivity(w: Workout, nowMs: number, scale = 1): number {
+  const factor = w.primary.length ? muscleClock(w.primary[0], scale) : scale
   const style = repStyleOf(w)
   const nf = nearFailure(w)
   const dt = Math.max(0, hoursBetween(w.performedAt, nowMs))
@@ -197,8 +221,9 @@ export function workoutActivity(w: Workout, nowMs: number): number {
 export function recoveryPhase(
   w: Workout,
   nowMs: number,
+  scale = 1,
 ): 'fresh' | 'peaking' | 'easing' | 'recovered' {
-  const factor = w.primary.length ? MUSCLE_RECOVERY[w.primary[0]] : 1
+  const factor = w.primary.length ? muscleClock(w.primary[0], scale) : scale
   const dt = Math.max(0, hoursBetween(w.performedAt, nowMs))
   if (dt >= CUTOFF_H * factor) return 'recovered'
   const style = repStyleOf(w)
@@ -212,7 +237,12 @@ export function recoveryPhase(
 
 export type StrainMap = Record<MuscleId, number>
 
-export function computeStrains(workouts: Workout[], nowMs: number): StrainMap {
+/**
+ * The whole body's strain at an instant. `scale` slows or quickens every
+ * muscle's clock together — see muscleClock. Read it from
+ * core/sleep's useRecoveryScale() at every surface.
+ */
+export function computeStrains(workouts: Workout[], nowMs: number, scale = 1): StrainMap {
   const strains = Object.fromEntries(ALL_MUSCLE_IDS.map((m) => [m, 0])) as StrainMap
   for (const w of workouts) {
     const dt = hoursBetween(w.performedAt, nowMs)
@@ -222,11 +252,11 @@ export function computeStrains(workouts: Workout[], nowMs: number): StrainMap {
     const nf = nearFailure(w)
     const load = workoutLoad(w)
     for (const m of w.primary) {
-      const env = recoveryEnvelope(t, style, MUSCLE_RECOVERY[m], nf)
+      const env = recoveryEnvelope(t, style, muscleClock(m, scale), nf)
       if (env > 0) strains[m] = Math.min(MAX_STRAIN, strains[m] + load * env)
     }
     for (const m of w.secondary) {
-      const env = recoveryEnvelope(t, style, MUSCLE_RECOVERY[m], nf)
+      const env = recoveryEnvelope(t, style, muscleClock(m, scale), nf)
       if (env > 0) strains[m] = Math.min(MAX_STRAIN, strains[m] + load * SECONDARY_WEIGHT * env)
     }
   }

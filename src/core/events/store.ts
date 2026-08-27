@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { makeId } from '../ids'
-import { addDays, startOfWeek } from '../dates'
+import { addDays, localDayKey, startOfWeek } from '../dates'
 import { noteDeleted, noteReplaced } from '../sync/intent'
 import { isProjection } from '../sync/projection'
 import type { CalendarEvent } from './types'
@@ -142,7 +142,8 @@ if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__events = useEventsStore
 
   // ?demo seeds the design's "brutal week" into an empty events store:
-  // four 13-hour night watches, recovery sleep, training, study, a payday.
+  // four 13-hour night watches, a fortnight of written-down sleep, next
+  // week's pencilled recovery blocks, training, study, a payday.
   if (
     new URLSearchParams(window.location.search).has('demo') &&
     useEventsStore.getState().events.length === 0
@@ -178,16 +179,75 @@ if (import.meta.env.DEV) {
       allDay,
       updatedAt: new Date().toISOString(),
     })
+    /**
+     * Fourteen mornings back from today, minus two nobody wrote down.
+     *
+     * Shapes rather than random noise: eight ordinary nights around 23:20 →
+     * 06:50, four daytime sleeps after a night watch (09:00 → 15:00), and a
+     * short one. That is what makes the body-clock instrument worth looking at
+     * — a fortnight of identical nights draws a flat band and demonstrates
+     * nothing about the chart or about the person.
+     *
+     * Ids are literal (`demo-night-<n>`) so the sleep store's own demo block
+     * can hang ratings off them; the `slept:` ref is what marks a block as a
+     * RECORD rather than one of the estate's pencil marks (core/sleep/lib.ts).
+     *
+     * Mornings the brutal week already fills (its four 09:00 daytime sleeps)
+     * are skipped: two blocks on one morning is a legitimate shape — a nap
+     * and a night — but it is not what this fixture is demonstrating, and the
+     * Manor harness edits one of those four by name.
+     */
+    const demoNights = (todayIdx: number): CalendarEvent[] => {
+      // [nights back, bed hour on the previous evening (or that morning when
+      // the night is a daytime one), hours slept]; a gap is simply absent
+      const SHAPES: [number, number, number][] = [
+        [13, 23.25, 7.4],
+        [12, 23.75, 7.0],
+        [11, 9, 6],
+        [10, 9, 5.5],
+        [9, 23.5, 8.4],
+        [8, 0.5, 6.2],
+        [6, 22.9, 7.8],
+        [5, 9, 6],
+        [4, 9, 5.2],
+        [3, 23.9, 6.6],
+        [1, 23.4, 7.2],
+        [0, 0.75, 6.9],
+      ]
+      const FIXED = new Set([1, 2, 4, 5])
+      return SHAPES.filter(([back]) => !FIXED.has(todayIdx - back)).map(([back, bedH, len], i) => {
+        const morning = todayIdx - back
+        // a bed hour at or past noon belongs to the evening BEFORE the morning
+        // it ends on; anything earlier is that morning's own clock
+        const startDay = bedH >= 12 ? morning - 1 : morning
+        return {
+          id: `demo-night-${i}`,
+          source: 'manual' as const,
+          sourceRef: `slept:${localDayKey(addDays(week0, morning))}`,
+          kind: 'sleep' as const,
+          title: 'Slept',
+          start: at(startDay, bedH),
+          end: at(startDay, bedH + len),
+          updatedAt: new Date().toISOString(),
+        }
+      })
+    }
+
     useEventsStore.getState().replaceAll([
       // this week — endH > 24 rolls into the next local day naturally
       ev(0, 19, 32, 'shift', 'Night Watch', 'watch'),
       ev(1, 19, 32, 'shift', 'Night Watch', 'watch'),
       ev(3, 19, 32, 'shift', 'Night Watch', 'watch'),
       ev(4, 19, 32, 'shift', 'Night Watch', 'watch'),
-      ev(1, 9, 15, 'sleep', 'Sleep'),
-      ev(2, 9, 15, 'sleep', 'Sleep'),
-      ev(4, 9, 15, 'sleep', 'Sleep'),
-      ev(5, 9, 15, 'sleep', 'Sleep'),
+      // the four daytime sleeps of the brutal week, as RECORDS (a `slept:`
+      // ref) rather than pencil marks — this IS the shift-worker's fortnight,
+      // and the demo should show what a written-down night looks like on the
+      // grid, not only what a suggestion looks like
+      ...[1, 2, 4, 5].map((d) => ({
+        ...ev(d, 9, 15, 'sleep', 'Sleep'),
+        id: `demo-day-sleep-${d}`,
+        sourceRef: `slept:${localDayKey(addDays(week0, d))}`,
+      })),
       ev(2, 17, 18.5, 'training', 'Strength — lower', 'grounds'),
       ev(5, 17, 18.5, 'training', 'Strength — upper', 'grounds'),
       ev(6, 10, 11.5, 'training', 'Intervals', 'grounds'),
@@ -223,11 +283,20 @@ if (import.meta.env.DEV) {
         sourceRef: 'proj:demo-vent-dark',
       },
       ev(3, 0, 0, 'marker', 'Payday', 'capital', true),
+      // THE NIGHT — a shift-worker's fortnight, anchored to TODAY rather than
+      // to the week so the dials always have their full window whichever day
+      // the demo is opened on. Two mornings are deliberately missing: the
+      // charts have to be seen with gaps in them, because the gaps are what
+      // make every average below them honest.
+      ...demoNights(todayIdx),
       // next week — a quieter stretch
       ev(8, 19, 32, 'shift', 'Night Watch', 'watch'),
       ev(11, 19, 32, 'shift', 'Night Watch', 'watch'),
-      ev(9, 9, 15, 'sleep', 'Sleep'),
-      ev(12, 9, 15, 'sleep', 'Sleep'),
+      // next week's sleep is the estate's own PENCIL — source 'watch', no
+      // `slept:` ref — so the demo shows both states of a sleep block at once:
+      // hatched suggestions ahead, solid records behind (core/sleep/lib.ts)
+      ev(9, 9, 15, 'sleep', 'Sleep', 'watch'),
+      ev(12, 9, 15, 'sleep', 'Sleep', 'watch'),
       ev(10, 17, 18.5, 'training', 'Strength — full', 'grounds'),
       ev(12, 0, 0, 'marker', 'Card bill', 'capital', true),
     ])

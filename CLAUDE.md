@@ -84,8 +84,19 @@ technical version.
   its blocks, an unfittable template isn't offered, QUICK ADD books on the slot
   its panel showed. Needs `npm run dev` up; exits
   non-zero on failure. `CHROME_PATH` / `MANOR_BASE` override the browser and origin.
+- `npm run check:night` — the **night harness** (`scripts/night-harness.mjs`): drives
+  headless Chromium through the running dev server and asserts THE NIGHT's numeric
+  contract — a night files under the morning it ENDED on, a missing night is a gap
+  and never a zero, debt credits a long night at half, the recovery coupling is
+  EXACTLY 1 below its four-night gate and capped either side of it, the morning
+  offer stops once the morning is written, and confirming a pencilled block turns
+  it into a record without inventing hours. Needs `npm run dev` up; exits non-zero
+  on failure. `CHROME_PATH` / `NIGHT_BASE` / `NIGHT_TZ` override the browser, the
+  origin and the clock (the offer's window is 04:00–22:00, so the default
+  `Asia/Tokyo` is what puts "now" inside it). No DST coverage, and the native
+  `<input type="time">` is driven by value rather than by the OS wheel.
 - No test runner **for the app at large**; verification is done in the browser. The
-  Manor is the one exception — its contract is numeric, and "looks plausible" is
+  Manor and THE NIGHT are the exceptions — its contract is numeric, and "looks plausible" is
   exactly how a cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness
   after touching `WeekGrid.tsx` / `ManorScreen.tsx`. Its B1/B2 checks read the
   **brief's own exam clause**, and the brief types itself out on a first visit —
@@ -426,6 +437,8 @@ src/
     dates.ts      local-time day/week/streak helpers
     useNow.ts     ticking-now hook (minute interval + visibilitychange)
     ids.ts        makeId()   ·  storage.ts  storageAvailable()
+    sleep/        THE NIGHT (see below) — the only wing-shaped thing in core,
+                  because it has two consumers from birth
     store/shell.ts  app-wide store: { skin, weekStart, wing prefs } @
                   `majordomo-shell` v4
     ui/           index.css (skin bundles) + skins.ts (SKINS flags) +
@@ -532,7 +545,10 @@ the rest. It replaced the accordion of one row per wing. Design source is
   **THE PEN**, so every clause must be a whole sentence that survives its
   neighbours being deleted — none may open with "and" or refer to the one
   before it. Copy lives in `voice.briefing.brief.line` / `.counsel`; the areas
-  and their wing order live in `Pen.tsx` `AREA_GROUPS`.
+  and their wing order live in `Pen.tsx` `AREA_GROUPS`. THE NIGHT owns a group
+  there without being a wing: its two clauses (`sleep`, `rest`) used to hang off
+  the Watch, which meant sleep was invisible to anyone who had never stood a
+  shift.
 - **Facts come from the wings, never re-derived.** `facts.ts` calls each wing's
   `use…BriefingFacts()` — the very hook that wing's own panel calls — so a
   sentence on the Manor and a panel on a wing cannot quote different numbers. A
@@ -554,6 +570,74 @@ the rest. It replaced the accordion of one row per wing. Design source is
 - Charts are drawn with `preserveAspectRatio="none"`, so **anything circular
   must be an HTML element positioned in percent**, never an SVG `<circle>` —
   the Ledger's trend chart learned this first.
+
+### THE NIGHT — sleep (`src/core/sleep/`)
+
+Optional sleep tracking: two clock times a morning, the figures that fall out of
+them, and one scalar those figures hand the strain engine. It is **not a wing** —
+no tab, no screen, no ConsoleModule — it is a record type the Manor writes and
+the Grounds reads.
+
+- **It lives in `core/` and that is the extract-on-contact rule, not an
+  exception to it.** Two consumers exist the day it ships: the Manor writes and
+  reads nights, and the Grounds reads them through recovery. Modules may not
+  import each other, so `modules/sleep/` could never have fed `lib/strain.ts`.
+- **A night IS a calendar event** (`kind: 'sleep'`). There is no second table of
+  hours — one would be free to disagree with the week on screen. The store keeps
+  only what a block cannot carry: the optional rating and minutes awake, keyed by
+  event id (the Study's session-meta split, exactly).
+- **A record carries `sourceRef: 'slept:<wake day>'`; a pencil mark does not.**
+  The estate has always drawn six hours in after a night watch
+  (`modules/watch/lib.ts` `planWatchPost`) — that is a SUGGESTION, and counting it
+  as sleep reports a week of rest nobody took. `isNightRecord` / `isPencilledNight`
+  in `core/sleep/lib.ts` are the one pair of predicates that separate them, and
+  everything reads them: the hatch on the week (`.booked-hatch`, whose comment
+  already said "pencilled in on the estate's behalf" before this existed), the
+  Watch's cycle card, the morning offer's wording, the ledger's every figure.
+  Anything placed by hand is grandfathered as a record — dragging a block onto
+  the week and calling it sleep has always been a person asserting they slept.
+  **Never add `slept:` to `PROJECTION_PREFIXES`**: a night is a record and
+  records are carried.
+- **A night belongs to the morning it ENDED on.** That is the one convention that
+  survives a night shift — 23:30 → 07:10 and 09:00 → 15:00 are both Tuesday's
+  night — and it is why the sheet pages MORNINGS and derives the bedtime's date
+  from the two clocks rather than asking (`night/write.ts` `nightWindow`), which
+  makes a negative or 26-hour night unrepresentable. The Manor's own week line
+  still splits a cross-midnight block across two columns; the two figures differ
+  at week edges by design, the way `WeekAttribution`'s two modes do.
+- **A night with no record is a GAP, never a zero.** Averages state what they
+  averaged over, debt skips absent nights entirely, and the instruments draw
+  nothing at all where a night is missing — which is what the `'band'` DialKind
+  was added for (`briefing/dials.ts`, `geometry.ts`). A zero-height bar is a
+  claim that somebody slept nothing.
+- **The recovery coupling is the only place sleep moves another wing's numbers**,
+  and it is deliberately small, capped and gated. `recoveryEffect` returns a
+  scalar that multiplies the strain engine's per-muscle recovery clock
+  (`lib/strain.ts` `muscleClock`) — above 1 the same session takes longer to
+  leave you. It is **EXACTLY 1** when the settings switch is off or when fewer
+  than four of the trailing seven nights are on file, so an estate that ignores
+  this system is never quietly being modelled. Range 0.88–1.20. The input is two
+  times typed on a phone, so every surface that shows it also prints the caveat
+  (`SleepRecoveryNote` in the Grounds; `voice.night.recovery.caveat`).
+- **Every caller of `computeStrains` passes that scalar** — read it from
+  `useRecoveryScale()`. The default of 1 exists for the pure-math probes
+  (`window.__engine`, the recovery scan's inner loop); a SURFACE that omits it is
+  a surface reading a different body from the one beside it.
+- **The body-clock instrument measures against a MEDIAN MIDPOINT, not the clock
+  face.** Each night draws as a band relative to the middle of a usual night, so
+  a daytime sleep and a night sleep are the same shape at different offsets and
+  nothing has to wrap around midnight. Regularity decays exponentially
+  (τ = 120 min) rather than linearly for the same reason: a straight line steep
+  enough to separate an ordinary week bottoms out at three hours of spread, and
+  a shift worker runs four or five as a matter of course.
+- **Doors in**: the ☾ NIGHT button in the Manor's nav row (always there, never
+  asks for anything), the morning offer above the week (`NightPrompt` — one
+  morning only, 04:00–22:00, dismissible for the day, switchable off), a sleep
+  block's own popover/mobile sheet, and QUICK ADD's Sleep template. The offer
+  changes from a request to a confirmation when the estate has already pencilled
+  the night in.
+- **Never begs.** No streaks, no backlog of missed mornings, no congratulation
+  for a long night. It states hours and moves on.
 
 ### Import boundaries (enforced by `eslint.config.js`, `npm run lint`)
 
@@ -618,6 +702,13 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   they carry **fixed ids and a constant `createdAt`** so two devices seeding
   independently produce identical records instead of eight shapes.
 
+- **`majordomo-sleep` v1** (`core/sleep/store.ts`) — THE NIGHT: `notes` (the optional
+  extras a night was given — a 1–5 rating, minutes awake — keyed by EVENT id, the
+  Study's session-meta split), plus `targetH`, `coupling`, `morningPrompt`,
+  `askedOn`. The nights themselves are `majordomo-events` entries; there is no
+  second table of hours, deliberately. `targetH`/`coupling` SYNC (they change what
+  every sleep figure means); `morningPrompt`/`askedOn` do not (whether one screen
+  puts a line above the week at breakfast is a fact about that device).
 - **`majordomo-briefing` v1** (`app/manor/briefing/prefs.ts`) — THE PEN: which
   clauses the brief covers, whether advice is written, and which four dials are
   on the board. Deliberately **never synced** — which dials one screen shows is
@@ -626,7 +717,7 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 
 **Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
 `majordomo-events` / `majordomo-study` / `majordomo-workshop` / `majordomo-watch` /
-`majordomo-briefing`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+`majordomo-sleep` / `majordomo-briefing`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
 boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
 still applies; the old keys are left in place as insurance and never read again.
 
@@ -766,6 +857,9 @@ ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
   ±15% corrector (DOMS ≠ hypertrophy). Secondary muscles ×0.5. Grounded in the
   hypertrophy/recovery literature (see [[workout-recovery-science]] memory). Strain
   is always recomputed from raw workouts — never persisted — so constants tune freely.
+  **THE NIGHT multiplies the per-muscle clock** (`muscleClock(m, scale)`): an
+  under-slept week stretches every muscle's timeline together, capped at ±20 % and
+  neutral until four of seven nights are on file — see the THE NIGHT section.
 - **Weekly volume mode** — `modules/training/lib/volume.ts` estimates "effective hard
   sets" per muscle over a **trailing 7 days** (deliberately not the calendar week —
   no Monday reset), classifies each against RP-style MEV/MAV/MRV `LANDMARKS`, and the
@@ -890,6 +984,7 @@ auto-enter Training so they land on the right screen.
 - `?consent` — shows the consent door (DEV never shows it unprompted; accepting
   stamps the shell store, so clear `majordomo-shell` to see it again)
 - `?manor=month` — opens the Manor in month view · `window.__events` — events store
+- `?night` — opens THE NIGHT's sheet on this morning (screenshot aid)
 - `?console=training|capital` — start the shell inside that console
 - `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by
   the **shell** store (founder machines also accept the seven legacy skin ids)
@@ -907,6 +1002,9 @@ auto-enter Training so they land on the right screen.
 - `window.__capital` — the Wayne Fund store handle in dev
 - `window.__study` — the Study store handle in dev
 - `window.__watch` — the Watch's shift-shape store handle in dev
+- `window.__sleep` / `window.__night` — THE NIGHT's store handle and its pure model
+  (`nightsIn`, `sleepStats`, `recoveryEffect`, … — the night harness scores
+  attributions and debts through it without a React round-trip)
 - `window.__engine` — the strain module (sample `recoveryEnvelope(t, style, muscleFactor, nf)`
   to plot recovery curves without React round-trips)
 - `window.__volume` / `window.__trainNext` — the volume estimator and the

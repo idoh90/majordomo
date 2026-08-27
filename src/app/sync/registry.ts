@@ -2,6 +2,8 @@ import { setWeekStartDefault, type WeekStart } from '../../core/dates'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
 import { useShellStore } from '../../core/store/shell'
+import { useSleepStore } from '../../core/sleep/store'
+import type { SleepNote } from '../../core/sleep/types'
 import { isProjection } from '../../core/sync/projection'
 import { mergeList, mergeMap } from '../../core/sync/merge'
 import { applyQuietlyAll } from './shareService'
@@ -350,6 +352,51 @@ const watchSource: SyncSource = {
     })),
 }
 
+/* ---------------------------------------------------------------- the Night */
+
+/**
+ * Sleep, minus the sleep.
+ *
+ * The nights themselves are calendar events and travel with the Manor; what
+ * lives here is the handful of things a block cannot carry — the rating and
+ * the time awake a night was given, keyed by event id (the Study's split
+ * exactly) — plus the two preferences that change what every sleep figure
+ * MEANS. `targetH` and `coupling` are estate: measured against seven hours on
+ * one device and eight on another, the same fortnight owes two different
+ * debts. `morningPrompt` and `askedOn` are deliberately absent — whether one
+ * screen puts a line above the week at breakfast is a fact about that device,
+ * the way panelTips and the briefing's dial picks are.
+ */
+const nightSource: SyncSource = {
+  wing: 'night',
+  toRecords: () => {
+    const s = useSleepStore.getState()
+    return [
+      // one record per singleton FIELD, never a grouped 'prefs' row: two
+      // devices editing the target and the coupling offline would otherwise
+      // be one conflicted record and one edit would vanish
+      rec('night', 'pref', 'targetH', s.targetH),
+      rec('night', 'pref', 'coupling', s.coupling),
+      ...Object.entries(s.notes).map(([eventId, note]) => rec('night', 'note', eventId, note)),
+    ]
+  },
+  subscribe: (onChange) => useSleepStore.subscribe(onChange),
+  apply: (records) => {
+    useSleepStore.setState((s) => ({
+      notes: mergeMap<SleepNote>(s.notes, of(records, 'note')),
+    }))
+    for (const r of of(records, 'pref')) {
+      if (r.deleted) continue
+      if (r.id === 'targetH' && typeof r.payload === 'number') {
+        useSleepStore.setState({ targetH: r.payload })
+      }
+      if (r.id === 'coupling' && typeof r.payload === 'boolean') {
+        useSleepStore.setState({ coupling: r.payload })
+      }
+    }
+  },
+}
+
 export const SYNC_SOURCES: SyncSource[] = [
   shellSource,
   manorSource,
@@ -358,4 +405,5 @@ export const SYNC_SOURCES: SyncSource[] = [
   workshopSource,
   ledgerSource,
   watchSource,
+  nightSource,
 ]

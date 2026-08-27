@@ -29,7 +29,9 @@ export interface WatchBriefingFacts {
   remaining: number
   nights: number
   days: number
-  /** recovery sleep pencilled after this week's nights */
+  /** this week's sleep hours on the calendar, pencilled and slept alike —
+   *  the Watch's own bookkeeping of the week's 168. THE NIGHT owns the
+   *  question of how much was actually slept (core/sleep). */
   sleepH: number
   /** the next watch anywhere ahead, with time until it begins. `at` is its
    *  clock time — the Manor's brief prints that instead of the countdown, so
@@ -150,6 +152,37 @@ export interface HouseRowFacts {
   delta: number | null
 }
 
+/**
+ * What THE NIGHT knows when it reports in.
+ *
+ * Every figure here is drawn from nights that were actually written down.
+ * `covered7` is the honesty gate the clauses lean on: an average over two
+ * nights is not a week, and the brief has to say which it is looking at.
+ */
+export interface SleepBriefingFacts {
+  /** the most recent night on file, and how long ago it was */
+  last: { hours: number; bed: string; wake: string; dayLabel: string; today: boolean } | null
+  /** mean hours over the nights of the last seven that carry a record */
+  avg7H: number
+  covered7: number
+  /** hours owed across the fortnight — 0 when nothing is short */
+  debtH: number
+  /** 0–100 steadiness of the body clock; null under three nights on file */
+  regularity: number | null
+  /** the spread of the nightly midpoint in minutes; null under three nights */
+  driftMin: number | null
+  targetH: number
+  /** what sleep is doing to the Grounds' recovery clock right now */
+  recovery: {
+    applied: boolean
+    /** how much slower recovery is running, as a percentage; 0 when not applied */
+    pct: number
+    covered: number
+    needed: number
+    couplingOn: boolean
+  }
+}
+
 /* ---------------------------------------------------------------------------
    THE BRIEFING — the Manor's written brief and its instruments.
 
@@ -163,6 +196,7 @@ export interface HouseRowFacts {
  *  each of its areas then writes nothing rather than a sentence about zero. */
 export interface BriefFacts {
   watch: WatchBriefingFacts | null
+  sleep: SleepBriefingFacts | null
   grounds: GroundsBriefingFacts | null
   study: StudyBriefingFacts | null
   workshop: WorkshopBriefingFacts | null
@@ -175,6 +209,7 @@ export interface BriefFacts {
 export type BriefAreaId =
   | 'shifts'
   | 'sleep'
+  | 'rest'
   | 'workouts'
   | 'muscles'
   | 'food'
@@ -202,7 +237,15 @@ export interface DialFactMap {
   volume: { now: number; avg: number }
   sessions: { now: number; goal: number; avg: number }
   watchhours: { doneH: number; expectedH: number; avg: number; remaining: number }
-  sleep: { last: number; avg: number; target: number }
+  sleep: { last: number | null; avg: number; target: number; covered: number; window: number }
+  sleepdebt: { now: number; target: number; covered: number; window: number }
+  sleepclock: {
+    regularity: number | null
+    driftMin: number | null
+    usualBed: string | null
+    usualWake: string | null
+    covered: number
+  }
   turnaround: { now: number | null; tightCount: number; tightLine: number }
   nights: { now: number; avg: number }
   studyhours: { now: number; goalH: number; avg: number }
@@ -523,6 +566,127 @@ export interface VoicePack {
       conflict: (v: { title: string; mins: number; before: boolean }) => string
     }
   }
+  /**
+   * THE NIGHT — sleep: the sheet that writes a night down, the morning offer,
+   * the figures the ledger prints, and the switches that govern all of it.
+   *
+   * The register is the same as everywhere else, with one extra rule this
+   * system needs more than most: sleep is the easiest thing in the app to be
+   * made to feel bad about, and the butler does not do that. Nothing here may
+   * scold a short night, chase a missed morning, or congratulate a long one.
+   * It states hours and it moves on.
+   */
+  night: {
+    /** what the system is called wherever it needs a name */
+    name: string
+    /** the Manor's own way in */
+    button: string
+    /** what a night is called on the calendar when the estate writes one */
+    blockTitle: string
+    /** the door from a sleep block on the week into its own sheet */
+    openLabel: string
+    sheet: {
+      /** writing a night that has none */
+      logTitle: string
+      /** correcting one already on file */
+      editTitle: string
+      /** the estate drew this and is asking whether it happened */
+      confirmTitle: string
+      /** the night being written, e.g. "Tuesday morning" */
+      whichLabel: string
+      /** the morning being written is today's */
+      thisMorning: string
+      /** the bedtime landed on the day before the morning */
+      dayBefore: string
+      prev: string
+      next: string
+      bedLabel: string
+      wakeLabel: string
+      /** the qualifier beside the live duration — what SHAPE of night this is,
+       *  and what was taken off it. The figure itself is drawn by the sheet. */
+      slept: (v: { crossesMidnight: boolean; inBedH: number; awakeMin: number }) => string
+      /** …when the two clocks make no night at all */
+      impossible: string
+      /** …when a night runs longer than the estate will believe */
+      tooLong: string
+      restLabel: string
+      restNote: string
+      /** five words for the five ratings, worst first */
+      restWords: [string, string, string, string, string]
+      /** clear a rating that was set by mistake */
+      restClear: string
+      awakeLabel: string
+      awakeNote: string
+      save: string
+      /** the pencilled block being confirmed rather than created */
+      confirm: string
+      remove: string
+      /** ConfirmDialog words its own Cancel; only these three are ours */
+      removeConfirm: { title: string; body: string; confirm: string }
+      /** it would land on hours already spoken for */
+      occupied: string
+      /** the note under a pencilled night waiting to be confirmed */
+      pencilNote: string
+      /** the strip of recent nights under the form */
+      ledger: string
+      /** …when there is nothing in it yet */
+      ledgerEmpty: string
+    }
+    /** the morning offer above the week */
+    prompt: {
+      /** nothing at all on last night */
+      line: string
+      cta: string
+      /** the estate pencilled the night in and wants a yes, not an entry */
+      pencilLine: string
+      pencilCta: string
+      /** waved off for today */
+      dismiss: string
+    }
+    /** the figures, wherever they are printed */
+    stats: {
+      lastNight: string
+      average: string
+      debt: string
+      regularity: string
+      /** "of the last 7 nights" style caption under a coverage figure */
+      covered: (v: { covered: number; of: number }) => string
+      /** the average's caption, which must say what it averaged over */
+      averageNote: (v: { covered: number }) => string
+      debtNote: (v: { target: number }) => string
+      /** the body-clock line: spread, and the usual shape it spreads around */
+      regularityNote: (v: { driftMin: number | null; bed: string | null; wake: string | null }) => string
+      /** too few nights to say anything about steadiness */
+      tooThin: string
+      /** nothing on file at all */
+      empty: string
+      /** a night with no record, wherever one is pointed at */
+      notWritten: string
+    }
+    /** the Grounds' recovery coupling, stated wherever it bites */
+    recovery: {
+      /** the line on the recovery card when the coupling is doing something */
+      line: (v: { pct: number; avgH: number; covered: number }) => string
+      /** …when it is on but the week is too thin to speak from */
+      thin: (v: { covered: number; needed: number }) => string
+      /** …when it is switched off */
+      off: string
+      /** the standing caveat, printed wherever the coupling shows a number */
+      caveat: string
+    }
+    settings: {
+      /** the section heading */
+      group: string
+      targetLabel: string
+      targetBlurb: string
+      /** the target set to nothing */
+      targetNone: string
+      couplingLabel: string
+      couplingBlurb: string
+      promptLabel: string
+      promptBlurb: string
+    }
+  }
   watch: {
     onDuty: string
     nextWatch: string
@@ -602,10 +766,15 @@ export interface VoicePack {
       splitTitle: string
       /** nothing on the books this week */
       empty: string
+      /** under the SLEEP figure, when some of it was actually slept */
+      sleepSplit: (v: { sleptH: number; pencilledH: number }) => string
       line: (v: {
         nights: number
         days: number
+        /** hours the estate drew and nobody confirmed */
         pencilledH: number
+        /** …and hours that were written down */
+        sleptH: number
         turnaroundH: number | null
         ownH: number
       }) => string

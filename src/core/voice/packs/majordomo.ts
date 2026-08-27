@@ -54,6 +54,24 @@ function midSentence(label: string): string {
   return label === 'Today' || label === 'Tomorrow' ? label.toLowerCase() : label
 }
 
+/**
+ * A slept duration, in prose: "seven hours and twenty minutes".
+ *
+ * Sleep is the one figure in this app that people say out loud in words
+ * rather than read off a dial, and "6.7 hours" is not a thing anyone has ever
+ * said about a night. Rounded to five minutes, because a log typed on a phone
+ * at seven in the morning does not carry a minute of real precision.
+ */
+function fmtSlept(hours: number): string {
+  const total = Math.max(0, Math.round((hours * 60) / 5) * 5)
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  const hPart = `${lower(h)} ${plural(h, 'hour', 'hours')}`
+  if (m === 0) return hPart
+  const mPart = `${lower(m)} ${plural(m, 'minute', 'minutes')}`
+  return h === 0 ? mPart : `${hPart} and ${mPart}`
+}
+
 /** "9 h 20 m" — the countdown format the Watch already prints */
 function untilLabel(h: number, m: number): string {
   return h > 0 ? `${h} h ${String(m).padStart(2, '0')} m` : `${m} m`
@@ -153,6 +171,7 @@ export const majordomoPack: VoicePack = {
       areaLabel: {
         shifts: 'SHIFTS',
         sleep: 'SLEEP',
+        rest: 'RECOVERY',
         workouts: 'WORKOUTS',
         muscles: 'MUSCLES',
         food: 'FOOD',
@@ -193,10 +212,45 @@ export const majordomoPack: VoicePack = {
           }
           return parts.join(' ')
         },
-        sleep: ({ watch: w }) =>
-          !w || w.sleepH <= 0
-            ? null
-            : `${w.sleepH.toFixed(1)} hours of recovery sleep are pencilled in after this week's nights.`,
+        // The clause the Watch used to write about its own pencil marks now
+        // reports what was actually slept. A pencilled block is a plan, and a
+        // plan reported as a night is how a week of six-hour suggestions used
+        // to read as a week of rest.
+        sleep: ({ sleep: n }) => {
+          if (!n) return null
+          if (!n.last) {
+            return n.covered7 > 0 ? null : 'No nights are written down yet.'
+          }
+          const first = n.last.today
+            ? `You slept ${fmtSlept(n.last.hours)} last night, ${n.last.bed} to ${n.last.wake}.`
+            : `The last night on file is ${midSentence(n.last.dayLabel)}: ${fmtSlept(n.last.hours)}, ${n.last.bed} to ${n.last.wake}.`
+          const parts = [first]
+          if (n.covered7 >= 3) {
+            parts.push(
+              `That averages ${fmtSlept(n.avg7H)} a night across the ${lower(n.covered7)} ${plural(n.covered7, 'night', 'nights')} of this week you have written down.`,
+            )
+          }
+          if (n.targetH > 0 && n.debtH >= 1) {
+            parts.push(`The fortnight is ${fmtSlept(n.debtH)} short of ${n.targetH} a night.`)
+          }
+          return parts.join(' ')
+        },
+        // Recovery is its own clause because it is the one place sleep changes
+        // another wing's numbers, and a reader must be able to switch off the
+        // modelling without losing the plain hours.
+        rest: ({ sleep: n }) => {
+          if (!n || !n.recovery.couplingOn) return null
+          const r = n.recovery
+          if (!r.applied) {
+            return r.covered >= 1
+              ? `Sleep is not moving the recovery clock — ${lower(r.covered)} of the last seven ${plural(r.covered, 'night is', 'nights are')} on file, and I want ${lower(r.needed)}.`
+              : null
+          }
+          if (r.pct === 0) return 'Your sleep leaves the recovery clock where it is.'
+          return r.pct > 0
+            ? `On that sleep I am running recovery ${r.pct} per cent slower than the book.`
+            : `On that sleep I am running recovery ${-r.pct} per cent faster than the book.`
+        },
         workouts: ({ grounds: g }) => {
           if (!g) return null
           // "No of four workouts are done" is what naming the goal first costs
@@ -310,9 +364,19 @@ export const majordomoPack: VoicePack = {
           w && w.turnaroundH !== null && w.turnaroundH < 10
             ? `Two of those shifts sit ${w.turnaroundH.toFixed(0)} hours apart. That is tight.`
             : null,
-        sleep: ({ watch: w }) =>
-          w && w.nights > 0 && w.sleepH < w.nights * 6
-            ? 'I would leave that sleep where it is.'
+        sleep: ({ sleep: n }) => {
+          if (!n || n.targetH <= 0) return null
+          if (n.covered7 >= 3 && n.avg7H > 0 && n.targetH - n.avg7H >= 1) {
+            return 'An earlier hour tonight would cost you less than it looks.'
+          }
+          if (n.regularity !== null && n.regularity < 45) {
+            return 'The hour you go down moves more than the hour you get up. That is the one worth holding.'
+          }
+          return null
+        },
+        rest: ({ sleep: n }) =>
+          n && n.recovery.applied && n.recovery.pct >= 8
+            ? 'I would take a set or two off the next session, sir.'
             : null,
         workouts: ({ grounds: g }) =>
           g && g.nextBlock && (g.readiness.band === 'worn' || g.readiness.band === 'spent')
@@ -360,6 +424,8 @@ export const majordomoPack: VoicePack = {
         sessions: 'WORKOUTS',
         watchhours: 'HOURS WORKED',
         sleep: 'SLEEP',
+        sleepdebt: 'SLEEP DEBT',
+        sleepclock: 'BODY CLOCK',
         turnaround: 'TURNAROUND',
         nights: 'NIGHT SHIFTS',
         studyhours: 'STUDY HOURS',
@@ -378,7 +444,9 @@ export const majordomoPack: VoicePack = {
         volume: 'LAST 8 WEEKS',
         sessions: 'LAST 8 WEEKS',
         watchhours: 'LAST 8 WEEKS',
-        sleep: 'LAST 7 NIGHTS',
+        sleep: 'LAST 14 NIGHTS',
+        sleepdebt: 'LAST 14 NIGHTS',
+        sleepclock: 'LAST 14 NIGHTS',
         turnaround: 'LAST 8 GAPS',
         nights: 'LAST 8 WEEKS',
         studyhours: 'LAST 8 WEEKS',
@@ -440,12 +508,46 @@ export const majordomoPack: VoicePack = {
                 ? 'A heavier week than usual on shift.'
                 : 'Every shift on the books is worked.',
         }),
-        sleep: ({ last, avg, target }) => ({
-          headSub: last >= target ? 'the debt is repaid' : `short of ${target}`,
+        sleep: ({ last, avg, target, covered, window }) => ({
+          headSub:
+            last === null
+              ? 'nothing on last night'
+              : target > 0
+                ? last >= target
+                  ? `at or over ${target}`
+                  : `${fmtSlept(target - last)} short of ${target}`
+                : `${fmtSlept(avg)} a night on average`,
           why:
-            avg >= target
-              ? 'The week averages out at target.'
-              : 'Nights cost sleep, and the days after repay it.',
+            covered === 0
+              ? 'Nothing is written down yet. Two clock times a morning is the whole of it.'
+              : covered < window
+                ? `Drawn from the ${lower(covered)} ${plural(covered, 'night', 'nights')} of the last ${lower(window)} you wrote down. The gaps are gaps, not zeroes.`
+                : target > 0 && avg >= target
+                  ? 'The fortnight averages at or above your mark.'
+                  : 'The bars are what you slept. The line is what you asked of yourself.',
+        }),
+        sleepdebt: ({ now, target, covered, window }) => ({
+          headSub: now < 1 ? 'nothing owed' : `owed against ${target} a night`,
+          why:
+            covered === 0
+              ? 'Nothing is written down yet.'
+              : now < 1
+                ? 'The fortnight has kept up with itself.'
+                : `Short nights add here and long ones pay back at half. Drawn from the ${lower(covered)} ${plural(covered, 'night', 'nights')} of the last ${lower(window)} on file.`,
+        }),
+        sleepclock: ({ regularity, driftMin, usualBed, usualWake, covered }) => ({
+          headSub:
+            regularity === null
+              ? `${lower(covered)} of three nights`
+              : usualBed && usualWake
+                ? `usually ${usualBed} to ${usualWake}`
+                : 'steadiness of the hour',
+          why:
+            regularity === null
+              ? 'Three nights on file and I can say how steady the hour is.'
+              : driftMin !== null && driftMin >= 90
+                ? `The middle of your night moves about ${lower(Math.round(driftMin / 15) * 15)} minutes either way. Every band is one night; the line is the hour you usually keep.`
+                : 'Every band is one night, drawn against the hour you usually keep.',
         }),
         turnaround: ({ now, tightCount, tightLine }) => ({
           headSub: now === null ? 'no gap to measure' : 'since the last shift',
@@ -1614,7 +1716,7 @@ export const majordomoPack: VoicePack = {
   },
   kinds: {
     shift: 'THE WATCH',
-    sleep: 'SLEEP',
+    sleep: 'THE NIGHT',
     training: 'THE GROUNDS',
     study: 'THE STUDY',
     workshop: 'THE WORKSHOP',
@@ -1627,6 +1729,101 @@ export const majordomoPack: VoicePack = {
     study: { name: 'THE STUDY', tagline: "Subjects · topics · what's due" },
     workshop: { name: 'THE WORKSHOP', tagline: 'Ventures · bench hours · milestones' },
     capital: { name: 'THE LEDGER', tagline: 'Net worth · markets · budget' },
+  },
+  night: {
+    name: 'THE NIGHT',
+    button: 'NIGHT',
+    blockTitle: 'Sleep',
+    openLabel: 'THE NIGHT',
+    sheet: {
+      logTitle: 'WRITE DOWN A NIGHT',
+      editTitle: 'CORRECT A NIGHT',
+      confirmTitle: 'IS THAT HOW IT WENT?',
+      whichLabel: 'THE MORNING OF',
+      thisMorning: 'THIS MORNING',
+      dayBefore: 'the night before',
+      prev: 'Earlier',
+      next: 'Later',
+      bedLabel: 'DOWN AT',
+      wakeLabel: 'UP AT',
+      slept: ({ crossesMidnight, inBedH, awakeMin }) =>
+        awakeMin > 0
+          ? `${fmtSlept(inBedH)} in bed, less ${awakeMin} awake`
+          : crossesMidnight
+            ? 'through midnight'
+            : 'inside the one day',
+      impossible: 'Those two hours make no night. Move one of them.',
+      tooLong: 'Over eighteen hours in bed. I have written it down as asked.',
+      restLabel: 'HOW IT LEFT YOU',
+      restNote: 'Optional. It nudges the recovery clock, nothing more.',
+      restWords: ['Wrecked', 'Rough', 'Fine', 'Good', 'Sharp'],
+      restClear: 'No rating',
+      awakeLabel: 'AWAKE IN THE NIGHT',
+      awakeNote: 'Optional. Taken off the hours above.',
+      save: 'WRITE IT DOWN',
+      confirm: 'YES, THAT IS IT',
+      remove: 'Remove this night',
+      removeConfirm: {
+        title: 'Remove the night?',
+        body: 'The block leaves the week and its figures leave the ledger.',
+        confirm: 'REMOVE',
+      },
+      occupied: 'Those hours are already spoken for.',
+      pencilNote: 'I pencilled this in after your watch. Confirm it and it counts.',
+      ledger: 'THE FORTNIGHT',
+      ledgerEmpty: 'Nothing written down yet.',
+    },
+    prompt: {
+      line: 'Last night is not written down.',
+      cta: 'WRITE IT DOWN',
+      pencilLine: 'I pencilled last night in after your watch. Was that how it went?',
+      pencilCta: 'CONFIRM IT',
+      dismiss: 'Not today',
+    },
+    stats: {
+      lastNight: 'LAST NIGHT',
+      average: 'AVERAGE',
+      debt: 'OWED',
+      regularity: 'BODY CLOCK',
+      covered: ({ covered, of }) => `${covered} of the last ${of} nights`,
+      averageNote: ({ covered }) =>
+        covered === 0
+          ? 'nothing to average'
+          : `over ${lower(covered)} ${plural(covered, 'night', 'nights')}`,
+      debtNote: ({ target }) => (target > 0 ? `against ${target} h a night` : 'no target set'),
+      regularityNote: ({ driftMin, bed, wake }) =>
+        bed && wake
+          ? driftMin === null
+            ? `usually ${bed} to ${wake}`
+            : `usually ${bed} to ${wake} · ±${driftMin} min`
+          : 'not enough nights yet',
+      tooThin: 'Three nights and I can say how steady the hour is.',
+      empty: 'Nothing on file. Two clock times a morning is the whole of it.',
+      notWritten: 'not written down',
+    },
+    recovery: {
+      line: ({ pct, avgH, covered }) =>
+        pct === 0
+          ? `Your sleep leaves this clock where it is — ${fmtSlept(avgH)} a night across ${lower(covered)} ${plural(covered, 'night', 'nights')}.`
+          : pct > 0
+            ? `Running ${pct} per cent slow on ${fmtSlept(avgH)} a night across ${lower(covered)} ${plural(covered, 'night', 'nights')}.`
+            : `Running ${-pct} per cent quick on ${fmtSlept(avgH)} a night across ${lower(covered)} ${plural(covered, 'night', 'nights')}.`,
+      thin: ({ covered, needed }) =>
+        `${sentence(word(covered))} of the last seven nights ${plural(covered, 'is', 'are')} written down. I want ${lower(needed)} before I let sleep move this clock.`,
+      off: 'Sleep is not moving this clock. You switched that off.',
+      caveat: 'An estimate from hours you typed yourself — read it as one.',
+    },
+    settings: {
+      group: 'THE NIGHT',
+      targetLabel: 'Hours a night',
+      targetBlurb: 'What the ledger measures a night against. Set it to none and it stops keeping score.',
+      targetNone: 'No target',
+      couplingLabel: 'Let sleep move recovery',
+      couplingBlurb:
+        'Short weeks slow the Grounds\u2019 recovery clock, long ones quicken it — by a fifth at the very most, and only once four of the last seven nights are on file. It is an estimate from hours you typed yourself.',
+      promptLabel: 'Ask about last night',
+      promptBlurb: 'A single line above the week on a morning that has no note. Waved off, it waits until tomorrow.',
+    },
   },
   watch: {
     onDuty: 'ON DUTY · THIS WEEK',
@@ -1696,7 +1893,11 @@ export const majordomoPack: VoicePack = {
       own: 'FREE',
       splitTitle: "THE WEEK'S 168 HOURS",
       empty: 'No shifts this week. All 168 hours are yours.',
-      line: ({ nights, days, pencilledH, turnaroundH, ownH }) => {
+      sleepSplit: ({ sleptH, pencilledH }) =>
+        pencilledH > 0
+          ? `${sleptH.toFixed(1)} h written down, ${pencilledH.toFixed(1)} h pencilled`
+          : 'all of it written down',
+      line: ({ nights, days, pencilledH, sleptH, turnaroundH, ownH }) => {
         const shape = [
           nights > 0 ? `${lower(nights)} ${plural(nights, 'night', 'nights')}` : '',
           days > 0 ? `${lower(days)} ${plural(days, 'day', 'days')}` : '',
@@ -1704,9 +1905,14 @@ export const majordomoPack: VoicePack = {
           .filter(Boolean)
           .join(' and ')
         const hrs = (h: number) => `${hoursWord(h)} ${plural(Math.round(h), 'hour', 'hours')}`
+        const sleepH = pencilledH + sleptH
         const parts = [
-          pencilledH > 0
-            ? `${sentence(shape)}, with ${hrs(pencilledH)} blocked out for sleep.`
+          sleepH > 0
+            ? sleptH > 0 && pencilledH > 0
+              ? `${sentence(shape)}, with ${hrs(sleepH)} given to sleep — ${hrs(sleptH)} of it written down.`
+              : sleptH > 0
+                ? `${sentence(shape)}, with ${hrs(sleptH)} of sleep written down around them.`
+                : `${sentence(shape)}, with ${hrs(pencilledH)} pencilled in for sleep.`
             : `${sentence(shape)}, with no sleep blocked out after them.`,
         ]
         // a gap under eight hours between shifts is the one figure here worth a remark
