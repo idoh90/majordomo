@@ -154,6 +154,7 @@ export function MobileQuickAddSheet({
 export function MobileEventSheet({
   open,
   event,
+  sandbox,
   hotNames,
   near,
   onClose,
@@ -163,6 +164,8 @@ export function MobileEventSheet({
 }: {
   open: boolean
   event: CalendarEvent | null
+  /** a what-if is open — the night door is closed while one is */
+  sandbox: boolean
   /** muscles still hot on this event's day (training events only) */
   hotNames: string[]
   near: NearWatch | null
@@ -236,7 +239,8 @@ export function MobileEventSheet({
                   rather than correcting. It takes the primary position here
                   because on a phone this sheet IS the popover, and MOVE is
                   rarely what you want with a night that already happened. */}
-              {e.kind === 'sleep' && (
+              {/* …and the same door, closed the same way (see EventPopover) */}
+              {e.kind === 'sleep' && !sandbox && (
                 <button
                   type="button"
                   onClick={() => {
@@ -256,7 +260,9 @@ export function MobileEventSheet({
               <button
                 type="button"
                 onClick={onMove}
-                className={`${e.kind === 'sleep' ? 'card mt-2 h-11' : 'btn-cta mt-3.5 h-12'} w-full font-display text-[13.5px] font-semibold tracking-[0.18em]`}
+                className={`${
+                  e.kind === 'sleep' && !sandbox ? 'card mt-2 h-11' : 'btn-cta mt-3.5 h-12'
+                } w-full font-display text-[13.5px] font-semibold tracking-[0.18em]`}
               >
                 {voice.manor.eventSheet.move}
               </button>

@@ -269,6 +269,30 @@ async function writing(page) {
   gone
     ? ok('W7 the offer stops once the morning is written')
     : bad('W7 the offer stops once the morning is written', 'still asking')
+
+  /* --- two identical clocks are not a night ---
+     The bedtime's DAY is derived from the pair, so equal times resolve to
+     "the day before" and the arithmetic cheerfully answers twenty-four hours
+     — a nonsense record, saveable in one press, occupying a whole day on the
+     week. It has to be refused rather than merely warned about. */
+  await page.getByRole('button', { name: /^NIGHT$/ }).first().click()
+  await page.waitForTimeout(500)
+  await page.getByLabel('DOWN AT', { exact: true }).fill('07:00')
+  await page.getByLabel('UP AT', { exact: true }).fill('07:00')
+  await page.waitForTimeout(350)
+  const equal = await page.evaluate(() => document.body.innerText)
+  const noFigure = !/24 h/.test(equal)
+  const disabled = await page
+    .getByRole('button', { name: /^WRITE IT DOWN$/ })
+    .last()
+    .isDisabled()
+    .catch(() => false)
+  noFigure
+    ? ok('W8 equal clocks print no duration')
+    : bad('W8 equal clocks print no duration', 'a 24 h night is on screen')
+  disabled
+    ? ok('W8 …and cannot be written down')
+    : bad('W8 …and cannot be written down', 'save is live')
 }
 
 /* --------------------------------------------------- pencil → confirmation */
@@ -340,6 +364,51 @@ async function pencil(page) {
   after.hatched === false
     ? ok('P5 …and it stops drawing hatched')
     : bad('P5 …and it stops drawing hatched', `hatch=${after.hatched}`)
+}
+
+/* ------------------------------------------------ closed during a rehearsal */
+
+/**
+ * A night is half calendar block and half record. Writing one while a what-if
+ * is open would put the hours in the DRAFT and the rating in the real store,
+ * so discarding the rehearsal would strand a rating with no night under it.
+ * Every door has to be shut, not just the obvious one in the nav row.
+ */
+async function rehearsal(page) {
+  await page.getByRole('button', { name: /WHAT-IF/i }).first().click()
+  await page.waitForTimeout(800)
+
+  const navGone = (await page.getByRole('button', { name: /^NIGHT$/ }).count()) === 0
+  navGone
+    ? ok('R1 the standing door is shut mid-rehearsal')
+    : bad('R1 the standing door is shut mid-rehearsal', 'NIGHT still in the nav row')
+
+  const body = await page.evaluate(() => document.body.innerText)
+  const offerGone = !/not written down|Was that how it went/i.test(body)
+  offerGone
+    ? ok('R2 the morning offer is silent mid-rehearsal')
+    : bad('R2 the morning offer is silent mid-rehearsal', 'still asking over a draft')
+
+  const blk = page.locator('[data-event-block]', { hasText: 'Sleep' }).first()
+  if ((await blk.count()) === 0) return bad('R3 a sleep block to press', 'none on the week')
+  await blk.click({ position: { x: 40, y: 20 } })
+  await page.waitForTimeout(500)
+  const doors = await page.getByRole('button', { name: /THE NIGHT|CONFIRM IT/ }).count()
+  doors === 0
+    ? ok("R3 a sleep block's own door is shut too")
+    : bad("R3 a sleep block's own door is shut too", `${doors} still open`)
+
+  // the mailbox backstop: even a door that got past the UI must not open it
+  await page.evaluate(() => {
+    const d = new Date()
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    window.__manorUi?.getState?.().requestNight?.(k)
+  })
+  await page.waitForTimeout(500)
+  const sheetShut = await page.evaluate(() => !/THE MORNING OF/i.test(document.body.innerText))
+  sheetShut
+    ? ok('R4 …and the mailbox refuses to open the sheet over a draft')
+    : bad('R4 …and the mailbox refuses to open the sheet over a draft', 'sheet opened')
 }
 
 /* ---------------------------------------------- the coupling actually bites */
@@ -476,6 +545,10 @@ try {
   const c = await fresh(browser)
   await pencil(c.page)
   await c.ctx.close()
+
+  const r = await fresh(browser)
+  await rehearsal(r.page)
+  await r.ctx.close()
 
   const d = await fresh(browser)
   await coupling(d.page)

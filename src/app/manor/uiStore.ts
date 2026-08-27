@@ -30,3 +30,9 @@ export const useManorUi = create<ManorUi>()((set) => ({
   requestNight: (dayKey) => set({ nightRequest: dayKey }),
   clearNightRequest: () => set({ nightRequest: null }),
 }))
+
+if (import.meta.env.DEV) {
+  // the night harness posts to this mailbox directly, to prove the Manor
+  // refuses it while a rehearsal is open even when no button offers to
+  ;(window as unknown as Record<string, unknown>).__manorUi = useManorUi
+}

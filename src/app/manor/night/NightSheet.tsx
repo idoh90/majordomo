@@ -115,6 +115,13 @@ export function NightSheet({
   const crosses = win.start.getDate() !== win.end.getDate()
   const clashes = nightClashes(events, win.start, win.end, existing?.eventId)
   const tooLong = hours > 18
+  /* Two identical clocks are not a night, they are an unfinished thought.
+     The bedtime's DAY is derived from the pair (write.ts), so equal times
+     resolve to "the day before" and produce a twenty-four-hour night — which
+     is saveable in one press and occupies the whole day on the week. Refuse
+     it and say why, rather than writing down a nonsense record because the
+     arithmetic happened to have an answer. */
+  const impossible = bedHHMM === wakeHHMM
 
   const bump = (set: (f: (v: number) => number) => void, delta: number) => {
     set((v) => wrap(v + delta))
@@ -132,6 +139,7 @@ export function NightSheet({
       touched
 
   const save = () => {
+    if (impossible) return
     writeNight({ morning, bedHHMM, wakeHHMM, rest, awakeMin, existing })
     // a submit handler, never a store action: the heal passes and the demo
     // fixtures drive the same store and must not read as somebody sleeping
@@ -237,13 +245,23 @@ export function NightSheet({
           <span className="text-[12.5px] text-ink-dim [font-variant-numeric:tabular-nums]">
             {hhmm(bedHHMM)} → {hhmm(wakeHHMM)}
           </span>
-          <span className="stat-num text-[19px] leading-none text-ink">{fmtHM(netHours)}</span>
-          <span className="text-[11px] text-ink-dim">
-            {V.sheet.slept({ crossesMidnight: crosses, inBedH: hours, awakeMin })}
+          <span className="stat-num text-[19px] leading-none text-ink">
+            {impossible ? '—' : fmtHM(netHours)}
           </span>
+          {!impossible && (
+            <span className="text-[11px] text-ink-dim">
+              {V.sheet.slept({ crossesMidnight: crosses, inBedH: hours, awakeMin })}
+            </span>
+          )}
         </div>
-        {tooLong && (
-          <div className="mt-1.5 text-[11px] italic text-ink-dim">{V.sheet.tooLong}</div>
+        {impossible ? (
+          <div className="mt-1.5 text-[11px] italic" style={{ color: 'var(--color-danger)' }}>
+            {V.sheet.impossible}
+          </div>
+        ) : (
+          tooLong && (
+            <div className="mt-1.5 text-[11px] italic text-ink-dim">{V.sheet.tooLong}</div>
+          )
         )}
         {clashes && (
           <div className="mt-1.5 text-[11px] italic text-ink-dim">{V.sheet.occupied}</div>
@@ -327,7 +345,8 @@ export function NightSheet({
         <button
           type="button"
           onClick={save}
-          className="btn-cta mt-4 h-12 w-full font-display text-[13.5px] font-semibold tracking-[0.18em]"
+          disabled={impossible}
+          className="btn-cta mt-4 h-12 w-full font-display text-[13.5px] font-semibold tracking-[0.18em] disabled:cursor-not-allowed disabled:opacity-40"
           style={{
             background: 'var(--color-w-sleep)',
             color: 'var(--color-bg)',

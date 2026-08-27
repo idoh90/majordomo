@@ -66,10 +66,15 @@ export function ManorScreen() {
   const nightRequest = useManorUi((s) => s.nightRequest)
   useEffect(() => {
     if (!nightRequest) return
-    const [y, m, d] = nightRequest.split('-').map(Number)
-    if (y && m && d) setNightDay(new Date(y, m - 1, d))
+    // never mid-rehearsal: the doors are already hidden, and this is the
+    // backstop that keeps a fourth one from ever opening the sheet over a
+    // draft (see EventPopover for what writing one there would strand)
+    if (!sandbox) {
+      const [y, m, d] = nightRequest.split('-').map(Number)
+      if (y && m && d) setNightDay(new Date(y, m - 1, d))
+    }
     useManorUi.getState().clearNightRequest()
-  }, [nightRequest])
+  }, [nightRequest, sandbox])
 
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -329,7 +334,7 @@ export function ManorScreen() {
           is mounted here beside theirs */}
       <NightUpkeep />
 
-      {nightDay && (
+      {nightDay && !sandbox && (
         <NightSheet open initialDay={nightDay} onClose={() => setNightDay(null)} />
       )}
 

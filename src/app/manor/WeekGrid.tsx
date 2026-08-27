@@ -979,6 +979,7 @@ export function WeekGrid({
             {popover && (
               <EventPopover
                 popover={popover}
+                sandbox={sandbox}
                 onClose={() => setPopover(null)}
                 onDelete={() => removeEvent(popover.event.id)}
                 onEdit={() => {
@@ -1044,6 +1045,7 @@ export function WeekGrid({
           <MobileEventSheet
             open={popover !== null}
             event={popover?.event ?? null}
+            sandbox={sandbox}
             hotNames={popover ? (strain?.[popover.col]?.hot.map((h) => h.label) ?? []) : []}
             near={
               popover && warnableBlock(popover.event)
@@ -1669,12 +1671,15 @@ function DragGhost({ drag, columns }: { drag: DragState; columns: ColumnWindow[]
 
 function EventPopover({
   popover,
+  sandbox,
   onClose,
   onDelete,
   onEdit,
   style,
 }: {
   popover: Popover
+  /** a what-if is open — see the night door below */
+  sandbox: boolean
   onClose: () => void
   onDelete: () => void
   onEdit: () => void
@@ -1740,7 +1745,13 @@ function EventPopover({
           beside them), and a pencilled block needs confirming rather than
           correcting. The generic Edit stays available underneath for anyone
           who only wants to drag the hours. */}
-      {!isAbroad(e) && e.kind === 'sleep' && (
+      {/* Closed while a rehearsal is open, on the bench timer's precedent. A
+          night is half calendar block and half record: writing one mid-what-if
+          would put the hours in the DRAFT and the rating in the real store, so
+          discarding the rehearsal would strand a rating with no night under
+          it. Nothing else about the block changes — it still drags, still
+          edits, still shows its hours. */}
+      {!isAbroad(e) && !sandbox && e.kind === 'sleep' && (
         <button
           type="button"
           onClick={() => useManorUi.getState().requestNight(localDayKey(en))}
