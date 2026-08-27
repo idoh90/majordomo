@@ -159,7 +159,10 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
 - **`vercel.json` rationale** (the schema rejects `comment` keys, so it lives here):
   hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
   cached** or the app can't learn it's stale; frame/sniff/referrer headers on
-  everything. The pre-landing `X-Robots-Tag: noindex` is GONE — the site is a
+  everything; `functions` pins each function's ceiling (bell 60 s, google 30 s)
+  so a hung invocation is killed on this project's terms rather than sitting on
+  the platform's 300 s default — the in-file `export const maxDuration` says the
+  same thing, deliberately twice. The pre-landing `X-Robots-Tag: noindex` is GONE — the site is a
   public product now, `index.html` says `index, follow`, and `public/robots.txt`
   + `public/sitemap.xml` (which lists `/`, `/privacy`, `/terms`) agree.
 - **The CSP is there for the supply chain, not for injection.** There is no
@@ -205,6 +208,29 @@ Everything else in that document (chat UI, context pack, read tools, write tools
 the sandbox bridge, the concierge, tiers and trials) is **not built**; do not
 describe it as existing.
 
+- **Every handler here is a WEB handler behind a Node bridge, and that is not a
+  style choice.** Vercel's Node runtime accepts exactly two shapes: a default
+  export called with Node's `(req, res)` pair, or NAMED per-method exports
+  (`export function GET(request: Request)`) written against the web standard. A
+  default export that takes a `Request` and returns a `Response` is neither — the
+  runtime calls it with `(req, res)` regardless, discards what it hands back, and
+  **nothing is ever written to the socket**. The caller waits with zero bytes
+  until the platform kills the invocation. That is what took both endpoints down
+  in Aug 2026: every request to `/api/bell` and `/api/google`, a `HEAD` that did
+  no work included, hung for 300 s and answered 504, and no Google account could
+  ever be connected. So both files keep their `Request → Response` bodies as
+  private functions and default-export `nodeHandler(fn, { deadlineMs })` from
+  **`api/_node.ts`** — underscore-prefixed, so Vercel bundles it and never routes
+  it. The bridge is also where the DEADLINE lives: a handler that has not
+  produced a response in 20 s gets a 504 written for it, because a hang is the
+  one failure a caller cannot tell from a slow success. `scripts/bell-serve.mjs`
+  now calls that same default export the way the platform does, so the local
+  runtime exercises the conversion instead of re-implementing it.
+- **A `HEAD` is answered 204 first, before everything.** Before the kill switch,
+  before auth, before any upstream. A health probe must never start a consent
+  walk, ring the model, cost a household a slot, or become an oracle for whether
+  a door is armed. Every wait inside either file is bounded well under 15 s
+  (6 s registry, 8 s Google) so the whole walk finishes inside that deadline.
 - **`api/` is the only place in this project that holds a secret**, and the only
   reason it exists. Server env, Vercel project settings, never in git, never in the
   bundle: `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `BELL_ENABLED`.
