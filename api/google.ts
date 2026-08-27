@@ -18,6 +18,16 @@
  *   POST {action:'calendar'}    → remember the app-created calendar's id
  *   POST {action:'disconnect'}  → revoke at Google, forget the row
  *
+ * The refresh token is never at rest as readable text. It lives in Supabase
+ * Vault; `gcal_accounts` keeps a uuid pointing at it and nothing more, so a
+ * database dump carries a pointer and a blob no key in the database can open.
+ * Three service_role-only functions are the whole of this file's access to it —
+ * `gcal_connect` (store), `gcal_rotate_token` (replace), `gcal_refresh_token`
+ * (read, and the only path to plaintext anywhere in this system). The reasoning
+ * is written out in `supabase/migrations/0007_gcal_vault.sql`; the short version
+ * is that this table's zero-policy posture protects the row, not the bytes, and
+ * a credential that outlives its permissions belongs behind a key.
+ *
  * Errors are a CLOSED machine vocabulary (`{ error: code }`) — the words live
  * in `voice.calendars.errors`, client-side, where every string in this app
  * lives. The server never phrases anything.
@@ -226,17 +236,43 @@ const emailFromIdToken = (idToken: unknown): string | null => {
   }
 }
 
-/** the service_role client — gcal_accounts' only door */
-const table = () =>
+/** the service_role client — gcal_accounts and the vault functions over it are
+ *  both service_role-only doors, and this key is the only thing that opens
+ *  either */
+const db = () =>
   createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: withTimeout(REGISTRY_TIMEOUT_MS) },
-  }).from('gcal_accounts')
+  })
 
+const table = () => db().from('gcal_accounts')
+
+/**
+ * The household's refresh token, decrypted out of the vault — the ONE call in
+ * this file that produces one, and the reason it is a function rather than an
+ * inlined `.rpc()` twice over.
+ *
+ * Empty means unusable and says nothing about why: no connection, or a row
+ * pointing at a secret that is no longer there. Both have the same remedy and
+ * the caller gives both the same sentence. A transport failure is `null`, which
+ * is a different thing entirely — the vault being unreachable must never read
+ * as a lapsed grant, or a sleeping database would send every household back
+ * through the consent screen.
+ */
+const heldToken = async (userId: string): Promise<string | null> => {
+  const { data, error } = await db().rpc('gcal_refresh_token', { p_user: userId })
+  // `error` covers the sleeping project and the half-pasted migration alike;
+  // the second is the one that matters. A vault that cannot be reached has to
+  // STOP the request — never fall through to a path that carries on without a
+  // credential, which is 0005's rule about the meter, wearing a different hat.
+  if (error) return null
+  return typeof data === 'string' ? data : ''
+}
+
+/** what the table itself still holds: who is connected, and to which calendar */
 type Row = {
   user_id: string
   google_email: string | null
-  refresh_token: string
   calendar_id: string | null
 }
 
@@ -266,16 +302,15 @@ async function callback(req: Request): Promise<Response> {
   // means the exchange itself went sideways, and a retry re-issues it
   if (!grant?.access_token || !grant.refresh_token) return bounce(state.o, 'error')
 
-  const { error } = await table().upsert(
-    {
-      user_id: state.u,
-      google_email: emailFromIdToken(grant.id_token),
-      refresh_token: grant.refresh_token,
-      // calendar_id deliberately absent: a reconnect must not forget the
-      // calendar the account already has (upsert only touches named columns)
-    },
-    { onConflict: 'user_id' },
-  )
+  // One call, because the secret and the row that points at it must not be able
+  // to land separately: `gcal_connect` writes the vault secret and upserts the
+  // row together, and leaves `calendar_id` alone — a reconnect must not forget
+  // the calendar the account already has.
+  const { error } = await db().rpc('gcal_connect', {
+    p_user: state.u,
+    p_token: grant.refresh_token,
+    p_email: emailFromIdToken(grant.id_token),
+  })
   // the refresh token is lost with the row unwritten — acceptable: reconnect
   // walks the same door and Google mints another
   if (error) return bounce(state.o, 'error')
@@ -368,7 +403,7 @@ export default async function handler(req: Request): Promise<Response> {
   /* the remaining actions all read the household's row first */
 
   const { data, error } = await table()
-    .select('user_id, google_email, refresh_token, calendar_id')
+    .select('user_id, google_email, calendar_id')
     .eq('user_id', userId)
     .maybeSingle<Row>()
   if (error) return fail(503, 'unreachable')
@@ -388,9 +423,16 @@ export default async function handler(req: Request): Promise<Response> {
   /* ------------------------------------------------------------- token */
 
   if (action === 'token') {
+    const held = await heldToken(userId)
+    if (held === null) return fail(503, 'unreachable')
+    // the row says connected and the vault has nothing to refresh from: a
+    // connection that cannot be repaired from here, and the consent door is
+    // the remedy — the same sentence a dead grant gets, below
+    if (held === '') return fail(401, 'reconnect')
+
     const grant = await googleToken({
       grant_type: 'refresh_token',
-      refresh_token: data.refresh_token,
+      refresh_token: held,
       client_id: env('GOOGLE_CLIENT_ID'),
       client_secret: env('GOOGLE_CLIENT_SECRET'),
     })
@@ -402,9 +444,11 @@ export default async function handler(req: Request): Promise<Response> {
       // reconnect state rather than its retry state
       return grant.error === 'invalid_grant' ? fail(401, 'reconnect') : fail(502, 'google')
     }
-    // Google occasionally rotates the refresh token inside a grant — keep it
-    if (grant.refresh_token && grant.refresh_token !== data.refresh_token) {
-      await table().update({ refresh_token: grant.refresh_token }).eq('user_id', userId)
+    // Google occasionally rotates the refresh token inside a grant — keep it.
+    // Back into the vault, over the same secret: the row's pointer does not
+    // move, so a device mid-cycle cannot read a stale one.
+    if (grant.refresh_token && grant.refresh_token !== held) {
+      await db().rpc('gcal_rotate_token', { p_user: userId, p_token: grant.refresh_token })
     }
     return ok({
       accessToken: grant.access_token,
@@ -441,16 +485,23 @@ export default async function handler(req: Request): Promise<Response> {
 
   // revocation is best-effort: Google being down must not leave the row —
   // the deletion is what disconnect MEANS, revocation is courtesy to the
-  // user's Google security page
-  try {
-    await withTimeout(GOOGLE_TIMEOUT_MS)('https://oauth2.googleapis.com/revoke', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ token: data.refresh_token }).toString(),
-    })
-  } catch {
-    /* the row deletion below is the source of truth */
+  // user's Google security page. A vault that will not answer is the same
+  // class of problem: nothing to revoke WITH is not a reason to refuse to
+  // disconnect, so the deletion goes ahead either way.
+  const parting = await heldToken(userId)
+  if (parting) {
+    try {
+      await withTimeout(GOOGLE_TIMEOUT_MS)('https://oauth2.googleapis.com/revoke', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token: parting }).toString(),
+      })
+    } catch {
+      /* the row deletion below is the source of truth */
+    }
   }
+  // the delete trigger takes the vault secret out with the row, by whatever
+  // route the row leaves — this one, or a cascade from a deleted account
   const { error: dropError } = await table().delete().eq('user_id', userId)
   if (dropError) return fail(503, 'unreachable')
   return ok({ ok: true })

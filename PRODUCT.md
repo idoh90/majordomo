@@ -121,9 +121,11 @@ these remain undecided and must not be presented as settled:
 **Built, awaiting arming:** two-way Google Calendar sync (settings → CALENDARS) —
 the estate's bookings go to an app-created "Majordomo" calendar in the user's
 Google account, Google's own events arrive as read-only blocks that hold their
-hours. The code ships dormant: it needs the Google Cloud OAuth client, the
-`gcal_accounts` migration and `GCAL_ENABLED=1` before the door opens (playbook
-§3.3.1's verification warning applies from the moment the consent screen exists).
+hours. The code ships dormant: it needs the Google Cloud OAuth client, both
+`gcal_accounts` migrations (`0006`, then `0007` — which moves the refresh token
+into Supabase Vault and needs that extension enabled) and `GCAL_ENABLED=1`
+before the door opens (playbook §3.3.1's verification warning applies from the
+moment the consent screen exists).
 
 **Not built, and not to be described as existing:** onboarding or first-run flow ·
 payments or any paid tier · push notifications and the
