@@ -9,6 +9,10 @@
     "api/bell.ts": { "maxDuration": 60 },
     "api/google.ts": { "maxDuration": 30 }
   },
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "status": 404, "dest": "/404.html" }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",

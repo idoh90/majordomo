@@ -421,4 +421,12 @@ export const voice = {
       },
     ],
   },
+
+  notFound: {
+    /* Dry butler register. No drama, no apology. The user made a wrong turn;
+       the app states the fact and shows the way back. */
+    title: 'Page not found',
+    body: 'The route you requested does not exist, sir.',
+    cta: 'Back to the estate',
+  },
 } as const

@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 /* ---------------------------------------------------------------------------
-   Prerender the landing's two routes into dist/*.html.
+   Prerender the landing's routes into dist/*.html.
 
    Runs after the client build. It compiles src/landing/entry-server.tsx for
    node, renders each route to a string, and splices it into the
@@ -82,7 +82,7 @@ const preloads = WANTED.map((re) => {
   return `<link rel="preload" href="/assets/${hit}" as="font" type="font/woff2" crossorigin>`
 }).join('')
 
-for (const route of ['index', 'privacy', 'terms']) {
+for (const route of ['index', 'privacy', 'terms', '404']) {
   const file = join(dist, `${route}.html`)
   let html = await readFile(file, 'utf8')
   html = html.replace('</head>', `${preloads}</head>`)
