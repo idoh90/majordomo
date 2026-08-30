@@ -115,10 +115,15 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       rollupOptions: {
-        /* Three documents: the landing (which doubles as the app shell once
-           the boot gate speaks) and its two legal pages. scripts/prerender.mjs
-           fills each with markup after this build. */
-        input: { index: 'index.html', privacy: 'privacy.html', terms: 'terms.html' },
+        /* Four documents: the landing (which doubles as the app shell once
+           the boot gate speaks), its two legal pages, and the 404.
+           scripts/prerender.mjs fills each with markup after this build. */
+        input: {
+          index: 'index.html',
+          privacy: 'privacy.html',
+          terms: 'terms.html',
+          404: '404.html',
+        },
       },
     },
     plugins: [
@@ -186,7 +191,9 @@ export default defineConfig(({ mode }) => {
           // entries an installed user tapping Terms or Privacy got the app
           // shell back from the precache instead of the page the law and the
           // consent door both point at.
-          navigateFallbackDenylist: [/^\/api\//, /^\/privacy$/, /^\/terms$/],
+          // The 404 is also excluded: it is not the app, it is its own document
+          // shown when a route genuinely does not exist.
+          navigateFallbackDenylist: [/^\/api\//, /^\/privacy$/, /^\/terms$/, /^\/404$/],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           // Quotes are a live-network luxury: serve the cache when it answers,

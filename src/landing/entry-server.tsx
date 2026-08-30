@@ -2,13 +2,14 @@ import { renderToString } from 'react-dom/server'
 import LandingPage from './LandingPage'
 import PrivacyPage from './PrivacyPage'
 import TermsPage from './TermsPage'
+import NotFoundPage from './NotFoundPage'
 import { voice } from './voice'
 
 /* ---------------------------------------------------------------------------
    Prerender.
 
    The page's whole pitch is calm competence on a tired person's phone, so the
-   headline must not wait on a JavaScript bundle to exist. This renders both
+   headline must not wait on a JavaScript bundle to exist. This renders all
    routes to static HTML at build time; the client then hydrates the same tree,
    which is why every component here is deterministic on first render:
 
@@ -19,9 +20,17 @@ import { voice } from './voice'
    Break any of those and hydration mismatches; there is no server at runtime
    to paper over it.
 --------------------------------------------------------------------------- */
-export function render(route: 'index' | 'privacy' | 'terms'): string {
+export function render(route: 'index' | 'privacy' | 'terms' | '404'): string {
   return renderToString(
-    route === 'privacy' ? <PrivacyPage /> : route === 'terms' ? <TermsPage /> : <LandingPage />,
+    route === 'privacy' ? (
+      <PrivacyPage />
+    ) : route === 'terms' ? (
+      <TermsPage />
+    ) : route === '404' ? (
+      <NotFoundPage />
+    ) : (
+      <LandingPage />
+    ),
   )
 }
 
@@ -32,4 +41,5 @@ export const meta = {
   index: { title: voice.meta.title, description: voice.meta.description },
   privacy: { title: voice.privacy.metaTitle, description: voice.privacy.metaDescription },
   terms: { title: voice.terms.metaTitle, description: voice.terms.metaDescription },
+  '404': { title: 'Page Not Found — Majordomo', description: 'The page you requested does not exist.' },
 }

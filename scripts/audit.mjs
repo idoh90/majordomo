@@ -36,7 +36,7 @@ const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Applic
 const CHROME_FLAGS = process.env.AUDIT_CHROME_FLAGS ?? '--headless=new --disable-gpu'
 const BASE = process.env.AUDIT_BASE ?? 'http://localhost:4173'
 const TMP = join(root, '.shots')
-const ROUTES = ['/', '/privacy', '/terms']
+const ROUTES = ['/', '/privacy', '/terms', '/404']
 
 let failures = 0
 const fail = (m) => {
