@@ -39,7 +39,6 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
-import { nodeHandler } from './_node'
 
 /* -------------------------------------------------------------------------- */
 /* environment                                                                */
@@ -478,10 +477,26 @@ async function serve(req: Request): Promise<Response> {
 }
 
 /**
- * What the platform actually calls.
+ * What the platform actually calls - using named exports to let Vercel handle
+ * the conversion from Node's IncomingMessage to Fetch API Request.
  *
- * 20 seconds is a net, not a budget: every wait inside is bounded already, and
- * the longest possible walk through them stays under it. Past that the caller
- * gets a 504 from this house rather than silence until `maxDuration`.
+ * This bypasses the nodeHandler bridge which was causing FUNCTION_INVOCATION_FAILED
+ * errors. Vercel's runtime natively supports per-method exports that take Request
+ * and return Response.
  */
-export default nodeHandler(serve, { deadlineMs: 20_000 })
+export async function GET(req: Request): Promise<Response> {
+  return serve(req)
+}
+
+export async function POST(req: Request): Promise<Response> {
+  return serve(req)
+}
+
+export async function HEAD(req: Request): Promise<Response> {
+  return serve(req)
+}
+
+/** Kept for local testing via bell-serve.mjs - DO NOT REMOVE */
+export default async function handler(req: Request): Promise<Response> {
+  return serve(req)
+}
