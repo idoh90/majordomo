@@ -38,8 +38,13 @@ export type WebHandler = (req: Request) => Promise<Response>
  * copied onto a new one. `content-length` and `content-encoding` go too: the body
  * below may have been parsed and re-serialised by the platform, so the numbers
  * that arrived no longer describe the bytes we hand on. `Request` recomputes both.
+ * 
+ * Forbidden headers per the Fetch spec that would cause `new Request()` to throw:
+ * `host`, `connection`, `keep-alive`, `transfer-encoding`, `upgrade`, `te`, 
+ * `trailer`, and any header starting with `proxy-` or `sec-`.
  */
 const DROP = new Set([
+  'host',
   'connection',
   'keep-alive',
   'transfer-encoding',
@@ -59,6 +64,8 @@ const headersOf = (req: IncomingMessage): Headers => {
   const headers = new Headers()
   for (const [name, value] of Object.entries(req.headers)) {
     if (value === undefined || DROP.has(name)) continue
+    // Also drop any header starting with 'sec-' or 'proxy-' (forbidden by Fetch)
+    if (name.startsWith('sec-') || name.startsWith('proxy-')) continue
     for (const one of Array.isArray(value) ? value : [value]) headers.append(name, one)
   }
   return headers
@@ -205,6 +212,16 @@ const LATE = Symbol('late')
 export const nodeHandler =
   (handler: WebHandler, { deadlineMs }: { deadlineMs: number }) =>
   async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    // Defensive: ensure we have valid request/response objects
+    if (!req || !res) {
+      console.error('[api] Invalid req/res objects:', { req: !!req, res: !!res })
+      if (res?.writeHead && !res.headersSent) {
+        res.writeHead(500, { 'content-type': 'text/plain' })
+        res.end('Invalid request/response objects')
+      }
+      return
+    }
+    
     const head = req.method === 'HEAD'
     let timer: ReturnType<typeof setTimeout> | undefined
 
