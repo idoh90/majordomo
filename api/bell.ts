@@ -50,7 +50,6 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
-import { nodeHandler } from './_node'
 
 /* -------------------------------------------------------------------------- */
 /* environment                                                                */
@@ -688,12 +687,22 @@ async function ring(req: Request): Promise<Response> {
 }
 
 /**
- * What the platform actually calls.
+ * What the platform actually calls - using named exports to let Vercel handle
+ * the conversion from Node's IncomingMessage to Fetch API Request.
  *
- * 20 seconds is the wait for the reply's HEADERS, not for the reply: the stream
- * is handed over the moment its status is known and may then run to
- * `maxDuration`. It sits above the two registry waits that precede it (6s each)
- * and well below the 60 above, so a stalled dependency is refused as a fact
- * instead of being killed as a timeout.
+ * This bypasses the nodeHandler bridge which was causing FUNCTION_INVOCATION_FAILED
+ * errors. Vercel's runtime natively supports per-method exports that take Request
+ * and return Response.
  */
-export default nodeHandler(ring, { deadlineMs: 20_000 })
+export async function POST(req: Request): Promise<Response> {
+  return ring(req)
+}
+
+export async function HEAD(req: Request): Promise<Response> {
+  return ring(req)
+}
+
+/** Kept for local testing via bell-serve.mjs and bell-probe.mjs - DO NOT REMOVE */
+export default async function handler(req: Request): Promise<Response> {
+  return ring(req)
+}
