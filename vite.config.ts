@@ -195,20 +195,47 @@ export default defineConfig(({ mode }) => {
           // every user's install for nobody's benefit. The landing's Wing
           // screenshots (shots/) are the same story at ten times the size.
           globIgnores: ['og.png', 'shots/**'],
-          // any unknown path falls back to the shell — there is no router, but a
-          // stray deep link must never dead-end offline
+          // The app is served at "/" and nowhere else, so this exists for the
+          // ROOT WITH A QUERY: "/?demo", "/?landing", "/?console=capital". A bare
+          // "/" is already answered by the precache route (workbox's directoryIndex
+          // resolves it to index.html), but a query string is not ignored when
+          // matching a cache key, so without this a resident opening "/?landing"
+          // offline would get nothing.
           navigateFallback: 'index.html',
-          // …except the server's own routes. `api/` is a real backend on the same
-          // origin, and an offline shell that answers for it would turn "the Bell
-          // is unreachable" into "the Bell replied with an HTML page" — a failure
-          // the caller cannot read and cannot retry sensibly. Nothing under /api
-          // is a navigation today, so this changes nothing yet; it is here so the
-          // chat UI does not discover it the hard way.
-          // The legal pages are real documents of their own: without these two
-          // entries an installed user tapping Terms or Privacy got the app
-          // shell back from the precache instead of the page the law and the
-          // consent door both point at.
-          navigateFallbackDenylist: [/^\/api\//, /^\/privacy$/, /^\/terms$/, /^\/404$/],
+          // Everything the fallback must NOT answer for. Workbox tests these
+          // against `url.pathname + url.search` (see workbox-routing's
+          // NavigationRoute._match), which is what lets the last rule separate a
+          // real path from a query on the root.
+          //
+          // The first four are specific and stay specific: `api/` is a real
+          // backend on the same origin, and an offline shell answering for it
+          // would turn "the Bell is unreachable" into "the Bell replied with an
+          // HTML page" — a failure the caller cannot read and cannot retry
+          // sensibly. The legal pages are real documents the law and the consent
+          // door both point at; without their entries an installed user tapping
+          // Terms got the app shell back instead. They are redundant under the
+          // last rule TODAY, and kept anyway so that narrowing the last rule
+          // cannot silently un-protect them.
+          //
+          // The last rule is the general one: any path that is not "/" is not
+          // this app's address. It used to be absent, and the cost was that the
+          // 404 page could never be seen by anyone who had the app installed —
+          // the shell answered first, at every wrong address, so a resident
+          // typing a typo got their own calendar at a URL that does not exist.
+          // The old comment here reasoned that "a stray deep link must never
+          // dead-end offline"; the app has no router and publishes no deep
+          // links, so there is no such link to strand. What it does cost is
+          // real and small: a wrong address while OFFLINE now gets the
+          // browser's own error page rather than 404.html, because the SW is
+          // no longer the one answering and the precached copy is keyed to
+          // "/404". That trade was made deliberately — see CLAUDE.md.
+          navigateFallbackDenylist: [
+            /^\/api\//,
+            /^\/privacy$/,
+            /^\/terms$/,
+            /^\/404$/,
+            /^\/[^?]/,
+          ],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           // Quotes are a live-network luxury: serve the cache when it answers,

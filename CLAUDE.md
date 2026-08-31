@@ -315,10 +315,22 @@ one **consent door**, and the acceptance stamp that gates telemetry.
   plus `public/sitemap.xml` and the landing footer. The html must carry
   `__SITE_ORIGIN__` in its canonical or the build throws (the lone exception is
   `404.html`, below).
-- **The SW must not answer for the legal pages**: `/privacy` and `/terms` are in
-  `navigateFallbackDenylist` (vite.config.ts) so an installed app's navigation gets
-  the document, not the precached shell. A new legal route needs the same entry.
-  `/404` is denylisted for the same reason.
+- **The SW answers for `/` AND NOTHING ELSE.** `navigateFallbackDenylist`
+  (vite.config.ts) ends in `/^\/[^?]/` — any path that is not the root. Workbox
+  tests these against `pathname + search`, which is exactly what lets that one rule
+  keep the fallback for `/?demo` / `/?landing` (the root with a query, and the only
+  reason `navigateFallback` still exists — a bare `/` is already answered by the
+  precache route via workbox's `directoryIndex`) while releasing every real path to
+  the network. `/api/`, `/privacy`, `/terms` and `/404` keep their own specific
+  entries, redundant under that rule today, so that narrowing it cannot silently
+  un-protect them. **The cost is stated and accepted**: a wrong address while
+  OFFLINE now gets the browser's error page rather than `404.html`. The app itself
+  still boots offline at `/` and at any `/?query` — verified with a live registered
+  worker, both online and with the network killed. The rule this replaced fell back
+  to the shell for everything, on the reasoning that "a stray deep link must never
+  dead-end offline"; the app has no router and publishes no deep links, so there was
+  no such link to strand — and the real cost was that the 404 page could never be
+  seen by anyone who had the app installed.
 - **`404.html` is the wrong address**, and it is served by CONVENTION, not by config:
   Vercel hands `dist/404.html` to any path a static deployment does not have, with a
   real 404 status. There is no rewrite and there must not be one — a rewrite answers
@@ -339,10 +351,10 @@ one **consent door**, and the acceptance stamp that gates telemetry.
   the build's `base: './'` resolves assets against the REQUESTED path, so without it
   the page would ask for `/a/b/assets/…` at `/a/b/c` and paint unstyled. Anything
   added to its head must stay below that tag.
-- **A resident with the service worker installed does not see it**, and that is the
-  older decision winning on purpose: `navigateFallback` hands any unknown navigation
-  the precached shell so a stray deep link never dead-ends offline. The 404 page is
-  for strangers, crawlers and anyone without the app installed.
+  **Everyone sees it, residents included** — but only because the SW rule above was
+  changed to let them. That is worth knowing before touching either: shipping this
+  page WITHOUT that rule ships a page the owner can never see on his own machine,
+  which is exactly how it shipped first and exactly how it was caught.
 - **The legal copy carries honesty invariants** (stated in a comment block above it
   in `src/landing/voice.ts`): the public pages stay tracker-free (Vercel aggregate
   counts only); app analytics are named actions only; deletion is a mailbox
