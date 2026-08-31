@@ -27,6 +27,34 @@ export interface DraftExercise {
 
 export const EMPTY_SET: DraftSet = { weightKg: '', reps: '' }
 
+/** the id prefix that marks an exercise as the user's own. It cannot collide
+ *  with a catalogue id (those are upstream slugs), and it is what tells a row
+ *  the user wrote from one that shipped with the app. */
+export const OWN_EXERCISE_PREFIX = 'cx-'
+
+export const isOwnExercise = (id: string): boolean => id.startsWith(OWN_EXERCISE_PREFIX)
+
+/**
+ * The fold a catalogue search matches through: lower case, and every run of
+ * anything that is not a letter or a digit becomes one space.
+ *
+ * A plain substring match made a hyphen a wall — 'chin up' found nothing while
+ * 'Chin-Up' sat in the catalogue — and the only thing the picker then offered
+ * was to write the typo in as your own exercise. Folding the punctuation out of
+ * both sides means the way a person types a lift and the way the catalogue
+ * spells it no longer have to agree.
+ */
+export const searchFold = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+
+/** the words a query is asking for; every one of them has to appear somewhere
+ *  in a row's fold, so word ORDER never decides whether a lift is findable */
+export const searchTerms = (query: string): string[] =>
+  searchFold(query).split(' ').filter(Boolean)
+
 /**
  * The muscles a session's exercises add up to, in the sheet's own Selection
  * shape so every surface downstream (the effort step's chips, the header's

@@ -41,6 +41,10 @@ interface EffortStepProps {
   onPerformedAt: (iso: string) => void
   workouts: Workout[]
   onSave: () => void
+  /** a refusal standing between the draft and the store — a run that states
+   *  neither a distance nor a clock has nothing to record, so Save is shut and
+   *  this prints under it. null saves as normal. */
+  saveBlocked?: string | null
   /** log-fulfills-block note ("This fulfils today's 7:15 AM block, sir.") —
    *  tappable into a picker when several blocks are in range */
   blockLink?: BlockLink | null
@@ -67,6 +71,7 @@ export function EffortStep({
   onPerformedAt,
   workouts,
   onSave,
+  saveBlocked = null,
   blockLink,
   whenInitiallyOpen,
 }: EffortStepProps) {
@@ -214,8 +219,9 @@ export function EffortStep({
       {blockLink && <BlockLinkNote {...blockLink} />}
       <button
         type="button"
+        disabled={saveBlocked !== null}
         onClick={onSave}
-        className={`btn-cta w-full py-3.5 text-lg transition active:scale-[0.99] ${blockLink ? 'mt-2.5' : 'mt-6'}`}
+        className={`btn-cta w-full py-3.5 text-lg transition active:scale-[0.99] disabled:opacity-30 ${blockLink ? 'mt-2.5' : 'mt-6'}`}
       >
         {editing
           ? 'Save Changes'
@@ -225,6 +231,9 @@ export function EffortStep({
               ? voice.grounds.sport.save
               : 'Save Workout'}
       </button>
+      {saveBlocked !== null && (
+        <p className="mt-2 text-center text-xs text-ink-faint">{saveBlocked}</p>
+      )}
     </div>
   )
 }
