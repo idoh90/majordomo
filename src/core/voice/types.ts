@@ -998,6 +998,33 @@ export interface VoicePack {
       /** detail sheet: the heading over the session's exercises */
       detailTitle: string
     }
+    /**
+     * RECASTING — the method step reached from a session that already exists.
+     * Backing out of an edit lands on the same picker a new workout opens on,
+     * and taking another door from it rewrites the record: an exercise list, a
+     * run's figures and the typed session size are each carried by exactly one
+     * method. So the step says which session it is standing in, marks the door
+     * that session already came through, and the guard names what a change
+     * would cost before it costs it.
+     */
+    recast: {
+      /** sheet title on the method step while a stored session is open — the
+       *  new-workout title there reads as a blank slate, which is the whole
+       *  reason a wipe felt like a fresh log */
+      stepTitle: string
+      /** tag on the door this session is currently logged through */
+      currentTag: string
+      /** the guard. `body` receives only what would actually be dropped —
+       *  every field null-when-absent, at least one always set. */
+      confirmTitle: string
+      confirmBody: (v: {
+        exercises: { exercises: number; sets: number } | null
+        run: { km: string | null; time: string | null } | null
+        setsTotal: number | null
+        durationMin: number | null
+      }) => string
+      confirmLabel: string
+    }
     /** weekly-goal card + its dialog */
     weekTitle: string
     goalMet: string
