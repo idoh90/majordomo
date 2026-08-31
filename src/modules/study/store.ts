@@ -30,6 +30,7 @@ interface StudyState {
   deleteSubject: (id: string) => void
 
   addTopic: (subjectId: string, title: string) => void
+  updateTopic: (id: string, patch: Partial<Omit<SyllabusTopic, 'id'>>) => void
   toggleTopic: (id: string) => void
   deleteTopic: (id: string) => void
 
@@ -124,6 +125,10 @@ export const useStudyStore = create<StudyState>()(
               order: s.topics.reduce((m, t) => Math.max(m, t.order + 1), 0),
             },
           ],
+        })),
+      updateTopic: (id, patch) =>
+        set((s) => ({
+          topics: s.topics.map((t) => (t.id === id ? { ...t, ...patch, id } : t)),
         })),
       toggleTopic: (id) =>
         set((s) => ({

@@ -1067,7 +1067,14 @@ export interface VoicePack {
     enrol: string
     mattersPending: string
     noExams: string
-    /** days until an exam (today / tomorrow / in N days) */
+    /** the quiet list under the cards: exams whose day has already gone */
+    examsSat: string
+    /**
+     * Days until an exam (today / tomorrow / in N days), and BACKWARDS for one
+     * already sat — the amend sheet's stepper can be wound into the past, and
+     * a negative reading 'today' is how a date sat months ago claimed to be
+     * this morning's.
+     */
     countdown: (days: number) => string
     hoursToward: (h: number) => string
     desk: string
@@ -1128,6 +1135,10 @@ export interface VoicePack {
       addHomework: string
       addExam: string
       addTopic: (name: string) => string
+      /** the same three sheets reopened on a record that already exists */
+      editHomework: string
+      editExam: string
+      editTopic: (name: string) => string
       bookHintPast: string
       bookHintFuture: string
       goalZeroHint: string
@@ -1139,7 +1150,12 @@ export interface VoicePack {
       ctaHw: string
       ctaExam: string
       ctaTopic: string
+      /** amending, rather than adding — one CTA for all three sheets */
+      ctaSave: string
+      remove: string
       cancel: string
+      /** replaces examHint on an amend: countFrom is NOT re-seeded by a move */
+      examEditHint: string
     }
     toast: {
       markedDone: string
@@ -1154,6 +1170,12 @@ export interface VoicePack {
       hwUndone: string
       examNoted: string
       topicAdded: string
+      hwEdited: string
+      hwRemoved: string
+      examEdited: string
+      examRemoved: string
+      topicEdited: string
+      topicRemoved: string
       archived: string
       filed: string
       nameFirst: string
@@ -1166,6 +1188,20 @@ export interface VoicePack {
     archiveTitle: string
     archiveBody: (name: string) => string
     archiveYes: string
+    /** delete confirm dialogs — each says what else goes with the record */
+    deleteHwTitle: string
+    deleteHwBody: (title: string) => string
+    deleteExamTitle: string
+    deleteExamBody: (title: string) => string
+    deleteTopicTitle: string
+    deleteTopicBody: (title: string) => string
+    deleteYes: string
+    /** accessible names for the docket rows that open their edit sheet */
+    editRow: {
+      homework: string
+      exam: string
+      topic: string
+    }
     /** menu-tile labels */
     tileUntilExam: string
     tileWeekRead: string

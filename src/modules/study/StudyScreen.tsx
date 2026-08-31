@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { addDays, atHour, localDayKey, startOfWeek } from '../../core/dates'
+import { addDays, atHour, localDayKey, startOfLocalDay, startOfWeek } from '../../core/dates'
 import { hoursOf, rangeFree } from '../../core/events/lib'
 import { useEventsStore } from '../../core/events/store'
 import { StudyBriefing } from './Briefing'
@@ -24,15 +24,31 @@ import {
 } from './lib'
 import { useStudyStore } from './store'
 import { useStudyUi } from './uiStore'
-import type { Exam, SessionMeta, Subject } from './types'
+import type { Exam, Homework, SessionMeta, Subject, SyllabusTopic } from './types'
 
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 const MAX_RINGS = 8
 const RING_C = 2 * Math.PI * 48
 
 const fdate = (d: Date) => `${WD[d.getDay()]} ${d.getDate()}`
+/** the same date with its month — for a day too far off for `fdate` to place */
+const fdatem = (d: Date) => `${fdate(d)} ${MON[d.getMonth()]}`
 const hhmm = (d: Date) =>
   `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+
+/**
+ * Which sheet is open, and on WHAT. The docket sheets do double duty: absent
+ * `editing`, they add; carrying one, they amend that record and offer to
+ * delete it. One union rather than a second `editing` state, so "open on
+ * nothing" is unrepresentable.
+ */
+type StudySheet =
+  | { kind: 'book' }
+  | { kind: 'enrol' }
+  | { kind: 'hw'; editing?: Homework }
+  | { kind: 'exam'; editing?: Exam }
+  | { kind: 'topic'; editing?: SyllabusTopic }
 
 /** The Study — subjects as progress rings, sessions planned then fulfilled. */
 export function StudyScreen() {
@@ -42,7 +58,7 @@ export function StudyScreen() {
   const weekStart = useShellStore((s) => s.weekStart)
   const now = useNow()
 
-  const [sheet, setSheet] = useState<'book' | 'enrol' | 'hw' | 'exam' | 'topic' | null>(null)
+  const [sheet, setSheet] = useState<StudySheet | null>(null)
   const [selSubjId, setSelSubjId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -59,9 +75,33 @@ export function StudyScreen() {
   const addSheetRequested = useStudyUi((s) => s.addSheetRequested)
   useEffect(() => {
     if (!addSheetRequested) return
-    setSheet('book')
+    setSheet({ kind: 'book' })
     useStudyUi.getState().clearAddSheetRequest()
   }, [addSheetRequested])
+
+  // a Manor marker chip posts the record it stands for; open it on that
+  // record's own sheet, standing on its subject. A ref whose record is gone
+  // is consumed silently — the chip is a projection and the heal pass will
+  // take it down anyway.
+  const recordRequested = useStudyUi((s) => s.recordRequested)
+  useEffect(() => {
+    if (!recordRequested) return
+    const study = useStudyStore.getState()
+    if (recordRequested.startsWith('hw:')) {
+      const hw = study.homework.find((h) => h.id === recordRequested.slice(3))
+      if (hw) {
+        setSelSubjId(hw.subjectId)
+        setSheet({ kind: 'hw', editing: hw })
+      }
+    } else if (recordRequested.startsWith('exam:')) {
+      const exam = study.exams.find((x) => x.id === recordRequested.slice(5))
+      if (exam) {
+        setSelSubjId(exam.subjectId)
+        setSheet({ kind: 'exam', editing: exam })
+      }
+    }
+    useStudyUi.getState().clearRecordRequest()
+  }, [recordRequested])
 
   // upkeep on entry: heal markers, drop meta for events deleted Manor-side.
   // Both are sandbox-guarded (reconcileMarkers internally; prune here).
@@ -83,14 +123,20 @@ export function StudyScreen() {
       <RingsPanel
         subjects={active}
         stats={stats}
-        onEnrol={() => setSheet('enrol')}
+        onEnrol={() => setSheet({ kind: 'enrol' })}
         selectedId={sel?.id ?? null}
         onSelect={setSelSubjId}
       />
 
       <SubjectLedger subjects={active} stats={stats} />
 
-      <ExamsPanel events={activeEvents} sessions={sessions} subjects={subjects} now={now} />
+      <ExamsPanel
+        events={activeEvents}
+        sessions={sessions}
+        subjects={subjects}
+        now={now}
+        onEdit={(x) => setSheet({ kind: 'exam', editing: x })}
+      />
 
       <div className="grid items-start gap-4 lg:grid-cols-[300px_1fr]">
         <Desk
@@ -99,7 +145,7 @@ export function StudyScreen() {
           sessions={sessions}
           weekWindow={[stats.weekStart, stats.weekEnd]}
           now={now}
-          onBook={() => setSheet('book')}
+          onBook={() => setSheet({ kind: 'book' })}
           butler={butler}
         />
         {sel && (
@@ -108,42 +154,52 @@ export function StudyScreen() {
             sel={sel}
             now={now}
             onPick={setSelSubjId}
-            onAddHw={() => setSheet('hw')}
-            onAddExam={() => setSheet('exam')}
-            onAddTopic={() => setSheet('topic')}
+            onAddHw={() => setSheet({ kind: 'hw' })}
+            onAddExam={() => setSheet({ kind: 'exam' })}
+            onAddTopic={() => setSheet({ kind: 'topic' })}
+            onEditHw={(h) => setSheet({ kind: 'hw', editing: h })}
+            onEditTopic={(t) => setSheet({ kind: 'topic', editing: t })}
             butler={butler}
           />
         )}
       </div>
 
       <BookSheet
-        open={sheet === 'book'}
+        open={sheet?.kind === 'book'}
         onClose={() => setSheet(null)}
         subjects={active}
         events={activeEvents}
         now={now}
         butler={butler}
       />
-      <EnrolSheet open={sheet === 'enrol'} onClose={() => setSheet(null)} butler={butler} />
+      <EnrolSheet open={sheet?.kind === 'enrol'} onClose={() => setSheet(null)} butler={butler} />
       {sel && (
         <>
           <HwSheet
-            open={sheet === 'hw'}
+            open={sheet?.kind === 'hw'}
             onClose={() => setSheet(null)}
             subjects={active}
             defaultSubj={sel.id}
+            editing={sheet?.kind === 'hw' ? sheet.editing : undefined}
             now={now}
             butler={butler}
           />
           <ExamSheet
-            open={sheet === 'exam'}
+            open={sheet?.kind === 'exam'}
             onClose={() => setSheet(null)}
             subjects={active}
             defaultSubj={sel.id}
+            editing={sheet?.kind === 'exam' ? sheet.editing : undefined}
             now={now}
             butler={butler}
           />
-          <TopicSheet open={sheet === 'topic'} onClose={() => setSheet(null)} sel={sel} butler={butler} />
+          <TopicSheet
+            open={sheet?.kind === 'topic'}
+            onClose={() => setSheet(null)}
+            sel={sel}
+            editing={sheet?.kind === 'topic' ? sheet.editing : undefined}
+            butler={butler}
+          />
         </>
       )}
 
@@ -163,17 +219,23 @@ function ExamsPanel({
   sessions,
   subjects,
   now,
+  onEdit,
 }: {
   events: CalendarEvent[]
   sessions: Record<string, SessionMeta>
   subjects: Subject[]
   now: number
+  onEdit: (exam: Exam) => void
 }) {
   const exams = useStudyStore((s) => s.exams)
   const todayKey = localDayKey(new Date(now))
   const upcoming = [...exams]
     .filter((x) => x.on >= todayKey)
     .sort((a, b) => a.on.localeCompare(b.on))
+  // An exam dated into the past leaves the cards above, and it must not leave
+  // the wing with it: a date typed wrongly BACKWARDS is exactly the mistake
+  // this panel has to stay reachable for. Newest first, stated quietly.
+  const sat = [...exams].filter((x) => x.on < todayKey).sort((a, b) => b.on.localeCompare(a.on))
   const nameOf = (x: Exam) => subjects.find((s) => s.id === x.subjectId)?.name ?? '—'
 
   return (
@@ -186,7 +248,13 @@ function ExamsPanel({
       ) : (
         <div className="mt-3 flex flex-wrap gap-3.5">
           {upcoming.map((x, i) => (
-            <div key={x.id} className="min-w-[230px] flex-1 rounded-xl border border-line bg-panel-2 px-4 py-3.5">
+            <button
+              key={x.id}
+              type="button"
+              aria-label={voice.study.editRow.exam}
+              onClick={() => onEdit(x)}
+              className="min-w-[230px] flex-1 rounded-xl border border-line bg-panel-2 px-4 py-3.5 text-left transition-colors hover:border-[var(--color-w-study)]"
+            >
               <div className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--color-w-study)' }} />
                 <span className="font-display text-[13.5px] font-bold tracking-[0.1em]">
@@ -205,9 +273,35 @@ function ExamsPanel({
               <div className="mt-1.5 text-xs text-ink-dim [font-variant-numeric:tabular-nums]">
                 {voice.study.hoursToward(examProgress(x, events, sessions))}
               </div>
-            </div>
+            </button>
           ))}
         </div>
+      )}
+      {sat.length > 0 && (
+        <>
+          <div className="mt-4 font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
+            {voice.study.examsSat}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {sat.map((x) => (
+              <button
+                key={x.id}
+                type="button"
+                aria-label={voice.study.editRow.exam}
+                onClick={() => onEdit(x)}
+                className="rounded-pill border border-line bg-panel-2 px-3 py-1.5 text-[11px] text-ink-dim transition-colors hover:border-[var(--color-w-study)] hover:text-ink"
+              >
+                {x.title}
+                <span className="ml-1.5 font-display text-[9px] font-semibold tracking-[0.13em] text-ink-faint">
+                  {nameOf(x).toUpperCase()}
+                </span>
+                <span className="ml-1.5 text-[10px] text-ink-faint [font-variant-numeric:tabular-nums]">
+                  {fdatem(dayKeyToDate(x.on))}
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </section>
   )
@@ -223,6 +317,8 @@ function Dossier({
   onAddHw,
   onAddExam,
   onAddTopic,
+  onEditHw,
+  onEditTopic,
   butler,
 }: {
   subjects: Subject[]
@@ -232,6 +328,8 @@ function Dossier({
   onAddHw: () => void
   onAddExam: () => void
   onAddTopic: () => void
+  onEditHw: (hw: Homework) => void
+  onEditTopic: (topic: SyllabusTopic) => void
   butler: (msg: string) => void
 }) {
   const homework = useStudyStore((s) => s.homework)
@@ -334,8 +432,11 @@ function Dossier({
               >
                 {h.done ? '✓' : ''}
               </button>
-              <span
-                className="min-w-0 flex-1 text-[13px]"
+              <button
+                type="button"
+                aria-label={voice.study.editRow.homework}
+                onClick={() => onEditHw(h)}
+                className="min-w-0 flex-1 text-left text-[13px] transition-colors hover:text-accent"
                 style={{
                   color: h.done ? 'var(--color-ink-faint)' : 'var(--color-ink)',
                   textDecoration: h.done ? 'line-through' : 'none',
@@ -345,7 +446,7 @@ function Dossier({
                 <span className="ml-1.5 font-display text-[9px] font-semibold tracking-[0.13em] text-ink-faint">
                   {nameOf(h.subjectId).toUpperCase()}
                 </span>
-              </span>
+              </button>
               <span className="flex-none text-[11px] [font-variant-numeric:tabular-nums]" style={{ color: dueC }}>
                 {dueL}
               </span>
@@ -382,12 +483,15 @@ function Dossier({
             >
               {t.covered ? '✓' : ''}
             </button>
-            <span
-              className="text-[13px]"
+            <button
+              type="button"
+              aria-label={voice.study.editRow.topic}
+              onClick={() => onEditTopic(t)}
+              className="min-w-0 flex-1 text-left text-[13px] transition-colors hover:text-accent"
               style={{ color: t.covered ? 'var(--color-ink-faint)' : 'var(--color-ink)' }}
             >
               {t.title}
-            </span>
+            </button>
           </div>
         ))}
       </div>
@@ -964,17 +1068,29 @@ function SheetActions({
   cta,
   onCancel,
   onSave,
+  onDelete,
 }: {
   cta: string
   onCancel: () => void
   onSave: () => void
+  /** amend sheets only — kept off to the left, away from the CTA thumb lands on */
+  onDelete?: () => void
 }) {
   return (
-    <div className="mt-5 flex justify-end gap-2.5">
+    <div className="mt-5 flex items-center gap-2.5">
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          className="font-display text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint transition-colors hover:text-danger"
+        >
+          {voice.study.sheet.remove}
+        </button>
+      )}
       <button
         type="button"
         onClick={onCancel}
-        className="btn-soft px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.14em]"
+        className="btn-soft ml-auto px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.14em]"
       >
         {voice.study.sheet.cancel}
       </button>
@@ -1021,29 +1137,39 @@ function SubjectChips({
   )
 }
 
-/** 14-day strip (this week + next), shared by book/homework sheets */
+/** the 14 days the strip offers — this week and next */
+function stripDays(now: number): Date[] {
+  const strip0 = startOfWeek(new Date(now), useShellStore.getState().weekStart)
+  return Array.from({ length: 14 }, (_, i) => addDays(strip0, i))
+}
+
+/**
+ * 14-day strip (this week + next), shared by book/homework sheets. It speaks
+ * DAY KEYS rather than offsets into itself: a homework being amended can carry
+ * a due day the strip does not reach, and an index has no way to say so.
+ */
 function DayStrip({
   now,
   picked,
   onPick,
 }: {
   now: number
-  picked: number | null
-  onPick: (i: number) => void
+  picked: string | null
+  onPick: (dayKey: string) => void
 }) {
-  const strip0 = startOfWeek(new Date(now), useShellStore.getState().weekStart)
-  const days = Array.from({ length: 14 }, (_, i) => addDays(strip0, i))
+  const days = stripDays(now)
   const todayKey = localDayKey(new Date(now))
   return (
     <div className="flex flex-wrap gap-1.5">
       {days.map((day, i) => {
-        const on = picked === i
-        const isToday = localDayKey(day) === todayKey
+        const key = localDayKey(day)
+        const on = picked === key
+        const isToday = key === todayKey
         return (
           <button
             key={i}
             type="button"
-            onClick={() => onPick(i)}
+            onClick={() => onPick(key)}
             className="w-[52px] rounded-[9px] border pb-1.5 pt-2 text-center transition-colors hover:border-accent"
             style={{
               borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
@@ -1068,12 +1194,6 @@ function DayStrip({
   )
 }
 
-/** index of today inside the 14-day strip */
-function todayStripIndex(now: number): number {
-  const strip0 = startOfWeek(new Date(now), useShellStore.getState().weekStart)
-  return Math.max(0, Math.min(13, Math.round((new Date(now).setHours(0, 0, 0, 0) - strip0.getTime()) / 86_400_000)))
-}
-
 function BookSheet({
   open,
   onClose,
@@ -1091,7 +1211,7 @@ function BookSheet({
 }) {
   const homework = useStudyStore((s) => s.homework)
   const [subj, setSubj] = useState<string>('')
-  const [dayIdx, setDayIdx] = useState<number | null>(null)
+  const [day0, setDay0] = useState<string | null>(null)
   const [startH, setStartH] = useState(19)
   const [dur, setDur] = useState(1.5)
   const [hw, setHw] = useState('')
@@ -1101,22 +1221,21 @@ function BookSheet({
   useEffect(() => {
     if (!open) return
     setSubj((prev) => (subjects.some((s) => s.id === prev) ? prev : (subjects[0]?.id ?? '')))
-    setDayIdx(todayStripIndex(now))
+    setDay0(localDayKey(new Date(now)))
     setStartH(19)
     setDur(1.5)
     setHw('')
     setNote('')
   }, [open])
 
-  const strip0 = startOfWeek(new Date(now), useShellStore.getState().weekStart)
-  const day = addDays(strip0, dayIdx ?? 0)
+  const day = dayKeyToDate(day0 ?? localDayKey(new Date(now)))
   const start = atHour(day, startH)
   const end = atHour(day, startH + dur)
   const past = end.getTime() <= now
 
   const save = () => {
     const subject = subjects.find((s) => s.id === subj)
-    if (!subject || dayIdx === null) return
+    if (!subject || day0 === null) return
     if (!rangeFree(events, start, end)) {
       butler(voice.manor.occupied)
       return
@@ -1147,7 +1266,7 @@ function BookSheet({
       <SheetLabel>{voice.study.sheet.subject}</SheetLabel>
       <SubjectChips subjects={subjects} value={subj} onPick={(id) => { setSubj(id); setHw('') }} />
       <SheetLabel>{voice.study.sheet.day}</SheetLabel>
-      <DayStrip now={now} picked={dayIdx} onPick={setDayIdx} />
+      <DayStrip now={now} picked={day0} onPick={setDay0} />
       <div className="flex flex-wrap gap-x-6 gap-y-0">
         <div>
           <SheetLabel>{voice.study.sheet.start}</SheetLabel>
@@ -1256,11 +1375,37 @@ function EnrolSheet({
   )
 }
 
+/** the pill the due row uses for its two non-strip choices */
+function DueChoice({
+  on,
+  label,
+  onClick,
+}: {
+  on: boolean
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-[9px] border px-3 py-2 font-display text-[10px] font-semibold tracking-[0.14em] text-ink-dim transition-colors"
+      style={{
+        borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
+        background: on ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'var(--color-panel-2)',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
 function HwSheet({
   open,
   onClose,
   subjects,
   defaultSubj,
+  editing,
   now,
   butler,
 }: {
@@ -1268,19 +1413,38 @@ function HwSheet({
   onClose: () => void
   subjects: Subject[]
   defaultSubj: string
+  /** the record being amended; absent = the sheet adds a new one */
+  editing?: Homework
   now: number
   butler: (msg: string) => void
 }) {
   const [title, setTitle] = useState('')
   const [subj, setSubj] = useState(defaultSubj)
-  const [dueIdx, setDueIdx] = useState<number | null>(null)
+  const [due, setDue] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const seedTitle = editing?.title ?? ''
+  const seedSubj = editing?.subjectId ?? defaultSubj
+  const seedDue = editing?.due ?? null
 
   useEffect(() => {
-    if (!open) return
-    setTitle('')
-    setSubj(defaultSubj)
-    setDueIdx(null)
-  }, [open, defaultSubj])
+    if (!open) {
+      // a stale confirm must never greet the next opening — Sheet's own rule
+      setConfirmDelete(false)
+      return
+    }
+    setTitle(seedTitle)
+    setSubj(seedSubj)
+    setDue(seedDue)
+  }, [open, seedTitle, seedSubj, seedDue])
+
+  // "differs from the store", not "was touched" — the SpendSheet's rule
+  const dirty = title !== seedTitle || subj !== seedSubj || due !== seedDue
+
+  // A due day outside the fortnight the strip shows still has to be
+  // representable, or amending the title of an overdue homework would quietly
+  // move its date. It rides beside NO DATE as its own chip.
+  const offStrip = due !== null && !stripDays(now).some((d) => localDayKey(d) === due)
 
   const save = () => {
     const trimmed = title.trim()
@@ -1288,48 +1452,68 @@ function HwSheet({
       butler(voice.study.toast.titleFirst)
       return
     }
-    const strip0 = startOfWeek(new Date(now), useShellStore.getState().weekStart)
-    const due = dueIdx === null ? undefined : localDayKey(addDays(strip0, dueIdx))
-    useStudyStore.getState().addHomework(subj, trimmed, due)
-    butler(voice.study.toast.hwAdded(due !== undefined))
+    const store = useStudyStore.getState()
+    if (editing) {
+      store.updateHomework(editing.id, { title: trimmed, subjectId: subj, due: due ?? undefined })
+      butler(voice.study.toast.hwEdited)
+    } else {
+      store.addHomework(subj, trimmed, due ?? undefined)
+      butler(voice.study.toast.hwAdded(due !== null))
+    }
     onClose()
   }
 
   return (
-    <Sheet open={open} onClose={onClose}>
-      <h2 className="card-title">{voice.study.sheet.addHomework}</h2>
-      <SheetLabel>{voice.study.sheet.title}</SheetLabel>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder={voice.study.sheet.hwPlaceholder}
-        className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+    <>
+      <Sheet open={open} onClose={onClose} dirty={dirty}>
+        <h2 className="card-title">
+          {editing ? voice.study.sheet.editHomework : voice.study.sheet.addHomework}
+        </h2>
+        <SheetLabel>{voice.study.sheet.title}</SheetLabel>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={voice.study.sheet.hwPlaceholder}
+          className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+        />
+        <SheetLabel>{voice.study.sheet.subject}</SheetLabel>
+        <SubjectChips subjects={subjects} value={subj} onPick={setSubj} />
+        <SheetLabel>{voice.study.sheet.due}</SheetLabel>
+        <div className="flex flex-wrap gap-1.5">
+          <DueChoice
+            on={due === null}
+            label={voice.study.sheet.noDate}
+            onClick={() => setDue(null)}
+          />
+          {offStrip && due !== null && (
+            <DueChoice on label={fdatem(dayKeyToDate(due))} onClick={() => setDue(due)} />
+          )}
+        </div>
+        <div className="mt-1.5">
+          <DayStrip now={now} picked={due} onPick={setDue} />
+        </div>
+        <div className="mt-3.5 text-xs italic text-ink-dim">{voice.study.sheet.hwDueHint}</div>
+        <SheetActions
+          cta={editing ? voice.study.sheet.ctaSave : voice.study.sheet.ctaHw}
+          onCancel={onClose}
+          onSave={save}
+          onDelete={editing ? () => setConfirmDelete(true) : undefined}
+        />
+      </Sheet>
+      <ConfirmDialog
+        open={confirmDelete && !!editing}
+        title={voice.study.deleteHwTitle}
+        message={editing ? voice.study.deleteHwBody(editing.title) : undefined}
+        confirmLabel={voice.study.deleteYes}
+        onConfirm={() => {
+          if (editing) useStudyStore.getState().deleteHomework(editing.id)
+          setConfirmDelete(false)
+          butler(voice.study.toast.hwRemoved)
+          onClose()
+        }}
+        onCancel={() => setConfirmDelete(false)}
       />
-      <SheetLabel>{voice.study.sheet.subject}</SheetLabel>
-      <SubjectChips subjects={subjects} value={subj} onPick={setSubj} />
-      <SheetLabel>{voice.study.sheet.due}</SheetLabel>
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          onClick={() => setDueIdx(null)}
-          className="rounded-[9px] border px-3 py-2 font-display text-[10px] font-semibold tracking-[0.14em] text-ink-dim transition-colors"
-          style={{
-            borderColor: dueIdx === null ? 'var(--color-accent)' : 'var(--color-line)',
-            background:
-              dueIdx === null
-                ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
-                : 'var(--color-panel-2)',
-          }}
-        >
-          {voice.study.sheet.noDate}
-        </button>
-      </div>
-      <div className="mt-1.5">
-        <DayStrip now={now} picked={dueIdx} onPick={setDueIdx} />
-      </div>
-      <div className="mt-3.5 text-xs italic text-ink-dim">{voice.study.sheet.hwDueHint}</div>
-      <SheetActions cta={voice.study.sheet.ctaHw} onCancel={onClose} onSave={save} />
-    </Sheet>
+    </>
   )
 }
 
@@ -1338,6 +1522,7 @@ function ExamSheet({
   onClose,
   subjects,
   defaultSubj,
+  editing,
   now,
   butler,
 }: {
@@ -1345,21 +1530,48 @@ function ExamSheet({
   onClose: () => void
   subjects: Subject[]
   defaultSubj: string
+  /** the record being amended; absent = the sheet adds a new one */
+  editing?: Exam
   now: number
   butler: (msg: string) => void
 }) {
   const [title, setTitle] = useState('')
   const [subj, setSubj] = useState(defaultSubj)
   const [onDays, setOnDays] = useState(7)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  /**
+   * The day the stepper counts FROM, frozen when the sheet opens. `now` ticks
+   * every minute, and a sheet left open across midnight would otherwise walk
+   * the exam a day forward on save without anyone touching the stepper.
+   */
+  const [from, setFrom] = useState(() => startOfLocalDay(new Date(now)).getTime())
+
+  const seedTitle = editing?.title ?? ''
+  const seedSubj = editing?.subjectId ?? defaultSubj
+  const seedDays = editing ? daysUntil(editing.on, from) : 7
 
   useEffect(() => {
-    if (!open) return
-    setTitle('')
-    setSubj(defaultSubj)
-    setOnDays(7)
-  }, [open, defaultSubj])
+    if (!open) {
+      setConfirmDelete(false)
+      return
+    }
+    const today = startOfLocalDay(new Date(Date.now())).getTime()
+    setFrom(today)
+    setTitle(seedTitle)
+    setSubj(seedSubj)
+    setOnDays(editing ? daysUntil(editing.on, today) : 7)
+    // `now` is read for the freeze, never watched — see `from` above
+  }, [open, seedTitle, seedSubj, editing])
 
-  const day = addDays(new Date(now), onDays)
+  const dirty = title !== seedTitle || subj !== seedSubj || onDays !== seedDays
+  // Amending has to be able to REPRESENT the record it opened on, so its range
+  // stretches to hold it: an exam already sat, or one dated beyond the reach
+  // adding allows, keeps its day instead of being silently clamped onto a new
+  // one. Adding keeps the range it always had.
+  const minDays = editing ? Math.min(0, seedDays) : 1
+  const maxDays = editing ? Math.max(90, seedDays) : 90
+
+  const day = addDays(new Date(from), onDays)
 
   const save = () => {
     const trimmed = title.trim()
@@ -1367,33 +1579,65 @@ function ExamSheet({
       butler(voice.study.toast.titleFirst)
       return
     }
-    useStudyStore.getState().addExam(subj, trimmed, localDayKey(day))
-    butler(voice.study.toast.examNoted)
+    const store = useStudyStore.getState()
+    if (editing) {
+      // countFrom is deliberately left alone: moving the day must not reset
+      // the hours already counted toward it.
+      store.updateExam(editing.id, { title: trimmed, subjectId: subj, on: localDayKey(day) })
+      butler(voice.study.toast.examEdited)
+    } else {
+      store.addExam(subj, trimmed, localDayKey(day))
+      butler(voice.study.toast.examNoted)
+    }
     onClose()
   }
 
   return (
-    <Sheet open={open} onClose={onClose}>
-      <h2 className="card-title">{voice.study.sheet.addExam}</h2>
-      <SheetLabel>{voice.study.sheet.title}</SheetLabel>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder={voice.study.sheet.examPlaceholder}
-        className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+    <>
+      <Sheet open={open} onClose={onClose} dirty={dirty}>
+        <h2 className="card-title">
+          {editing ? voice.study.sheet.editExam : voice.study.sheet.addExam}
+        </h2>
+        <SheetLabel>{voice.study.sheet.title}</SheetLabel>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={voice.study.sheet.examPlaceholder}
+          className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+        />
+        <SheetLabel>{voice.study.sheet.subject}</SheetLabel>
+        <SubjectChips subjects={subjects} value={subj} onPick={setSubj} />
+        <SheetLabel>{voice.study.sheet.theDay}</SheetLabel>
+        <Stepper
+          label={`${voice.study.countdown(onDays)} — ${fdatem(day)}`}
+          minWidth={200}
+          onDec={() => setOnDays((d) => Math.max(minDays, d - 1))}
+          onInc={() => setOnDays((d) => Math.min(maxDays, d + 1))}
+        />
+        <div className="mt-3.5 text-xs italic text-ink-dim">
+          {editing ? voice.study.sheet.examEditHint : voice.study.sheet.examHint}
+        </div>
+        <SheetActions
+          cta={editing ? voice.study.sheet.ctaSave : voice.study.sheet.ctaExam}
+          onCancel={onClose}
+          onSave={save}
+          onDelete={editing ? () => setConfirmDelete(true) : undefined}
+        />
+      </Sheet>
+      <ConfirmDialog
+        open={confirmDelete && !!editing}
+        title={voice.study.deleteExamTitle}
+        message={editing ? voice.study.deleteExamBody(editing.title) : undefined}
+        confirmLabel={voice.study.deleteYes}
+        onConfirm={() => {
+          if (editing) useStudyStore.getState().deleteExam(editing.id)
+          setConfirmDelete(false)
+          butler(voice.study.toast.examRemoved)
+          onClose()
+        }}
+        onCancel={() => setConfirmDelete(false)}
       />
-      <SheetLabel>{voice.study.sheet.subject}</SheetLabel>
-      <SubjectChips subjects={subjects} value={subj} onPick={setSubj} />
-      <SheetLabel>{voice.study.sheet.theDay}</SheetLabel>
-      <Stepper
-        label={`${voice.study.countdown(onDays)} — ${fdate(day)}`}
-        minWidth={170}
-        onDec={() => setOnDays((d) => Math.max(1, d - 1))}
-        onInc={() => setOnDays((d) => Math.min(90, d + 1))}
-      />
-      <div className="mt-3.5 text-xs italic text-ink-dim">{voice.study.sheet.examHint}</div>
-      <SheetActions cta={voice.study.sheet.ctaExam} onCancel={onClose} onSave={save} />
-    </Sheet>
+    </>
   )
 }
 
@@ -1401,18 +1645,30 @@ function TopicSheet({
   open,
   onClose,
   sel,
+  editing,
   butler,
 }: {
   open: boolean
   onClose: () => void
   sel: Subject
+  /** the record being amended; absent = the sheet adds a new one */
+  editing?: SyllabusTopic
   butler: (msg: string) => void
 }) {
   const [title, setTitle] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const seedTitle = editing?.title ?? ''
 
   useEffect(() => {
-    if (open) setTitle('')
-  }, [open])
+    if (!open) {
+      setConfirmDelete(false)
+      return
+    }
+    setTitle(seedTitle)
+  }, [open, seedTitle])
+
+  const dirty = title !== seedTitle
 
   const save = () => {
     const trimmed = title.trim()
@@ -1420,22 +1676,52 @@ function TopicSheet({
       butler(voice.study.toast.titleFirst)
       return
     }
-    useStudyStore.getState().addTopic(sel.id, trimmed)
-    butler(voice.study.toast.topicAdded)
+    const store = useStudyStore.getState()
+    if (editing) {
+      store.updateTopic(editing.id, { title: trimmed })
+      butler(voice.study.toast.topicEdited)
+    } else {
+      store.addTopic(sel.id, trimmed)
+      butler(voice.study.toast.topicAdded)
+    }
     onClose()
   }
 
   return (
-    <Sheet open={open} onClose={onClose}>
-      <h2 className="card-title">{voice.study.sheet.addTopic(sel.name.toUpperCase())}</h2>
-      <SheetLabel>{voice.study.sheet.title}</SheetLabel>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder={voice.study.sheet.topicPlaceholder}
-        className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+    <>
+      <Sheet open={open} onClose={onClose} dirty={dirty}>
+        <h2 className="card-title">
+          {editing
+            ? voice.study.sheet.editTopic(sel.name.toUpperCase())
+            : voice.study.sheet.addTopic(sel.name.toUpperCase())}
+        </h2>
+        <SheetLabel>{voice.study.sheet.title}</SheetLabel>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={voice.study.sheet.topicPlaceholder}
+          className="w-full rounded-[10px] border border-line bg-panel-2 px-3 py-2.5 text-sm text-ink outline-none"
+        />
+        <SheetActions
+          cta={editing ? voice.study.sheet.ctaSave : voice.study.sheet.ctaTopic}
+          onCancel={onClose}
+          onSave={save}
+          onDelete={editing ? () => setConfirmDelete(true) : undefined}
+        />
+      </Sheet>
+      <ConfirmDialog
+        open={confirmDelete && !!editing}
+        title={voice.study.deleteTopicTitle}
+        message={editing ? voice.study.deleteTopicBody(editing.title) : undefined}
+        confirmLabel={voice.study.deleteYes}
+        onConfirm={() => {
+          if (editing) useStudyStore.getState().deleteTopic(editing.id)
+          setConfirmDelete(false)
+          butler(voice.study.toast.topicRemoved)
+          onClose()
+        }}
+        onCancel={() => setConfirmDelete(false)}
       />
-      <SheetActions cta={voice.study.sheet.ctaTopic} onCancel={onClose} onSave={save} />
-    </Sheet>
+    </>
   )
 }
