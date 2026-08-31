@@ -2118,13 +2118,20 @@ export const majordomoPack: VoicePack = {
     fxMissing: (currencies) =>
       `No ₪ rate for ${currencies.join(', ')} yet. These figures aren't converted. Try refreshing prices.`,
     liveDegraded: (currencies) =>
-      `Still waiting on ${currencies.join(', ')} figures. Those accounts show their last saved balance.`,
+      `Still waiting on ${currencies.join(', ')} figures. Those accounts show their last saved balance — Update balances will take a typed one.`,
     hide: 'HIDE',
     reveal: 'REVEAL',
     stampLive: 'live',
     stampHeld: 'held',
     stampHeldTitle:
-      'No fresh quote or ₪ rate. Keeping the last saved value rather than writing a wrong one.',
+      'No fresh quote or ₪ rate. Showing the last balance you saved — Update balances will take a new one.',
+    stampNoQuote: 'no quote',
+    stampNoQuoteTitle:
+      'No fresh quote or ₪ rate, so this one takes a typed balance. Your figure stands until quotes return.',
+    stampNoQuoteNote: (accounts) =>
+      accounts === 1
+        ? 'No quote for the marked account. Type its balance — your figure stands until quotes return.'
+        : 'No quote for the marked accounts. Type their balances — your figures stand until quotes return.',
     recentEntries: 'RECENT ENTRIES',
     tenDayPartial: (covered, positions) => `${covered} of ${positions} positions`,
     totalsPartial: (currencies) =>

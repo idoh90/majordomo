@@ -801,6 +801,13 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   line; the accounts list flips `· live` to `· held`. The **portfolio board is the
   exception** — it keeps per-row market values and labels them in their own currency
   (`unconvertedCurrency`), which is honest because the row says which currency it is.
+  **Strict must never mean unwritable, though**: a priced account with no live figure
+  gets an ordinary field in Update balances, prefilled with its last saved balance and
+  tagged `no quote` (`SnapshotSheet`). It was read-only there, so one holding plus a
+  missing quote — no key, offline, a rate-limited tier, a ticker nobody prices — left an
+  account with no balance box anywhere in the app, and a deposit into it could not be
+  recorded at all. The stamp stays strict either way: live when there is a live figure,
+  otherwise whatever the person typed, never cost basis and never a rate-1 conversion.
 - **Prices** (`lib/prices.ts`, `lib/holdings.ts`) — Twelve Data `/quote` (batched by
   exchange) + `/exchange_rate` for FX. Prices are in each holding's **native currency**;
   net worth converts to ₪ via `fx` (currency→ILS). `refreshPrices()` (a store action)
