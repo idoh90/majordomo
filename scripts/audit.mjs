@@ -36,7 +36,15 @@ const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Applic
 const CHROME_FLAGS = process.env.AUDIT_CHROME_FLAGS ?? '--headless=new --disable-gpu'
 const BASE = process.env.AUDIT_BASE ?? 'http://localhost:4173'
 const TMP = join(root, '.shots')
+/* The indexable routes — what Lighthouse scores and what the sitemap lists. */
 const ROUTES = ['/', '/privacy', '/terms']
+/* Every page a visitor can actually land on. /404 is contrast-checked like the
+   rest (AA everywhere is the page's criterion, and an error page is still a
+   page someone has to read) but deliberately stays OUT of the Lighthouse loop:
+   it declares itself noindex on purpose, and Lighthouse counts "page is
+   blocked from indexing" as an SEO failure — so scoring it would fail this
+   gate for doing the correct thing. */
+const PAGES = [...ROUTES, '/404']
 
 let failures = 0
 const fail = (m) => {
@@ -50,7 +58,7 @@ const browser = await chromium.launch({ executablePath: CHROME })
 
 /* ------------------------------------------------------------------ contrast */
 console.log('\ncontrast (WCAG AA)')
-for (const route of ROUTES) {
+for (const route of PAGES) {
   for (const [w, h] of [
     [390, 844],
     [1440, 900],

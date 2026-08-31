@@ -12,6 +12,19 @@ import {
   resolveOrigin,
 } from './site.config'
 
+/* A document may skip the origin token only by declaring itself noindex —
+   which today is 404.html and nothing else. An error page has no canonical
+   URL because it has no address: it answers at every address that is wrong.
+   The guard's job is unchanged either way — a page carrying NEITHER a
+   canonical nor a noindex is a page whose own address was forgotten, and it
+   still fails the build.
+
+   \s+ between the attributes, not a single space: Prettier wraps a long meta
+   tag across three lines, and a regex that assumes one space silently stops
+   matching the day someone adds max-image-preview to it. (The same lesson
+   scripts/prerender.mjs learned about its description tag.) */
+const NOINDEX = /<meta\s+name="robots"\s+content="[^"]*\bnoindex\b/i
+
 /* ---------------------------------------------------------------------------
    The page's own address, filled in at build time.
 
@@ -23,7 +36,8 @@ import {
    Every hook here THROWS on a missing token rather than passing the file
    through untouched. A file that quietly stops being wired up is the exact
    failure this replaced: it builds, it deploys, and it is wrong in a way only
-   a crawler notices.
+   a crawler notices. The one document exempt from the canonical is 404.html,
+   which buys the exemption by declaring itself noindex — see NOINDEX above.
 --------------------------------------------------------------------------- */
 function siteAddress(env: Record<string, string | undefined>): Plugin {
   const origin = resolveOrigin(env)
@@ -49,10 +63,12 @@ function siteAddress(env: Record<string, string | undefined>): Plugin {
     transformIndexHtml: {
       order: 'post',
       handler(html, ctx) {
-        if (!html.includes(ORIGIN_TOKEN)) {
+        if (!html.includes(ORIGIN_TOKEN) && !NOINDEX.test(html)) {
           throw new Error(
-            `${ctx.filename} carries no ${ORIGIN_TOKEN}. Every route needs a canonical ` +
-              `URL, and it must come from site.config.ts rather than being typed in.`,
+            `${ctx.filename} carries no ${ORIGIN_TOKEN} and does not declare itself noindex. ` +
+              `Every route needs a canonical URL, and it must come from site.config.ts ` +
+              `rather than being typed in — or the document must say plainly that it is ` +
+              `not a route, the way 404.html does.`,
           )
         }
         return fill(html)
@@ -115,10 +131,16 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       rollupOptions: {
-        /* Three documents: the landing (which doubles as the app shell once
-           the boot gate speaks) and its two legal pages. scripts/prerender.mjs
-           fills each with markup after this build. */
-        input: { index: 'index.html', privacy: 'privacy.html', terms: 'terms.html' },
+        /* Four documents: the landing (which doubles as the app shell once
+           the boot gate speaks), its two legal pages, and the not-found page
+           Vercel serves at every path the deployment does not have.
+           scripts/prerender.mjs fills each with markup after this build. */
+        input: {
+          index: 'index.html',
+          privacy: 'privacy.html',
+          terms: 'terms.html',
+          '404': '404.html',
+        },
       },
     },
     plugins: [
@@ -186,7 +208,7 @@ export default defineConfig(({ mode }) => {
           // entries an installed user tapping Terms or Privacy got the app
           // shell back from the precache instead of the page the law and the
           // consent door both point at.
-          navigateFallbackDenylist: [/^\/api\//, /^\/privacy$/, /^\/terms$/],
+          navigateFallbackDenylist: [/^\/api\//, /^\/privacy$/, /^\/terms$/, /^\/404$/],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           // Quotes are a live-network luxury: serve the cache when it answers,

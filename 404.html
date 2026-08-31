@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!-- The one document in this build that needs this, and the reason is the
+         whole nature of the page: Vercel serves it at every path the
+         deployment does not have, so its own URL is arbitrary and can be any
+         depth. Vite builds with `base: './'` (an absolute base breaks
+         `vercel dev` and `npm run preview`, which serve from other ports), and
+         a relative asset URL resolves against the REQUESTED path — so at
+         /a/b/c this page would ask for /a/b/assets/… and get nothing. The
+         prerendered words would still show; the stylesheet and the fonts would
+         not, which is a worse 404 than the platform's.
+
+         Root-relative, not absolute: `/` is right on every origin this is
+         served from, localhost included. It must stay ahead of every other
+         URL in this head. CSP `base-uri 'self'` permits exactly this. -->
+    <base href="/" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0c1017" />
+    <title>Nothing at this address — Majordomo</title>
+    <meta name="description" content="That page is not part of the estate." />
+
+    <!-- This document has NO canonical, which is why vite.config.ts lets a
+         page skip the build's origin token when it declares itself noindex.
+         An error page has no address of its own: it answers at every address
+         that is wrong. A self-referencing canonical would name a URL that does
+         not exist, and one pointing at "/" would ask a crawler to treat every
+         typo as the home page.
+
+         `follow` rather than `noindex, nofollow`: the links out of here are
+         the real pages, and there is no reason to stop a crawler walking back
+         to them. -->
+    <meta name="robots" content="noindex, follow" />
+
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+
+    <!-- No boot-gate.js and no /src/main.tsx: this page never becomes the app.
+         A resident who lands here gets the same short page a stranger does,
+         and "/" — which the gate does answer — is one link away. -->
+    <script type="module" src="/src/landing/entry-404.tsx"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

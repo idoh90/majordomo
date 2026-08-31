@@ -311,12 +311,38 @@ one **consent door**, and the acceptance stamp that gates telemetry.
   `TermsPage`/`PrivacyPage` over the shared `LegalPage` shell → copy in
   `src/landing/voice.ts` → prerendered by `scripts/prerender.mjs`. **Adding a landing
   route means touching four fail-loud lists**: the rollup `input`, the prerender
-  route loop, `entry-server.tsx` (union + meta), and `audit.mjs` `ROUTES` — plus
-  `public/sitemap.xml` and the landing footer. The html must carry `__SITE_ORIGIN__`
-  in its canonical or the build throws.
+  route loop, `entry-server.tsx` (union + meta), and `audit.mjs` `ROUTES`/`PAGES` —
+  plus `public/sitemap.xml` and the landing footer. The html must carry
+  `__SITE_ORIGIN__` in its canonical or the build throws (the lone exception is
+  `404.html`, below).
 - **The SW must not answer for the legal pages**: `/privacy` and `/terms` are in
   `navigateFallbackDenylist` (vite.config.ts) so an installed app's navigation gets
   the document, not the precached shell. A new legal route needs the same entry.
+  `/404` is denylisted for the same reason.
+- **`404.html` is the wrong address**, and it is served by CONVENTION, not by config:
+  Vercel hands `dist/404.html` to any path a static deployment does not have, with a
+  real 404 status. There is no rewrite and there must not be one — a rewrite answers
+  200, which tells a crawler the typo is a page. Before it existed, an unknown path
+  got the platform's own black NOT_FOUND card: the one screen a stranger could reach
+  that did not look like the product. It is a full landing-tree page (`NotFoundPage`
+  over `voice.notFound`, prerendered like the rest), and it deviates from the
+  four-list recipe above in exactly three ways, all deliberate:
+  · **no canonical** — an error page has no address of its own, it answers at every
+  address that is wrong. It buys the exemption from the `__SITE_ORIGIN__` throw by
+  declaring `noindex`, which is the one escape hatch `NOINDEX` in `vite.config.ts`
+  allows; a document with NEITHER still fails the build.
+  · **not in `sitemap.xml`, not in the footer** — that list is routes, and this is not one.
+  · **in `audit.mjs`'s `PAGES` (contrast) but not `ROUTES` (Lighthouse)** — it is a
+  page someone has to read, so AA still applies; but Lighthouse scores `noindex` as an
+  SEO failure, so scoring it would fail the gate for doing the correct thing.
+  It is also the ONE document carrying `<base href="/">`, and that is load-bearing:
+  the build's `base: './'` resolves assets against the REQUESTED path, so without it
+  the page would ask for `/a/b/assets/…` at `/a/b/c` and paint unstyled. Anything
+  added to its head must stay below that tag.
+- **A resident with the service worker installed does not see it**, and that is the
+  older decision winning on purpose: `navigateFallback` hands any unknown navigation
+  the precached shell so a stray deep link never dead-ends offline. The 404 page is
+  for strangers, crawlers and anyone without the app installed.
 - **The legal copy carries honesty invariants** (stated in a comment block above it
   in `src/landing/voice.ts`): the public pages stay tracker-free (Vercel aggregate
   counts only); app analytics are named actions only; deletion is a mailbox
