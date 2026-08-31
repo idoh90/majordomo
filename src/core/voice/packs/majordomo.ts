@@ -2125,6 +2125,8 @@ export const majordomoPack: VoicePack = {
     stampHeld: 'held',
     stampHeldTitle:
       'No fresh quote or ₪ rate. Keeping the last saved value rather than writing a wrong one.',
+    debtNoMinus:
+      'A debt is what you owe, so it goes in as a plain number. The row carries the minus for you.',
     recentEntries: 'RECENT ENTRIES',
     tenDayPartial: (covered, positions) => `${covered} of ${positions} positions`,
     totalsPartial: (currencies) =>

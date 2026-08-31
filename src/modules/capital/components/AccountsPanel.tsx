@@ -1,6 +1,7 @@
 import type { Account, Holding, Snapshot } from '../types'
 import { ASSET_CLASSES } from '../lib/money'
 import { accountLiveValue, isDegraded, isPriced, type Fx, type Prices } from '../lib/holdings'
+import { accountFigure } from '../lib/networth'
 import { voice } from '../../../core/voice'
 import { Amount } from './Amount'
 import { Hinted } from '../../../core/ui/Hint'
@@ -16,8 +17,14 @@ interface AccountsPanelProps {
 }
 
 export function AccountsPanel({ accounts, latest, holdings, prices, fx, onEdit, onAdd }: AccountsPanelProps) {
+  // the figure the row prints: a debt's magnitude, since the row draws its own
+  // faint '−' in front. Feeding it the raw balance printed "−-₪400K" in two
+  // different minus glyphs for anyone who typed the mortgage the way their bank
+  // app shows it — which read as a rendering glitch rather than as the ₪800,000
+  // error it stood for. Sorting on it too, so a debt sits where the same debt
+  // typed the other way would.
   const valueOf = (a: Account) =>
-    accountLiveValue(a.id, holdings, prices, fx, latest?.balances[a.id] ?? 0)
+    accountFigure(a.assetClass, accountLiveValue(a.id, holdings, prices, fx, latest?.balances[a.id] ?? 0))
   const rows = [...accounts].sort((a, b) => valueOf(b) - valueOf(a))
 
   return (

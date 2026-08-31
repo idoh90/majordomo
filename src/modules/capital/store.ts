@@ -282,6 +282,12 @@ export const useCapitalStore = create<CapitalState>()(
 
 if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__capital = useCapitalStore
+  // the pure net-worth model, on the strain engine's precedent (window.__engine):
+  // the ledger harness scores the sign contract — a debt SUBTRACTS however it
+  // was typed — without a React round-trip
+  import('./lib/networth').then((m) => {
+    ;(window as unknown as Record<string, unknown>).__ledger = m
+  })
 
   // ?demo seeds a fresh store with fixture accounts + a few months of snapshots
   // (screenshot/testing aid; mirrors the training console's ?demo)

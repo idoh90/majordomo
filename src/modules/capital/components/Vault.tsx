@@ -84,13 +84,17 @@ export function Vault({
   )
 }
 
+/** `negative` draws the minus itself, in the faint colour — so the figure beside
+ *  it is a MAGNITUDE. Handing it a signed one printed "-₪400K" under LIABILITIES,
+ *  a garble that looked like a font problem and was in fact the whole net worth
+ *  being wrong by twice the mortgage. */
 function Figure({ label, value, negative }: { label: string; value: number; negative?: boolean }) {
   return (
     <div>
       <div className="text-[11px] uppercase tracking-[0.14em] text-ink-faint">{label}</div>
       <div className="mt-0.5">
         {negative && <span className="text-ink-faint">−</span>}
-        <Amount value={value} kind="compact" className="stat-num text-lg text-ink" />
+        <Amount value={negative ? Math.abs(value) : value} kind="compact" className="stat-num text-lg text-ink" />
       </div>
     </div>
   )

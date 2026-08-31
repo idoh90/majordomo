@@ -2,12 +2,42 @@ import type { Account, AssetClass, Holding, Snapshot } from '../types'
 import { ASSET_CLASSES } from './money'
 import { accountDegradedCurrencies, accountLiveValue, type Fx, type Prices } from './holdings'
 
+/**
+ * What a balance is OWED on a liability, whichever way it was typed.
+ *
+ * Balances are stored as positive magnitudes (see types.ts) — but a bank app
+ * shows a mortgage as −400,000, so that is what people type, and `-bal` then
+ * ADDED it: ₪50,000 in the bank beside a ₪400,000 mortgage read ₪450,000
+ * instead of −₪350,000. Out by ₪800,000, stated in the biggest type on the
+ * screen, and stamped permanently into the trend history.
+ *
+ * The entry sheet now refuses a minus on a debt row, so nothing new arrives
+ * this way. This is the other half: it makes a debt that ADDS to net worth
+ * unrepresentable for every balance already stamped, imported, or synced from
+ * a device that never saw the fix. Assets are untouched — an overdraft at
+ * −5,000 is a real negative and must stay one.
+ */
+function owed(value: number): number {
+  return Math.abs(value)
+}
+
+/** What one account contributes to net worth: assets as they stand, a
+ *  liability always MINUS what it is owed. */
+export function netWorthContribution(assetClass: AssetClass, value: number): number {
+  return ASSET_CLASSES[assetClass].liability ? -owed(value) : value
+}
+
+/** The figure a row prints beside its class's own sign — the debt's magnitude
+ *  (the '−' is drawn separately, in the faint colour), an asset as it stands. */
+export function accountFigure(assetClass: AssetClass, value: number): number {
+  return ASSET_CLASSES[assetClass].liability ? owed(value) : value
+}
+
 /** Net worth of one snapshot = Σ assets − Σ debts. */
 export function netWorthOf(snapshot: Snapshot, accounts: Account[]): number {
   let total = 0
   for (const a of accounts) {
-    const bal = snapshot.balances[a.id] ?? 0
-    total += ASSET_CLASSES[a.assetClass].liability ? -bal : bal
+    total += netWorthContribution(a.assetClass, snapshot.balances[a.id] ?? 0)
   }
   return total
 }
@@ -21,10 +51,11 @@ export function assetsOf(snapshot: Snapshot, accounts: Account[]): number {
   return total
 }
 
+/** Σ what the debts are owed — a magnitude, never a signed figure. */
 export function liabilitiesOf(snapshot: Snapshot, accounts: Account[]): number {
   let total = 0
   for (const a of accounts) {
-    if (ASSET_CLASSES[a.assetClass].liability) total += snapshot.balances[a.id] ?? 0
+    if (ASSET_CLASSES[a.assetClass].liability) total += owed(snapshot.balances[a.id] ?? 0)
   }
   return total
 }
@@ -90,7 +121,10 @@ function allocationFromTotals(totals: Map<AssetClass, number>): AllocationSlice[
 
 /* ---- live variants: holdings override manual balances for the current view ---- */
 
-/** Current value of one account (Σ live market value if priced, else latest balance). */
+/** Current value of one account (Σ live market value if priced, else latest
+ *  balance) — RAW, exactly as stored. A liability's is not yet a magnitude, so
+ *  anything totalling or printing it goes through netWorthContribution /
+ *  accountFigure first. */
 export function liveAccountValue(
   account: Account,
   holdings: Holding[],
@@ -126,7 +160,9 @@ export function liveNetWorth(
     const v = liveAccountValue(a, holdings, prices, fx, latest)
     for (const c of accountDegradedCurrencies(a.id, holdings, prices, fx)) degraded.add(c)
     if (ASSET_CLASSES[a.assetClass].liability) {
-      liabilities += v
+      // a magnitude, so `assets - liabilities` can only ever SUBTRACT a debt —
+      // see netWorthContribution above for the ₪800,000 this cost
+      liabilities += accountFigure(a.assetClass, v)
     } else {
       assets += v
       if (v !== 0) totals.set(a.assetClass, (totals.get(a.assetClass) ?? 0) + v)
