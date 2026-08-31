@@ -90,7 +90,12 @@ technical version.
   and never a zero, debt credits a long night at half, the recovery coupling is
   EXACTLY 1 below its four-night gate and capped either side of it, the morning
   offer stops once the morning is written, and confirming a pencilled block turns
-  it into a record without inventing hours. Needs `npm run dev` up; exits non-zero
+  it into a record without inventing hours. Its N10–N15 and C5/C6 checks are the
+  pencil's own contract — a week of blocks the estate drew is no nights on file,
+  no average, no debt, no body clock, a recovery scale of exactly 1 and not one
+  sentence in the brief — asserted through the pure model AND through the live
+  store, because the figures were wrong for a fortnight while every predicate
+  around them was right. Needs `npm run dev` up; exits non-zero
   on failure. `CHROME_PATH` / `NIGHT_BASE` / `NIGHT_TZ` override the browser, the
   origin and the clock (the offer's window is 04:00–22:00, so the default
   `Asia/Tokyo` is what puts "now" inside it). No DST coverage, and the native
@@ -652,6 +657,21 @@ the Grounds reads.
   the week and calling it sleep has always been a person asserting they slept.
   **Never add `slept:` to `PROJECTION_PREFIXES`**: a night is a record and
   records are carried.
+- **The ledger's default is RECORDS, and the default is the mechanism.** For a
+  fortnight the predicates existed and the figures ignored them: `nightsIn` took
+  every sleep block, so a shift worker who posted a roster and never touched the
+  sleep feature collected an average, a debt and a body clock made entirely of the
+  app's own six-hour guesses — and once four landed in a trailing week the
+  Grounds slowed its recovery clock on the strength of them. So `nightsIn` now
+  filters to `isNightRecord` unless a caller passes `{ includePencilled: true }`
+  (`NightScope`), and `sleepStats` — the ledger's own question, "what did you
+  sleep" — has no such parameter at all. `SleepStats.pencilled` is the ONE field
+  that knows pencil marks exist, and it exists so a surface can explain an empty
+  figure rather than fill one in. The two callers that must still see a pencil are
+  the morning offer and the night sheet, and both reach it through `nightOf`,
+  which returns the record if there is one and the pencil otherwise — which is
+  also what stops a leftover suggestion beside a confirmed night from summing to
+  a thirteen-hour night.
 - **A night belongs to the morning it ENDED on.** That is the one convention that
   survives a night shift — 23:30 → 07:10 and 09:00 → 15:00 are both Tuesday's
   night — and it is why the sheet pages MORNINGS and derives the bedtime's date

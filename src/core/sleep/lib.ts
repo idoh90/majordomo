@@ -64,6 +64,29 @@ function minutesFrom(day: Date, at: Date): number {
   return Math.round((at.getTime() - startOfLocalDay(day).getTime()) / 60_000)
 }
 
+/** how much of the calendar's sleep a caller is asking about */
+export interface NightScope {
+  /**
+   * Count the blocks the estate DREW as well as the ones somebody wrote down.
+   *
+   * Default false, and the default is the whole point. Every figure this
+   * module publishes — the average, the debt, the body clock, the count of
+   * nights on file, and through that count the gate on the recovery coupling
+   * — is a claim about what a person slept. A six-hour block the app drew
+   * itself after a night watch is a SUGGESTION with no one behind it, and
+   * counting it built an entire fortnight of rest out of the app's own
+   * guesses: an average nobody produced, a debt measured against it, and a
+   * body clock plotted from four pencil marks. Worse, once four of those
+   * landed in a trailing week the Grounds began slowing its recovery clock on
+   * the strength of them.
+   *
+   * So the ledger asks for records and the two surfaces that genuinely need
+   * to SEE a pencil mark — the morning offer and the night sheet, both of
+   * which exist to turn one into a record — ask for it by name.
+   */
+  includePencilled?: boolean
+}
+
 /**
  * The nights that ENDED inside [from, to), oldest first.
  *
@@ -71,15 +94,24 @@ function minutesFrom(day: Date, at: Date): number {
  * night that both finish on Tuesday are one Tuesday of sleep. The hours are
  * the sum of every block; the clock times are the LONGEST block's, because
  * "when did you go to bed" means the night, not the nap.
+ *
+ * Pencil marks are left out unless `scope.includePencilled` asks for them —
+ * see NightScope. That also settles the mixed morning, where a confirmed
+ * night sits beside the leftover suggestion it replaced: only the record is
+ * summed, rather than the pair adding up to thirteen hours in bed.
  */
 export function nightsIn(
   events: CalendarEvent[],
   notes: Record<string, SleepNote>,
   from: Date,
   to: Date,
+  scope: NightScope = {},
 ): NightRow[] {
+  const considered = scope.includePencilled
+    ? sleepBlocks(events)
+    : sleepBlocks(events).filter(isNightRecord)
   const byDay = new Map<string, CalendarEvent[]>()
-  for (const e of sleepBlocks(events)) {
+  for (const e of considered) {
     const end = new Date(e.end)
     if (end < from || end >= to) continue
     const key = localDayKey(end)
@@ -115,14 +147,27 @@ export function nightsIn(
   return rows.sort((a, b) => a.dayKey.localeCompare(b.dayKey))
 }
 
-/** the night that ended on `day`, if one is on file */
+/**
+ * The night that ended on `day`: the record if there is one, otherwise the
+ * pencil mark waiting on a yes, otherwise nothing.
+ *
+ * Both callers — the morning offer and the night sheet — want exactly that
+ * order, and they read `row.pencilled` to decide whether they are asking a
+ * question or confirming an answer. Preferring the record also means a
+ * morning holding both never opens the sheet onto the suggestion.
+ */
 export function nightOf(
   events: CalendarEvent[],
   notes: Record<string, SleepNote>,
   day: Date,
 ): NightRow | null {
-  const rows = nightsIn(events, notes, startOfLocalDay(day), addDays(day, 1))
-  return rows[0] ?? null
+  const from = startOfLocalDay(day)
+  const to = addDays(day, 1)
+  return (
+    nightsIn(events, notes, from, to)[0] ??
+    nightsIn(events, notes, from, to, { includePencilled: true })[0] ??
+    null
+  )
 }
 
 /* ----------------------------------------------------------------- stats */
@@ -172,6 +217,13 @@ function regularityOf(sdMin: number): number {
   return clamp(Math.round(100 * Math.exp(-sdMin / REGULARITY_TAU_MIN)), 0, 100)
 }
 
+/**
+ * Every figure the ledger prints, over RECORDS ONLY.
+ *
+ * There is no scope parameter here on purpose. This function answers "what
+ * did you sleep", and there is no reading of that question under which the
+ * app's own pencil marks are part of the answer — see NightScope.
+ */
 export function sleepStats(
   events: CalendarEvent[],
   notes: Record<string, SleepNote>,
@@ -181,8 +233,20 @@ export function sleepStats(
 ): SleepStats {
   const today = startOfLocalDay(new Date(now))
   const to = addDays(today, 1)
-  const rows = nightsIn(events, notes, addDays(to, -windowNights), to)
+  const from = addDays(to, -windowNights)
+  const rows = nightsIn(events, notes, from, to)
   const seven = rows.filter((r) => r.dayKey >= localDayKey(addDays(to, -7)))
+  // mornings the estate drew a block on and nobody answered for — reported so
+  // a surface can say why a figure is empty, and counted into nothing else
+  const written = new Set(rows.map((r) => r.dayKey))
+  const pencilled = new Set(
+    sleepBlocks(events)
+      .filter(isPencilledNight)
+      .map((e) => new Date(e.end))
+      .filter((end) => end >= from && end < to)
+      .map(localDayKey)
+      .filter((k) => !written.has(k)),
+  ).size
 
   const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
   const mids = rows.map((r) => r.midMin)
@@ -194,18 +258,17 @@ export function sleepStats(
     debt += gap >= 0 ? gap : gap * CREDIT_RATE
   }
 
-  // the shape to prefill a new night with — from CONFIRMED nights only, so a
-  // fortnight of the house's own pencil marks cannot teach it your habits
-  const kept = rows.filter((r) => !r.pencilled)
-  const usual = kept.length
+  // the shape to prefill a new night with. `rows` holds records alone, so a
+  // fortnight of the house's own pencil marks cannot teach it your habits.
+  const usual = rows.length
     ? {
         bedMin: Math.round(
-          median(kept.map((r) => minutesFrom(startOfLocalDay(r.wake), r.bed))),
+          median(rows.map((r) => minutesFrom(startOfLocalDay(r.wake), r.bed))),
         ),
         wakeMin: Math.round(
-          median(kept.map((r) => minutesFrom(startOfLocalDay(r.wake), r.wake))),
+          median(rows.map((r) => minutesFrom(startOfLocalDay(r.wake), r.wake))),
         ),
-        midMin: Math.round(median(kept.map((r) => r.midMin))),
+        midMin: Math.round(median(rows.map((r) => r.midMin))),
       }
     : null
 
@@ -216,6 +279,7 @@ export function sleepStats(
     rows,
     windowNights,
     covered: rows.length,
+    pencilled,
     avgH: mean(rows.map((r) => r.hours)),
     avg7H: mean(seven.map((r) => r.hours)),
     covered7: seven.length,
@@ -284,6 +348,14 @@ export interface NightPoint {
   /** is there a record behind that 0? */
   has: boolean
   row: NightRow | null
+  /**
+   * Hours the estate PENCILLED on this morning and nobody has confirmed; 0
+   * when there is no pencil mark. It is carried separately from `hours` and
+   * counts towards nothing — but a chart that dropped it entirely would leave
+   * a blank column under a block the week is visibly drawing, which reads as
+   * a bug rather than as a question waiting for an answer.
+   */
+  pencilledH: number
 }
 
 /** the last `n` nights ending today, oldest first — gaps included as gaps */
@@ -294,13 +366,29 @@ export function nightlySeries(
   n: number,
 ): NightPoint[] {
   const today = startOfLocalDay(new Date(now))
-  const rows = nightsIn(events, notes, addDays(today, 1 - n), addDays(today, 1))
+  const from = addDays(today, 1 - n)
+  const to = addDays(today, 1)
+  const rows = nightsIn(events, notes, from, to)
   const byKey = new Map(rows.map((r) => [r.dayKey, r]))
+  const pencil = new Map<string, number>()
+  for (const e of sleepBlocks(events).filter(isPencilledNight)) {
+    const end = new Date(e.end)
+    if (end < from || end >= to) continue
+    const key = localDayKey(end)
+    pencil.set(key, (pencil.get(key) ?? 0) + hoursOf(e))
+  }
   return Array.from({ length: n }, (_, i) => {
     const day = addDays(today, -(n - 1 - i))
     const dayKey = localDayKey(day)
     const row = byKey.get(dayKey) ?? null
-    return { dayKey, day, hours: row?.hours ?? 0, has: row !== null, row }
+    return {
+      dayKey,
+      day,
+      hours: row?.hours ?? 0,
+      has: row !== null,
+      row,
+      pencilledH: row ? 0 : (pencil.get(dayKey) ?? 0),
+    }
   })
 }
 

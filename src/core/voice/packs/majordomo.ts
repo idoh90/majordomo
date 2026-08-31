@@ -1772,6 +1772,12 @@ export const majordomoPack: VoicePack = {
       pencilNote: 'I pencilled this in after your watch. Confirm it and it counts.',
       ledger: 'THE FORTNIGHT',
       ledgerEmpty: 'Nothing written down yet.',
+      // The hatched columns are the estate's own pencil, and they count
+      // towards none of the four figures beside them. Said once, as a fact,
+      // in the one place the reader is already looking at the gap — not as a
+      // backlog of mornings anybody owes me.
+      ledgerPencilled: ({ pencilled }) =>
+        `${sentence(word(pencilled))} hatched ${plural(pencilled, 'night is', 'nights are')} mine, not yours — ${plural(pencilled, 'it counts', 'they count')} for nothing until confirmed.`,
     },
     prompt: {
       line: 'Last night is not written down.',
@@ -1800,6 +1806,7 @@ export const majordomoPack: VoicePack = {
       tooThin: 'Three nights and I can say how steady the hour is.',
       empty: 'Nothing on file. Two clock times a morning is the whole of it.',
       notWritten: 'not written down',
+      pencilledNight: 'pencilled, not confirmed',
     },
     recovery: {
       line: ({ pct, avgH, covered }) =>

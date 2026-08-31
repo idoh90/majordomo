@@ -14,6 +14,13 @@ import { voice } from '../../../core/voice'
  * honesty of every figure below rests on the difference between "slept badly"
  * and "did not write it down", and a bar chart that renders both as a stub
  * loses it in the one place the reader would notice.
+ *
+ * A morning the estate PENCILLED draws a third way: a hatched ghost at the
+ * height of the block on the week, counting towards none of the four figures.
+ * Dropping it entirely would have been just as honest and much more
+ * confusing — the reader can see a six-hour block on the week above, and an
+ * unexplained blank underneath it reads as a broken chart rather than as a
+ * question nobody has answered.
  */
 export function NightLedger({
   points,
@@ -26,8 +33,9 @@ export function NightLedger({
   activeKey: string
 }) {
   const V = voice.night
-  const ceiling = Math.max(9, stats.targetH, ...points.map((p) => p.hours))
-  const anything = points.some((p) => p.has)
+  const ceiling = Math.max(9, stats.targetH, ...points.map((p) => Math.max(p.hours, p.pencilledH)))
+  const pencilled = points.filter((p) => p.pencilledH > 0).length
+  const anything = points.some((p) => p.has) || pencilled > 0
 
   return (
     <div className="mt-4 border-t border-line pt-3">
@@ -62,7 +70,13 @@ export function NightLedger({
               return (
                 <div
                   key={p.dayKey}
-                  title={p.has ? fmtHM(p.hours) : V.stats.notWritten}
+                  title={
+                    p.has
+                      ? fmtHM(p.hours)
+                      : p.pencilledH > 0
+                        ? `${fmtHM(p.pencilledH)} · ${V.stats.pencilledNight}`
+                        : V.stats.notWritten
+                  }
                   className="relative flex h-full min-w-0 flex-1 items-end"
                 >
                   {p.has ? (
@@ -73,6 +87,19 @@ export function NightLedger({
                         background: on
                           ? 'var(--color-w-sleep)'
                           : 'color-mix(in srgb, var(--color-w-sleep) 42%, transparent)',
+                      }}
+                    />
+                  ) : p.pencilledH > 0 ? (
+                    /* the estate's own pencil: drawn at the height of the
+                       block on the week, hatched like it, and counted into
+                       nothing below */
+                    <div
+                      className="w-full rounded-[2px] border border-dashed"
+                      style={{
+                        height: `${Math.max(4, (p.pencilledH / ceiling) * 100)}%`,
+                        borderColor: `color-mix(in srgb, var(--color-w-sleep) ${on ? 70 : 40}%, transparent)`,
+                        background:
+                          'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-w-sleep) 22%, transparent) 0 4px, transparent 4px 8px)',
                       }}
                     />
                   ) : (
@@ -120,6 +147,11 @@ export function NightLedger({
               }
             />
           </div>
+          {pencilled > 0 && (
+            <p className="mt-2 text-[11px] leading-snug text-ink-faint">
+              {V.sheet.ledgerPencilled({ pencilled })}
+            </p>
+          )}
         </>
       ) : (
         <p className="mt-2 text-[12px] italic text-ink-dim">{V.sheet.ledgerEmpty}</p>

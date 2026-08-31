@@ -495,6 +495,14 @@ export function useDials(facts: BriefFacts): Dial[] {
       const target = sleepStats.targetH
       const dayLabel = (d: Date, i: number) =>
         i === NIGHTS - 1 ? 'LAST NIGHT' : `${DAY[d.getDay()]} ${d.getDate()}`
+      // A gap the estate itself drew a block on says so rather than reading as
+      // an ordinary silence. Matched by label because that is all fmtPoint
+      // gets, and the labels are unique inside one fortnight.
+      const pencilLabels = new Set(
+        points.flatMap((p, i) => (p.pencilledH > 0 ? [dayLabel(p.day, i)] : [])),
+      )
+      const gapNote = (label: string) =>
+        pencilLabels.has(label) ? voice.night.stats.pencilledNight : voice.night.stats.notWritten
 
       // a 'band' rather than plain bars for one reason: a night nobody wrote
       // down has NO bar at all. A zero-height bar on a bar chart is a claim
@@ -521,7 +529,7 @@ export function useDials(facts: BriefFacts): Dial[] {
           urgency:
             sleepStats.covered7 >= 3 && target > 0 && target - sleepStats.avg7H >= 1 ? 5 : 2,
           fmt: h1,
-          fmtPoint: (p) => (p.lo === undefined ? voice.night.stats.notWritten : fmtHM(p.v)),
+          fmtPoint: (p) => (p.lo === undefined ? gapNote(p.label) : fmtHM(p.v)),
         },
         V.dial.sleep({
           last: lastPt.has ? lastPt.hours : null,
@@ -607,7 +615,7 @@ export function useDials(facts: BriefFacts): Dial[] {
             fmt: clockFace,
             fmtPoint: (p) =>
               p.lo === undefined
-                ? voice.night.stats.notWritten
+                ? gapNote(p.label)
                 : `${clockFace(p.v)} \u2192 ${clockFace(p.lo)}`,
           },
           V.dial.sleepclock({

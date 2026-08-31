@@ -62,10 +62,25 @@ export interface NightRow {
    * apart instead of twenty minutes.
    */
   midMin: number
-  /** the estate pencilled this in and it was never confirmed */
+  /**
+   * The estate pencilled this in and nobody confirmed it.
+   *
+   * Only ever true on a row asked for with `{ includePencilled: true }` —
+   * the ledger's own rows are records by construction. The morning offer and
+   * the night sheet read it to tell "write this down" from "was that how it
+   * went".
+   */
   pencilled: boolean
 }
 
+/**
+ * The ledger's figures — all of them over nights that were WRITTEN DOWN.
+ *
+ * A block the estate pencilled in after a night watch is a suggestion, and a
+ * suggestion counted as sleep is how this app once reported a fortnight of
+ * rest to somebody who had never touched the sleep feature. `pencilled` is
+ * the only field that knows such blocks exist.
+ */
 export interface SleepStats {
   /** the most recent night on file inside the window */
   last: NightRow | null
@@ -75,6 +90,15 @@ export interface SleepStats {
   windowNights: number
   /** …of which this many carry a record */
   covered: number
+  /**
+   * Mornings inside the window carrying only a block the estate DREW — a
+   * night watch's six pencilled hours nobody has confirmed. They are counted
+   * here and nowhere else: not in `covered`, not in any average, not in the
+   * debt, not in the body clock, and so not in the gate on the recovery
+   * coupling. A surface prints this to explain an empty figure, never to fill
+   * one in.
+   */
+  pencilled: number
   /** mean hours slept over the covered nights (0 when there are none) */
   avgH: number
   /** the same over the trailing seven nights only */

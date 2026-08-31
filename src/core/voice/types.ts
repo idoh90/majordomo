@@ -631,6 +631,8 @@ export interface VoicePack {
       ledger: string
       /** …when there is nothing in it yet */
       ledgerEmpty: string
+      /** …why some of its columns are hatched and count towards nothing */
+      ledgerPencilled: (v: { pencilled: number }) => string
     }
     /** the morning offer above the week */
     prompt: {
@@ -662,6 +664,8 @@ export interface VoicePack {
       empty: string
       /** a night with no record, wherever one is pointed at */
       notWritten: string
+      /** …when the estate drew one there and nobody has confirmed it */
+      pencilledNight: string
     }
     /** the Grounds' recovery coupling, stated wherever it bites */
     recovery: {
