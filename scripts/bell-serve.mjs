@@ -116,9 +116,13 @@ const outDir = path.join(ROOT, 'node_modules', '.cache', 'bell-local')
 const outFile = path.join(outDir, 'bell.mjs')
 fs.mkdirSync(outDir, { recursive: true })
 
-// `api/bell.ts` imports the Node bridge, and a single-file transpile leaves that
-// specifier extensionless — which the bundler resolves and Node does not. Both
-// files are emitted and the one specifier is pointed at the emitted twin.
+// `api/bell.ts` imports the Node bridge as `./_node.js` — the spelling Node's
+// own ESM resolver needs, and the one the deployed function uses. Here the emit
+// is `.mjs` (this cache directory sits inside node_modules, which has no
+// `"type": "module"` of its own to make a bare `.js` an ES module), so the one
+// specifier is repointed at the emitted twin. Both spellings are matched: an
+// extensionless `./_node` is the bug that took production down in Aug 2026, and
+// this rewrite must not be the thing that hides it coming back.
 for (const name of ['_node', 'bell']) {
   const compiled = ts.transpileModule(fs.readFileSync(path.join(ROOT, 'api', `${name}.ts`), 'utf8'), {
     fileName: `${name}.ts`,
@@ -131,7 +135,7 @@ for (const name of ['_node', 'bell']) {
   })
   fs.writeFileSync(
     path.join(outDir, `${name}.mjs`),
-    compiled.outputText.replace(/(from\s+['"])\.\/_node(['"])/g, '$1./_node.mjs$2'),
+    compiled.outputText.replace(/(from\s+['"])\.\/_node(?:\.js)?(['"])/g, '$1./_node.mjs$2'),
   )
 }
 

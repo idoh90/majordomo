@@ -39,7 +39,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
-import { nodeHandler } from './_node'
+import { nodeHandler } from './_node.js'
 
 /* -------------------------------------------------------------------------- */
 /* environment                                                                */

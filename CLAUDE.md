@@ -226,6 +226,22 @@ describe it as existing.
   one failure a caller cannot tell from a slow success. `scripts/bell-serve.mjs`
   now calls that same default export the way the platform does, so the local
   runtime exercises the conversion instead of re-implementing it.
+- **Every relative import in `api/` must carry a `.js` extension, and the bridge
+  is why this matters at all.** Vercel does not bundle these files — it transpiles
+  each one on its own and copies the root `package.json` (`"type": "module"`) in
+  beside them, so the emitted `api/google.js` is loaded by Node's own ESM
+  resolver, which does not guess extensions. `import … from './_node'` therefore
+  ships a specifier that resolves to nothing: every function died at module load
+  with `ERR_MODULE_NOT_FOUND: Cannot find module '/var/task/api/_node'`, before a
+  line of handler code ran, which the platform reports as a bare
+  `FUNCTION_INVOCATION_FAILED` with no outgoing requests. That was Aug 2026's
+  SECOND api outage, and it was introduced by the fix for the first — `_node.ts`
+  was the first cross-file import this directory ever had. `_node.js` was in the
+  bundle the whole time; only the spelling was wrong. **`tsconfig.api.json` is
+  pinned to `moduleResolution: "nodenext"` so it stays wrong loudly**: the
+  extensionless form is now TS2835 in `npm run build` instead of a green build
+  and a dead deployment. Never relax that to `bundler` — nothing bundles this
+  directory, and the mode has to describe the runtime the files actually get.
 - **A `HEAD` is answered 204 first, before everything.** Before the kill switch,
   before auth, before any upstream. A health probe must never start a consent
   walk, ring the model, cost a household a slot, or become an oracle for whether

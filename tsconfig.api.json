@@ -8,12 +8,24 @@
 //
 // Both projects run in `npm run build`. A serverless function that only fails at
 // deploy time is a function nobody typechecked.
+//
+// `moduleResolution` is `nodenext`, and that is the load-bearing line in this
+// file. The root package.json says `"type": "module"`, Vercel copies it into the
+// function bundle, and the platform transpiles each `api/*.ts` FILE BY FILE — it
+// never bundles them, so every import specifier written here reaches Node's own
+// ESM resolver verbatim. That resolver does not guess extensions: `./_node` is
+// not a module, `./_node.js` is. Under the `bundler` mode this project used to
+// carry, TypeScript happily accepted the extensionless spelling, `npm run build`
+// went green, and every deployed function died at module load with
+// ERR_MODULE_NOT_FOUND before a line of handler code ran. `nodenext` is the only
+// setting that describes the runtime these files actually get, so the same
+// mistake now fails here (TS2835) instead of in production.
 {
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
     "types": ["node"],
     "moduleDetection": "force",
     "verbatimModuleSyntax": true,
