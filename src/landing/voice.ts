@@ -267,7 +267,7 @@ export const voice = {
        the document's <title> comes from here like everything else */
     metaTitle: 'Privacy — Majordomo',
     metaDescription: 'What Majordomo keeps, what it counts, and what it never does.',
-    updated: 'Last updated: 25 August 2026',
+    updated: 'Last updated: 31 August 2026',
     sections: [
       {
         h: 'The short version',
@@ -342,7 +342,7 @@ export const voice = {
     back: 'Back to the estate',
     metaTitle: 'Terms — Majordomo',
     metaDescription: 'The agreement for using Majordomo.',
-    updated: 'Last updated: 25 August 2026',
+    updated: 'Last updated: 31 August 2026',
     sections: [
       {
         h: 'Who we are, and what this is',

@@ -55,17 +55,18 @@ export const FALLBACK_ORIGIN = 'https://majordomocal.com'
    been registered to someone else since September 2021. Mail sent there did
    not bounce — it went to a stranger, from people asking to be forgotten.
 
-   So the default is a mailbox that actually exists today: the app's own,
-   opened for the launch (it also now carries the weight of the legal pages —
-   /terms and /privacy both print it). If a hello@majordomocal.com forward is
-   ever set up, set CONTACT_EMAIL in the Vercel project — after the forwarding
-   is live, not before. An address that is merely intended is the same failure
-   again with better branding. Changing here alone is not enough: the plain-
-   node duplicate in scripts/prerender.mjs must move with it, and a stale
-   CONTACT_EMAIL env var in Vercel overrides them both.
+   Then it was a gmail.com mailbox opened for the launch — one that did exist,
+   until Google disabled the account on 30 Aug 2026 and the printed deletion
+   address started bouncing: the same untrue promise, by revocation not typo.
+   So the default is now a mailbox on the app's own domain (Google Workspace),
+   where the address survives a change of provider because the domain is ours.
+   It carries the weight of the legal pages — /terms and /privacy both print
+   it. Changing here alone is not enough: the plain-node duplicate in
+   scripts/prerender.mjs must move with it, and a stale CONTACT_EMAIL env var
+   in Vercel overrides them both — check the dashboard whenever this moves.
 --------------------------------------------------------------------------- */
 
-export const FALLBACK_CONTACT = 'majordomocal@gmail.com'
+export const FALLBACK_CONTACT = 'majorcal@majordomocal.com'
 
 /* The spelling that appears in index.html, privacy.html, robots.txt and
    sitemap.xml. Deliberately not valid in any of those formats on its own: a

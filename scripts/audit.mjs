@@ -214,7 +214,7 @@ console.log('\nthe page’s own address')
     ['index.html', 'twitter:image', /<meta name="twitter:image" content="(https?:\/\/[^"]+)"/g, 1],
     ['privacy.html', 'canonical', /<link rel="canonical" href="(https?:\/\/[^"]+)"/g, 1],
     ['robots.txt', 'Sitemap:', /Sitemap:\s*(https?:\/\/\S+)/g, 1],
-    ['sitemap.xml', '<loc>', /<loc>(https?:\/\/[^<]+)<\/loc>/g, 2],
+    ['sitemap.xml', '<loc>', /<loc>(https?:\/\/[^<]+)<\/loc>/g, 3],
   ]
   const found = []
   for (const [name, label, re, expected] of SOURCES) {
