@@ -346,7 +346,7 @@ one **consent door**, and the acceptance stamp that gates telemetry.
 - **The legal copy carries honesty invariants** (stated in a comment block above it
   in `src/landing/voice.ts`): the public pages stay tracker-free (Vercel aggregate
   counts only); app analytics are named actions only; deletion is a mailbox
-  (`majordomocal@gmail.com` — `FALLBACK_CONTACT` in `site.config.ts`, duplicated in
+  (`majorcal@majordomocal.com` — `FALLBACK_CONTACT` in `site.config.ts`, duplicated in
   `scripts/prerender.mjs`, both overridden by a `CONTACT_EMAIL` Vercel env var)
   because no in-app deletion exists. Do not edit the documents into promising
   machinery the app does not have.

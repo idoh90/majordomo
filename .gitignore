@@ -9,3 +9,6 @@ dist
 # agent scratch: throwaway worktrees and design-hook cache, not project state
 .claude/worktrees
 .impeccable
+
+# npm run audit's own output — lighthouse reports and screenshots, rewritten every run
+.shots

@@ -33,7 +33,7 @@ const ssrDir = join(root, '.ssr')
 /* Fallback duplicated from site.config.ts (FALLBACK_CONTACT): this script is
    plain node and cannot import TypeScript. It only feeds the SSR bundle's
    `define`; the shipped HTML got the real value from vite.config.ts. */
-const contact = (process.env.CONTACT_EMAIL ?? '').trim() || 'majordomocal@gmail.com'
+const contact = (process.env.CONTACT_EMAIL ?? '').trim() || 'majorcal@majordomocal.com'
 
 await build({
   root,
