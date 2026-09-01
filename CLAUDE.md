@@ -95,6 +95,16 @@ technical version.
   origin and the clock (the offer's window is 04:00–22:00, so the default
   `Asia/Tokyo` is what puts "now" inside it). No DST coverage, and the native
   `<input type="time">` is driven by value rather than by the OS wheel.
+- `npm run check:recast` — the **recast harness** (`scripts/recast-harness.mjs`): drives
+  headless Chromium through the running dev server and asserts the Grounds'
+  edit-a-session contract — backing out of an edit lands on a method picker that says
+  it is standing over a record and marks the door that record came through, a method
+  change that would drop the session's exercises, sets, run figures or typed session
+  size names them before it does it, cancelling costs the record nothing, a costless
+  change is never interrupted, and a confirmed recast still does what it always did.
+  Needs `npm run dev` up; exits non-zero on failure. `CHROME_PATH` / `RECAST_BASE`
+  override the browser and the origin. Desktop clicks only — nothing here proves a
+  thumb can reach the confirm's buttons.
 - `npm run check:ledger` — the **Ledger harness** (`scripts/ledger-harness.mjs`): drives
   headless Chromium through the running dev server and asserts the Ledger's SIGN
   contract — a debt subtracts however it was typed, liabilities read as a magnitude,
@@ -104,16 +114,18 @@ technical version.
   `CHROME_PATH` / `LEDGER_BASE` override the browser and origin. It scores the SIGN
   only — spend pace, live prices, FX and the portfolio board are not covered.
 - No test runner **for the app at large**; verification is done in the browser. The
-  Manor, THE NIGHT and the Ledger's sign are the exceptions — their contracts are
-  numeric, and "looks plausible" is
-  exactly how a cross-midnight drag silently rewrote 13 h to 2 h, and how a mortgage
-  typed the way a bank app shows it counted as an ASSET. Re-run the Manor harness
-  after touching `WeekGrid.tsx` / `ManorScreen.tsx`, and the Ledger's after touching
-  `lib/networth.ts` / `SnapshotSheet.tsx`. Its B1/B2 checks read the
+  Manor, THE NIGHT, the Grounds' recast and the Ledger's sign are the exceptions —
+  their contracts are numeric, and "looks plausible" is
+  exactly how a cross-midnight drag silently rewrote 13 h to 2 h, how three taps came
+  to wipe three exercises and nine sets off a saved session, and how a mortgage typed
+  the way a bank app shows it counted as an ASSET. Re-run the Manor harness after
+  touching `WeekGrid.tsx` / `ManorScreen.tsx`, and the Ledger's after touching
+  `lib/networth.ts` / `SnapshotSheet.tsx`. The Manor's B1/B2 checks read the
   **brief's own exam clause**, and the brief types itself out on a first visit —
   they press SKIP before every read, so a fresh context does not measure a
   half-written sentence. It does NOT cover the mobile 350 ms long-press drag
-  (not drivable by synthetic events) or DST.
+  (not drivable by synthetic events) or DST. Re-run `check:recast` after touching
+  `AddWorkoutSheet.tsx` / `MethodStep.tsx` / `lib/recast.ts`.
 
 ## Ship: it is live
 
@@ -812,6 +824,13 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   line; the accounts list flips `· live` to `· held`. The **portfolio board is the
   exception** — it keeps per-row market values and labels them in their own currency
   (`unconvertedCurrency`), which is honest because the row says which currency it is.
+  **Strict must never mean unwritable, though**: a priced account with no live figure
+  gets an ordinary field in Update balances, prefilled with its last saved balance and
+  tagged `no quote` (`SnapshotSheet`). It was read-only there, so one holding plus a
+  missing quote — no key, offline, a rate-limited tier, a ticker nobody prices — left an
+  account with no balance box anywhere in the app, and a deposit into it could not be
+  recorded at all. The stamp stays strict either way: live when there is a live figure,
+  otherwise whatever the person typed, never cost basis and never a rate-1 conversion.
 - **Prices** (`lib/prices.ts`, `lib/holdings.ts`) — Twelve Data `/quote` (batched by
   exchange) + `/exchange_rate` for FX. Prices are in each holding's **native currency**;
   net worth converts to ₪ via `fx` (currency→ILS). `refreshPrices()` (a store action)
@@ -1096,6 +1115,8 @@ auto-enter Training so they land on the right screen.
   to plot recovery curves without React round-trips)
 - `window.__volume` / `window.__trainNext` — the volume estimator and the
   train-next selector (probe `sessionBudget`/`sessionSets`/`trainNext` the same way)
+- `window.__recast` — what a mid-edit method change would cost (`recastLoss`), the
+  model behind the add sheet's guard
 - `window.__nutrition` — the nutrition module (`dailyTargets`, `bmr`, … for macro checks)
 
 ## Environment quirk (this machine's Claude browser pane)

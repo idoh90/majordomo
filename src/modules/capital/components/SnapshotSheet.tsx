@@ -30,6 +30,11 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
   const saveSnapshot = useCapitalStore((s) => s.saveSnapshot)
 
   const [balances, setBalances] = useState<Record<string, string>>({})
+  // rows the user has actually typed into this visit. A refresh landing while
+  // the sheet is open must not flip such a row back to a live stamp and bin the
+  // number that was typed into it — this app does not take a figure and then
+  // quietly overwrite it.
+  const [typed, setTyped] = useState<Record<string, true>>({})
   const [showProblems, setShowProblems] = useState(false)
 
   // Prefill on OPEN only. It used to re-seed whenever `accounts` or `snapshots`
@@ -46,6 +51,7 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
       seed[a.id] = v != null ? String(v) : ''
     }
     setBalances(seed)
+    setTyped({})
     setShowProblems(false)
   }, [open, editing]) // `accounts`/`snapshots` deliberately absent — see above
 
@@ -61,37 +67,41 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
 
   const parsed = useMemo(() => {
     const out: Record<string, number> = {}
-    const held: Record<string, boolean> = {}
+    const noQuote: Record<string, boolean> = {}
     const manual: Record<string, boolean> = {}
-    const prev = latestSnapshot(snapshots)
     for (const a of accounts) {
       // live-stamp priced accounts only for NEW snapshots — editing an old
       // point must never overwrite history with today's market value.
       // STRICT: a missing quote or ₪ rate must not stamp cost basis or a
       // rate-1 currency mixup into history (updating only the cash used to
-      // silently rewrite the portfolio stamp with garbage) — hold the last
-      // saved value instead and say so.
+      // silently rewrite the portfolio stamp with garbage).
       const live = !editing && isPriced(a.id, holdings)
         ? accountLiveValueILSStrict(a.id, holdings, prices, fx)
         : null
-      const prior = prev?.balances[a.id]
-      // …but "hold the last saved value" needs there to BE one. With no quote
-      // and no prior snapshot the old code held ₪0 — a number nobody entered,
-      // written permanently into history, with no field to correct it. Such an
-      // account gets an ordinary input instead.
-      if (!editing && isPriced(a.id, holdings) && (live != null || prior != null)) {
-        held[a.id] = live == null
-        out[a.id] = live ?? prior ?? 0
+      // …and with no live figure the account is an ORDINARY manual row,
+      // prefilled with its last saved balance. It used to be read-only, held at
+      // that balance for as long as the quote was missing — so an account with
+      // a holding and no quote (no API key, offline, a rate-limited tier, a
+      // ticker nobody prices) had no balance field anywhere in the app, and a
+      // deposit into it could not be recorded at all. Untouched, the row still
+      // saves exactly what that read-only stamp saved.
+      if (live != null && !typed[a.id]) {
+        out[a.id] = live
       } else {
         manual[a.id] = true
+        // the tag tracks the QUOTE, not the row: a row kept manual by `typed`
+        // after a quote arrived is just an ordinary field, and saying "no
+        // quote" over a quote we now hold would be a lie.
+        noQuote[a.id] = !editing && isPriced(a.id, holdings) && live == null
         const n = parseFloat(balances[a.id] ?? '')
         out[a.id] = Number.isFinite(n) ? n : 0
       }
     }
-    return { out, held, manual }
-  }, [balances, accounts, holdings, prices, fx, editing, snapshots])
+    return { out, noQuote, manual }
+  }, [balances, accounts, holdings, prices, fx, editing, typed])
 
   const stamped = parsed.out
+  const noQuoteCount = accounts.filter((a) => parsed.noQuote[a.id]).length
 
   // differs-from-the-store, so a backdrop brush asks before binning a column of
   // retyped balances. Live-stamped rows are excluded — they have no input, and
@@ -164,7 +174,7 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
           <div className="flex flex-col gap-2">
             {accounts.map((a) => {
               const liveStamped = !parsed.manual[a.id]
-              const isHeld = liveStamped && parsed.held[a.id]
+              const noQuote = parsed.noQuote[a.id]
               // the debt row wears the minus itself, so the convention is
               // legible before a single digit is typed
               const isDebt = ASSET_CLASSES[a.assetClass].liability
@@ -174,19 +184,19 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
                   <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: ASSET_CLASSES[a.assetClass].color }} />
                   <span className="min-w-0 flex-1 truncate text-sm text-ink">
                     {a.name}
-                    {liveStamped &&
-                      (isHeld ? (
-                        <span
-                          className="ml-1.5 cursor-help text-[11px] text-ink-faint"
-                          title={voice.capital.stampHeldTitle}
-                        >
-                          {voice.capital.stampHeld}
-                        </span>
-                      ) : (
-                        <span className="ml-1.5 text-[11px] text-accent">
-                          {voice.capital.stampLive}
-                        </span>
-                      ))}
+                    {liveStamped && (
+                      <span className="ml-1.5 text-[11px] text-accent">
+                        {voice.capital.stampLive}
+                      </span>
+                    )}
+                    {noQuote && (
+                      <span
+                        className="ml-1.5 cursor-help text-[11px] text-ink-faint"
+                        title={voice.capital.stampNoQuoteTitle}
+                      >
+                        {voice.capital.stampNoQuote}
+                      </span>
+                    )}
                   </span>
                   {liveStamped ? (
                     <span className="w-32 py-2 pr-2.5 text-right font-display text-base font-bold text-ink-dim">
@@ -203,7 +213,11 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
                         min={isDebt ? 0 : undefined}
                         aria-invalid={marked || undefined}
                         value={balances[a.id] ?? ''}
-                        onChange={(e) => setBalances((b) => ({ ...b, [a.id]: e.target.value }))}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setBalances((b) => ({ ...b, [a.id]: v }))
+                          setTyped((t) => (t[a.id] ? t : { ...t, [a.id]: true }))
+                        }}
                         className={`card w-32 py-2 ${isDebt ? 'pl-8' : 'pl-6'} pr-2.5 text-right font-display text-base font-bold text-ink outline-none focus:border-accent/60 ${
                           marked ? 'border-danger' : ''
                         }`}
@@ -215,6 +229,18 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
             })}
           </div>
 
+          {noQuoteCount > 0 && (
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+              {voice.capital.stampNoQuoteNote(noQuoteCount)}
+            </p>
+          )}
+
+          {showProblems && badDebts.length > 0 && (
+            <p className="mt-2 text-[12px] leading-relaxed text-danger">
+              {voice.capital.debtNoMinus}
+            </p>
+          )}
+
           {!editing && (
             <button
               type="button"
@@ -223,12 +249,6 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
             >
               + Add account
             </button>
-          )}
-
-          {showProblems && badDebts.length > 0 && (
-            <p className="mt-3 text-[12px] leading-relaxed text-danger">
-              {voice.capital.debtNoMinus}
-            </p>
           )}
 
           <div className="mt-4 flex items-center justify-between border-t border-line pt-4">

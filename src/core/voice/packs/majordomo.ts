@@ -43,6 +43,12 @@ function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many
 }
 
+/** "a", "a and b", "a, b and c" — no serial comma, the register elsewhere */
+function and(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? ''
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+}
+
 /** capitalise a clause that a number-word may be leading ("no hours stood…") */
 function sentence(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
@@ -1015,6 +1021,32 @@ export const majordomoPack: VoicePack = {
       derivedSets: ({ sets, exercises }) =>
         `${sets} working ${plural(sets, 'set', 'sets')} across ${exercises} ${plural(exercises, 'exercise', 'exercises')} — counted, not estimated.`,
       detailTitle: 'Exercises',
+    },
+    recast: {
+      stepTitle: 'How is it logged?',
+      currentTag: 'CURRENT',
+      confirmTitle: 'Change how this is logged?',
+      confirmBody: ({ exercises, run, setsTotal, durationMin }) => {
+        const parts: string[] = []
+        if (exercises) {
+          parts.push(`${exercises.exercises} ${plural(exercises.exercises, 'exercise', 'exercises')}`)
+          parts.push(`${exercises.sets} ${plural(exercises.sets, 'set', 'sets')}`)
+        }
+        if (run)
+          parts.push(
+            run.km && run.time
+              ? `${run.km} km in ${run.time}`
+              : run.km
+                ? `${run.km} km`
+                : `a time of ${run.time}`,
+          )
+        if (setsTotal !== null)
+          parts.push(`${setsTotal} working ${plural(setsTotal, 'set', 'sets')}`)
+        if (durationMin !== null)
+          parts.push(`${durationMin} ${plural(durationMin, 'minute', 'minutes')}`)
+        return `This session holds ${and(parts)}. Saved under another method, none of that is kept.`
+      },
+      confirmLabel: 'Change method',
     },
     weekTitle: 'This week',
     goalMet: "You've hit this week's goal.",
@@ -2118,13 +2150,20 @@ export const majordomoPack: VoicePack = {
     fxMissing: (currencies) =>
       `No ₪ rate for ${currencies.join(', ')} yet. These figures aren't converted. Try refreshing prices.`,
     liveDegraded: (currencies) =>
-      `Still waiting on ${currencies.join(', ')} figures. Those accounts show their last saved balance.`,
+      `Still waiting on ${currencies.join(', ')} figures. Those accounts show their last saved balance — Update balances will take a typed one.`,
     hide: 'HIDE',
     reveal: 'REVEAL',
     stampLive: 'live',
     stampHeld: 'held',
     stampHeldTitle:
-      'No fresh quote or ₪ rate. Keeping the last saved value rather than writing a wrong one.',
+      'No fresh quote or ₪ rate. Showing the last balance you saved — Update balances will take a new one.',
+    stampNoQuote: 'no quote',
+    stampNoQuoteTitle:
+      'No fresh quote or ₪ rate, so this one takes a typed balance. Your figure stands until quotes return.',
+    stampNoQuoteNote: (accounts) =>
+      accounts === 1
+        ? 'No quote for the marked account. Type its balance — your figure stands until quotes return.'
+        : 'No quote for the marked accounts. Type their balances — your figures stand until quotes return.',
     debtNoMinus:
       'A debt is what you owe, so it goes in as a plain number. The row carries the minus for you.',
     recentEntries: 'RECENT ENTRIES',

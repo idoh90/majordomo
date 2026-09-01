@@ -998,6 +998,33 @@ export interface VoicePack {
       /** detail sheet: the heading over the session's exercises */
       detailTitle: string
     }
+    /**
+     * RECASTING — the method step reached from a session that already exists.
+     * Backing out of an edit lands on the same picker a new workout opens on,
+     * and taking another door from it rewrites the record: an exercise list, a
+     * run's figures and the typed session size are each carried by exactly one
+     * method. So the step says which session it is standing in, marks the door
+     * that session already came through, and the guard names what a change
+     * would cost before it costs it.
+     */
+    recast: {
+      /** sheet title on the method step while a stored session is open — the
+       *  new-workout title there reads as a blank slate, which is the whole
+       *  reason a wipe felt like a fresh log */
+      stepTitle: string
+      /** tag on the door this session is currently logged through */
+      currentTag: string
+      /** the guard. `body` receives only what would actually be dropped —
+       *  every field null-when-absent, at least one always set. */
+      confirmTitle: string
+      confirmBody: (v: {
+        exercises: { exercises: number; sets: number } | null
+        run: { km: string | null; time: string | null } | null
+        setsTotal: number | null
+        durationMin: number | null
+      }) => string
+      confirmLabel: string
+    }
     /** weekly-goal card + its dialog */
     weekTitle: string
     goalMet: string
@@ -1510,11 +1537,20 @@ export interface VoicePack {
     /** blur-toggle pill labels: action to take (hide when shown, reveal when hidden) */
     hide: string
     reveal: string
-    /** snapshot sheet: a priced account stamped from live quotes… */
+    /** snapshot sheet + accounts list: a priced account valued from live quotes */
     stampLive: string
-    /** …or held at its last saved value because quotes/₪ rate are missing */
+    /** accounts list: a priced account with no quote, reading its last saved
+     *  balance. The title has to name the way out — a policy with no door is how
+     *  a deposit became unrecordable */
     stampHeld: string
     stampHeldTitle: string
+    /** snapshot sheet: a priced account with no quote takes a TYPED balance, so
+     *  its row is an ordinary input wearing this tag */
+    stampNoQuote: string
+    stampNoQuoteTitle: string
+    /** the visible line under the list saying what those rows want (a title
+     *  attribute is nothing on a phone) */
+    stampNoQuoteNote: (accounts: number) => string
     /** snapshot sheet: a debt row asks what is OWED, so a minus is refused there
      *  — a bank app shows a mortgage as −400,000, and typing that made the debt
      *  ADD to net worth instead of subtracting */
