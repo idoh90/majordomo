@@ -95,14 +95,27 @@ technical version.
   origin and the clock (the offer's window is 04:00–22:00, so the default
   `Asia/Tokyo` is what puts "now" inside it). No DST coverage, and the native
   `<input type="time">` is driven by value rather than by the OS wheel.
+- `npm run check:recast` — the **recast harness** (`scripts/recast-harness.mjs`): drives
+  headless Chromium through the running dev server and asserts the Grounds'
+  edit-a-session contract — backing out of an edit lands on a method picker that says
+  it is standing over a record and marks the door that record came through, a method
+  change that would drop the session's exercises, sets, run figures or typed session
+  size names them before it does it, cancelling costs the record nothing, a costless
+  change is never interrupted, and a confirmed recast still does what it always did.
+  Needs `npm run dev` up; exits non-zero on failure. `CHROME_PATH` / `RECAST_BASE`
+  override the browser and the origin. Desktop clicks only — nothing here proves a
+  thumb can reach the confirm's buttons.
 - No test runner **for the app at large**; verification is done in the browser. The
-  Manor and THE NIGHT are the exceptions — its contract is numeric, and "looks plausible" is
-  exactly how a cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness
+  Manor, THE NIGHT and the Grounds' recast are the exceptions — their contracts are
+  numeric, and "looks plausible" is
+  exactly how a cross-midnight drag silently rewrote 13 h to 2 h, and how three taps
+  came to wipe three exercises and nine sets off a saved session. Re-run the harness
   after touching `WeekGrid.tsx` / `ManorScreen.tsx`. Its B1/B2 checks read the
   **brief's own exam clause**, and the brief types itself out on a first visit —
   they press SKIP before every read, so a fresh context does not measure a
   half-written sentence. It does NOT cover the mobile 350 ms long-press drag
-  (not drivable by synthetic events) or DST.
+  (not drivable by synthetic events) or DST. Re-run `check:recast` after touching
+  `AddWorkoutSheet.tsx` / `MethodStep.tsx` / `lib/recast.ts`.
 
 ## Ship: it is live
 
@@ -1070,6 +1083,8 @@ auto-enter Training so they land on the right screen.
   to plot recovery curves without React round-trips)
 - `window.__volume` / `window.__trainNext` — the volume estimator and the
   train-next selector (probe `sessionBudget`/`sessionSets`/`trainNext` the same way)
+- `window.__recast` — what a mid-edit method change would cost (`recastLoss`), the
+  model behind the add sheet's guard
 - `window.__nutrition` — the nutrition module (`dailyTargets`, `bmr`, … for macro checks)
 
 ## Environment quirk (this machine's Claude browser pane)

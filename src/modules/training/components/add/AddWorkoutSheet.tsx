@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type {
   CatalogueExercise,
   MuscleId,
@@ -16,6 +16,7 @@ import { relativeDayLabel, timeLabel } from '../../../../core/dates'
 import { track } from '../../../../core/telemetry'
 import { voice } from '../../../../core/voice'
 import { Sheet } from '../../../../core/ui/Sheet'
+import { ConfirmDialog } from '../../../../core/ui/ConfirmDialog'
 import type { BlockLink } from './BlockLinkNote'
 import { EffortStep } from './EffortStep'
 import { ExercisesStep } from './ExercisesStep'
@@ -34,6 +35,7 @@ import {
   type DraftExercise,
   type DraftSet,
 } from '../../lib/exercises'
+import { recastLoss, type LogMethod, type RecastLoss } from '../../lib/recast'
 import { clampPace, EFFORT_LIVE, runEffort } from '../../lib/pace'
 import { strainToColor } from '../../lib/strainColor'
 import { SKINS } from '../../../../core/ui/skins'
@@ -43,8 +45,10 @@ export type Selection = Partial<Record<MuscleId, 'primary' | 'secondary'>>
 
 type Step = 'method' | 'ppl' | 'muscles' | 'run' | 'sport' | 'exercises' | 'effort'
 /** 'exercises' is a DRAFT method only — it saves as 'custom' with an exercise
- *  list attached, so nothing that classifies a session has to learn a shape */
-type Method = 'ppl' | 'custom' | 'run' | 'sport' | 'exercises'
+ *  list attached, so nothing that classifies a session has to learn a shape.
+ *  The union lives in lib/recast, which is the other thing that reasons about
+ *  which method carries what. */
+type Method = LogMethod
 
 /** log-fulfills-block aim: follow the ranked match, claim a named block, or
  *  claim none. Any change of time re-ranks, so the override dies with it. */
@@ -125,7 +129,17 @@ function reducer(d: Draft, a: Action): Draft {
   switch (a.type) {
     case 'method':
       if (a.method === 'ppl') return { ...d, method: 'ppl', step: 'ppl' }
-      if (a.method === 'exercises') return { ...d, method: 'exercises', step: 'exercises' }
+      if (a.method === 'exercises')
+        return {
+          ...d,
+          method: 'exercises',
+          step: 'exercises',
+          // arriving from ANOTHER door, the muscles that door installed are not
+          // this session's — the list is (withExercises' rule), so re-derive.
+          // Re-entering the same door changes nothing, which is what keeps a
+          // stored selection round-tripping verbatim on an untouched edit.
+          selection: d.method === 'exercises' ? d.selection : deriveSelection(d.exercises),
+        }
       if (a.method === 'run')
         return { ...d, method: 'run', selection: runSelection(), repStyle: 'light', step: 'run' }
       // the two ways into the sport step, both sealed while the door is shut,
@@ -335,6 +349,12 @@ const TITLES: Record<Step, string> = {
   effort: 'How did it go?',
 }
 
+/** the method step's title depends on whose session it is: 'Log Workout' over
+ *  an existing record reads as a blank slate, which is exactly how a recast
+ *  came to feel like starting a new one */
+const stepTitle = (step: Step, editing: boolean): string =>
+  step === 'method' && editing ? voice.grounds.recast.stepTitle : TITLES[step]
+
 const STEP_INDEX: Record<Step, number> = {
   method: 0,
   ppl: 1,
@@ -373,11 +393,15 @@ export function AddWorkoutSheet({
   const [draft, dispatch] = useReducer(reducer, undefined, freshDraft)
   /** the draft as the sheet opened — what "dirty" is measured against */
   const opened = useRef<Draft>(draft)
+  /** a method change held at the door because it would cost the session
+   *  something no other method carries — see lib/recast */
+  const [recast, setRecast] = useState<{ method: Method; loss: RecastLoss } | null>(null)
 
   useEffect(() => {
     if (!open) return
     const fresh = editing ? draftFromWorkout(editing) : freshDraft()
     opened.current = fresh
+    setRecast(null) // a stale guard must never greet the next opening
     dispatch({ type: 'reset', draft: fresh })
     if (devStartStep && !editing)
       dispatch({
@@ -577,6 +601,16 @@ export function AddWorkoutSheet({
   const canBack =
     draft.step !== 'method' && !(draft.step === 'effort' && draft.method === 'sport' && !SPORT_DOOR_OPEN)
 
+  /** Save writes every method's fields, so taking a different door drops
+   *  whatever only the old one carried — on an edit that is a deletion from
+   *  the record, with no undo behind it. A change that costs nothing goes
+   *  straight through; one that costs something says so first. */
+  const chooseMethod = (method: Method) => {
+    const loss = recastLoss(draft, method)
+    if (loss) setRecast({ method, loss })
+    else dispatch({ type: 'method', method })
+  }
+
   return (
     <Sheet open={open} onClose={onClose} dirty={dirty}>
       <div className="mb-4 flex items-center gap-2">
@@ -598,7 +632,9 @@ export function AddWorkoutSheet({
             </svg>
           </button>
         )}
-        <h2 className="font-display text-xl font-bold tracking-wide">{TITLES[draft.step]}</h2>
+        <h2 className="font-display text-xl font-bold tracking-wide">
+          {stepTitle(draft.step, editing !== null)}
+        </h2>
         <div className="ml-auto flex items-center gap-1.5" aria-hidden>
           {[0, 1, 2].map((i) => (
             <span
@@ -616,7 +652,7 @@ export function AddWorkoutSheet({
 
       <div key={draft.step} className="animate-[step-in_220ms_ease-out] pb-2">
         {draft.step === 'method' && (
-          <MethodStep onChoose={(method) => dispatch({ type: 'method', method })} />
+          <MethodStep current={editing ? draft.method : null} onChoose={chooseMethod} />
         )}
         {draft.step === 'ppl' && (
           <PplStep value={draft.ppl} onChoose={(ppl) => dispatch({ type: 'ppl', ppl })} />
@@ -701,6 +737,18 @@ export function AddWorkoutSheet({
           />
         )}
       </div>
+
+      <ConfirmDialog
+        open={recast !== null}
+        title={voice.grounds.recast.confirmTitle}
+        message={recast ? voice.grounds.recast.confirmBody(recast.loss) : undefined}
+        confirmLabel={voice.grounds.recast.confirmLabel}
+        onConfirm={() => {
+          if (recast) dispatch({ type: 'method', method: recast.method })
+          setRecast(null)
+        }}
+        onCancel={() => setRecast(null)}
+      />
     </Sheet>
   )
 }

@@ -148,6 +148,9 @@ if (import.meta.env.DEV) {
   import('./lib/trainNext').then((m) => {
     ;(window as unknown as Record<string, unknown>).__trainNext = m
   })
+  import('./lib/recast').then((m) => {
+    ;(window as unknown as Record<string, unknown>).__recast = m
+  })
 
   // ?demo seeds a fresh browser profile with fixture workouts (screenshot/testing aid)
   if (
