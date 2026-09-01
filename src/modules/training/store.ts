@@ -33,6 +33,7 @@ interface WorkoutState {
   skin: string
   addWorkout: (w: Workout) => void
   addCustomExercise: (e: CatalogueExercise) => void
+  updateCustomExercise: (id: string, patch: Partial<Omit<CatalogueExercise, 'id'>>) => void
   deleteCustomExercise: (id: string) => void
   updateWorkout: (id: string, patch: Partial<Omit<Workout, 'id'>>) => void
   deleteWorkout: (id: string) => void
@@ -86,8 +87,17 @@ export const useWorkoutStore = create<WorkoutState>()(
       },
       addCustomExercise: (e) =>
         set((s) => ({ customExercises: [...s.customExercises, e].sort(byName) })),
-      // no surface calls this yet: a delete path has to exist alongside the
-      // tombstone it owes, not be added later on top of records already synced
+      // a rename is an UPSERT, so the sync engine's diff carries it without
+      // anything being declared here — only deletion is ever declared. It
+      // rewrites nothing already logged: a workout copies its exercises' names
+      // and muscles at save time (the PPL rule), so history keeps the spelling
+      // it was recorded under and only the picker moves on.
+      updateCustomExercise: (id, patch) =>
+        set((s) => ({
+          customExercises: s.customExercises
+            .map((e) => (e.id === id ? { ...e, ...patch, id } : e))
+            .sort(byName),
+        })),
       deleteCustomExercise: (id) => {
         set((s) => ({ customExercises: s.customExercises.filter((e) => e.id !== id) }))
         noteDeleted('grounds', 'exercise', [id])

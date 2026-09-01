@@ -26,7 +26,7 @@ import { PplStep } from './PplStep'
 import { SportStep } from './SportStep'
 import { DEFAULT_PACE, EMPTY_RUN_FIELDS, RunStep, runFieldSeconds, type RunFields } from './RunStep'
 import { secondsToMinutes } from '../../lib/runs'
-import { gymEffort } from '../../lib/gymEffort'
+import { gymEffort, gymEffortPrefill } from '../../lib/gymEffort'
 import {
   deriveSelection,
   EMPTY_SET,
@@ -86,6 +86,7 @@ type Action =
   | { type: 'continue' }
   | { type: 'back' }
   | { type: 'exercise-add'; exercise: CatalogueExercise }
+  | { type: 'exercise-edited'; exercise: CatalogueExercise }
   | { type: 'exercise-remove'; index: number }
   | { type: 'set-add'; exercise: number }
   | { type: 'set-remove'; exercise: number; set: number }
@@ -98,6 +99,16 @@ type Action =
   | { type: 'performedAt'; value: string }
   | { type: 'link'; value: LinkChoice }
   | { type: 'reset'; draft: Draft }
+
+/** the muscles a PPL day resolves to — copied onto the record at save, so
+ *  tuning PPL_MAP later never rewrites history. Shared with the step's effort
+ *  prefill: the day and the effort it suggests must read the same spread. */
+function pplSelection(ppl: PplType): Selection {
+  const selection: Selection = {}
+  for (const m of PPL_MAP[ppl].primary) selection[m] = 'primary'
+  for (const m of PPL_MAP[ppl].secondary) selection[m] = 'secondary'
+  return selection
+}
 
 /** a run's muscles are resolved at save time, like PPL — tuning RUN_MAP later
  *  never rewrites history */
@@ -146,12 +157,8 @@ function reducer(d: Draft, a: Action): Draft {
       // so no build can reach a step it has no picker for (the other is 'back')
       if (a.method === 'sport') return SPORT_DOOR_OPEN ? { ...d, method: 'sport', step: 'sport' } : d
       return { ...d, method: 'custom', step: 'muscles' }
-    case 'ppl': {
-      const selection: Selection = {}
-      for (const m of PPL_MAP[a.ppl].primary) selection[m] = 'primary'
-      for (const m of PPL_MAP[a.ppl].secondary) selection[m] = 'secondary'
-      return { ...d, ppl: a.ppl, selection, step: 'effort' }
-    }
+    case 'ppl':
+      return { ...d, ppl: a.ppl, selection: pplSelection(a.ppl), step: 'effort' }
     case 'sport': {
       // resolved at save time like PPL and runs — tuning SPORT_MAP later never
       // rewrites history; the rep character is the sport's, not the user's
@@ -180,6 +187,28 @@ function reducer(d: Draft, a: Action): Draft {
           sets: [EMPTY_SET],
         },
       ])
+    case 'exercise-edited': {
+      // A correction made from the picker while this session already holds the
+      // exercise. The draft carries a COPY (the PPL rule — a re-vendored
+      // catalogue must never rewrite a record), so it has to be told, or the
+      // card would keep the typo the picker has just stopped showing. Only the
+      // OPEN draft is touched: sessions already saved keep their own copies.
+      const hit = d.exercises.some((e) => e.exerciseId === a.exercise.id)
+      if (!hit) return d
+      return withExercises(
+        d,
+        d.exercises.map((e) =>
+          e.exerciseId === a.exercise.id
+            ? {
+                ...e,
+                name: a.exercise.name,
+                primary: a.exercise.primary,
+                secondary: a.exercise.secondary,
+              }
+            : e,
+        ),
+      )
+    }
     case 'exercise-remove':
       return withExercises(
         d,
@@ -463,7 +492,17 @@ export function AddWorkoutSheet({
       }
     : null
 
+  /** the one thing that stands between a draft and the store: a run that
+   *  states neither a distance nor a clock. It would save as a session that
+   *  knows neither how far nor how long — em-dashes on the RUNS card, and half
+   *  an hour on the Manor from the block fallback, none of it claimed. */
+  const saveBlocked =
+    draft.method === 'run' && runFieldSeconds(draft.run) === 0
+      ? voice.grounds.runNeedsDetail
+      : null
+
   const save = () => {
+    if (saveBlocked !== null) return
     const primary: MuscleId[] = []
     const secondary: MuscleId[] = []
     for (const [m, kind] of Object.entries(draft.selection) as [
@@ -655,7 +694,26 @@ export function AddWorkoutSheet({
           <MethodStep current={editing ? draft.method : null} onChoose={chooseMethod} />
         )}
         {draft.step === 'ppl' && (
-          <PplStep value={draft.ppl} onChoose={(ppl) => dispatch({ type: 'ppl', ppl })} />
+          <PplStep
+            value={draft.ppl}
+            onChoose={(ppl) => {
+              // The same session must earn the same effort whichever door it
+              // came through: a PPL day is a set of muscle picks like any
+              // other, so it is priced by the same function the muscle and
+              // exercise steps use. Left to the draft's own default, PUSH
+              // arrived at 7 while its four muscles picked by hand arrived at
+              // 4 — and effort is the dominant term in the strain model and
+              // feeds the calorie target, so the button pressed on the first
+              // screen was quietly deciding both.
+              // An edit re-tapping the day it was recorded as holds its
+              // recorded effort — the muscle step's held-effort rule, keyed on
+              // the day rather than on the picks it resolves to.
+              const hold = editing !== null && ppl === opened.current.ppl
+              const prefill = hold ? null : gymEffortPrefill(pplSelection(ppl))
+              if (prefill !== null) dispatch({ type: 'effort', value: prefill })
+              dispatch({ type: 'ppl', ppl })
+            }}
+          />
         )}
         {draft.step === 'muscles' && (
           <MuscleStep
@@ -678,6 +736,7 @@ export function AddWorkoutSheet({
             editingId={editing?.id}
             holdEffort={muscleUntouched}
             onAdd={(exercise) => dispatch({ type: 'exercise-add', exercise })}
+            onEdited={(exercise) => dispatch({ type: 'exercise-edited', exercise })}
             onRemove={(index) => dispatch({ type: 'exercise-remove', index })}
             onSetAdd={(exercise) => dispatch({ type: 'set-add', exercise })}
             onSetRemove={(exercise, set) => dispatch({ type: 'set-remove', exercise, set })}
@@ -732,6 +791,7 @@ export function AddWorkoutSheet({
             onPerformedAt={(value) => dispatch({ type: 'performedAt', value })}
             workouts={workouts}
             onSave={save}
+            saveBlocked={saveBlocked}
             blockLink={blockLink}
             whenInitiallyOpen={devWhenOpen}
           />

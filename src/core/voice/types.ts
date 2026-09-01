@@ -864,6 +864,10 @@ export interface VoicePack {
     /** the read-out: the time the pace works out to, or what it still wants */
     runTotal: (v: { time: string; km: string }) => string
     runNeedsDistance: string
+    /** the refusal under a blocked Continue/Save: a run that states neither a
+     *  distance nor a clock records nothing at all, so it is refused rather
+     *  than stored as a session with three dashes where its numbers go */
+    runNeedsDetail: string
     /** a stored clock held verbatim while it has no distance to pace against */
     runHeldTime: (v: { time: string }) => string
     /** the effort line under the band — prefilled, or waiting on a distance */
@@ -983,6 +987,18 @@ export interface VoicePack {
       createSave: string
       createNeedsName: string
       createNeedsPrimary: string
+      /** the same form reopened on an exercise the user already wrote: the
+       *  door into it from the picker, its heading, its save, the note that
+       *  sessions already logged keep the spelling they were saved with, and
+       *  the delete with the confirm standing in front of it */
+      editAria: (v: { name: string }) => string
+      editTitle: string
+      editSave: string
+      editHistoryNote: string
+      editDelete: string
+      editDeleteTitle: string
+      editDeleteBody: (v: { name: string }) => string
+      editDeleteConfirm: string
       /** a set row: the add button, and the tally under an exercise's name */
       addSet: string
       setCount: (n: number) => string
