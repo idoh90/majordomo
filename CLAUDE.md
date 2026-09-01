@@ -197,6 +197,33 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   silently, which is the correct direction.
 - **`.vercelignore` only governs CLI uploads** — a Git build clones the whole repo.
   Harmless (only `dist/` is served), but never rely on it to hide anything.
+- **`public/404.html` is the estate's own not-found page** — Vercel serves any
+  `404.html` sitting at the output root for an unmatched path (with a real 404
+  status), and Vite copies `public/` there verbatim, so it needs no `vercel.json`
+  entry (there are no `rewrites`, so nothing swallows the path first). It is
+  **self-contained for the reason `BootFailure.tsx` is**: no stylesheet, no font,
+  no bundle, its own copy of the preset tokens. `base: './'` means the app's
+  relative asset paths resolve against whatever depth was typed, so a linked
+  stylesheet would be a second 404 on the 404 — and a page that speaks when a
+  request found nothing must not depend on the thing that just failed. Its copy is
+  duplicated from `src/core/voice/` under the same exception the Open Graph block
+  claims above — static HTML is served before any JavaScript runs — so a voice
+  change has to be carried across by hand.
+- **The 404's one script is EXTERNAL, and the CSP is why.** `script-src 'self'`
+  admits `/404.js` and would drop an inline block, taking the skin and the echoed
+  path with it *while the page still looked fine* — the one case where the policy
+  fails quietly rather than loudly. Absolute path, not relative: same reason as the
+  stylesheet. It applies the persisted `majordomo-shell` skin before paint so the
+  page arrives in the user's own palette (founder-only ids fall back to Midnight,
+  like `normalizeSkin`), and echoes the requested path through `textContent`, never
+  `innerHTML` — that string comes from the address bar. Both are enhancements: if
+  the file never arrives the page still renders, in Midnight, with the path row
+  hidden. **The service worker outranks all of it** — `navigateFallback:
+  'index.html'` means an installed client typing a bad path gets the app shell, not
+  this page, which is the better outcome offline (no dead end) and the reason the
+  fallback stays. So the 404 answers network navigations — first visits, shared
+  links, a cleared SW — which is exactly where Vercel's default black-and-white
+  error page used to show.
 - **Origins don't share storage — and this is now a real migration, not a note.**
   `localhost:5173`, `majordomo-cyan.vercel.app` and `majordomocal.com` are three
   separate estates, because localStorage is scoped per origin and **the deployed
