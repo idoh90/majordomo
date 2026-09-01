@@ -1510,11 +1510,20 @@ export interface VoicePack {
     /** blur-toggle pill labels: action to take (hide when shown, reveal when hidden) */
     hide: string
     reveal: string
-    /** snapshot sheet: a priced account stamped from live quotes… */
+    /** snapshot sheet + accounts list: a priced account valued from live quotes */
     stampLive: string
-    /** …or held at its last saved value because quotes/₪ rate are missing */
+    /** accounts list: a priced account with no quote, reading its last saved
+     *  balance. The title has to name the way out — a policy with no door is how
+     *  a deposit became unrecordable */
     stampHeld: string
     stampHeldTitle: string
+    /** snapshot sheet: a priced account with no quote takes a TYPED balance, so
+     *  its row is an ordinary input wearing this tag */
+    stampNoQuote: string
+    stampNoQuoteTitle: string
+    /** the visible line under the list saying what those rows want (a title
+     *  attribute is nothing on a phone) */
+    stampNoQuoteNote: (accounts: number) => string
     /** recent one-off spends card title */
     recentEntries: string
     /** the 10-day P/L covers only the positions whose history actually arrived */
