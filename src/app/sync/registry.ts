@@ -71,7 +71,11 @@ const shellSource: SyncSource = {
     const s = useShellStore.getState()
     // deliberately NOT here: onboarded, panelTips, wingOrder/wingsOff,
     // termsAccepted/termsAcceptedAt, telemetryOff — facts about a device,
-    // not the estate (consent especially: each browser answers its own door)
+    // not the estate (consent especially: each browser answers its own door).
+    // THE VALET's ledger (`majordomo-butler` — wave-offs, what he has already
+    // said today, which rooms he has offered) has no source at all, for the
+    // same reason: whether one screen's butler has spoken this morning is not
+    // a record.
     return [rec('shell', 'pref', 'skin', s.skin), rec('shell', 'pref', 'weekStart', s.weekStart)]
   },
   subscribe: (onChange) => useShellStore.subscribe(onChange),

@@ -37,6 +37,11 @@ export type TelemetryEvent =
   | 'crew_shared'
   | 'crew_joined'
   | 'pwa_installed'
+  /** THE VALET's card was opened from its folded chip — carries the matter id
+   *  (a closed feature vocabulary, never anything the matter is ABOUT) */
+  | 'butler_open'
+  /** THE VALET's way-through was taken — same closed vocabulary */
+  | 'butler_followed'
   /** the settings switch turned analytics off — the last event a device sends */
   | 'telemetry_off'
 

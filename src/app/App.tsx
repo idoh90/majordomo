@@ -19,6 +19,7 @@ import { SyncButton } from './SyncButton'
 import { useAuthUi } from './authUi'
 import { offReason } from '../core/sync/gate'
 import { TabBar } from './TabBar'
+import { Butler } from './butler/Butler'
 import { Onboarding } from './onboarding/Onboarding'
 import { useOnboarding } from './onboarding/store'
 import { ConsentDoor } from './ConsentDoor'
@@ -149,6 +150,10 @@ function Shell() {
 
       {/* the first-time setup, the same way: null until a stage is running */}
       <Onboarding />
+
+      {/* the butler, the same way again: silent unless something needs saying,
+          and silent throughout the walk above — one of them talks at a time */}
+      <Butler />
     </>
   )
 }

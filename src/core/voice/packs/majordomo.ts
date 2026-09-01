@@ -1825,6 +1825,51 @@ export const majordomoPack: VoicePack = {
       promptBlurb: 'A single line above the week on a morning that has no note. Waved off, it waits until tomorrow.',
     },
   },
+  butler: {
+    matter: {
+      overdueHomework: (n) =>
+        n === 1
+          ? 'One piece of homework is past its day.'
+          : `${n} pieces of homework are past their day.`,
+      overdueMilestone: ({ venture, title }) =>
+        `The "${title}" milestone on ${venture} is past its date.`,
+      overdueDelivery: ({ venture, title }) =>
+        `The "${title}" task on ${venture} is past its delivery hour.`,
+      workshopReport: (n) =>
+        n === 1
+          ? 'One bench session still needs logging.'
+          : `${n} bench sessions still need logging.`,
+      benchLong: ({ since }) => `The bench clock has been running since ${since}.`,
+      gcalReconnect:
+        'The Google calendar connection has lapsed. Reconnecting takes a moment.',
+      syncChoice:
+        'This device and the registry each hold records. Sync is waiting on your word, sir.',
+      pricesDegraded: 'The Vault is quoting prices it cannot stand behind. Worth a refresh.',
+    },
+    offer: {
+      study:
+        'The Study is there when you want it: subjects, weekly hours, and exams with the days counted down.',
+      workshop:
+        'The Workshop holds side projects — a bench clock, weekly hours, and a pegboard for the loose ends.',
+      ledger:
+        'The Ledger keeps the accounts: net worth, a monthly budget, and what the month has actually cost.',
+      night:
+        'THE NIGHT takes two clock times of a morning and works out the rest. Yours if it suits, sir.',
+      gcal: 'The Manor can sit alongside your Google calendar, both ways, if that would help.',
+    },
+    cta: {
+      go: 'TAKE ME THERE',
+      settings: 'OPEN SETTINGS',
+      write: 'WRITE IT DOWN',
+    },
+    dismiss: 'Not today',
+    chipAria: 'The Majordomo has a note',
+    settings: {
+      toggle: "The Majordomo's notes",
+      blurb:
+        'A line in the corner when something has been forgotten. One matter at a time, waved off until tomorrow, and silent when nothing needs you.',
+    },
+  },
   watch: {
     onDuty: 'ON DUTY · THIS WEEK',
     nextWatch: 'NEXT SHIFT',
