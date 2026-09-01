@@ -105,6 +105,22 @@ export function WorkshopScreen() {
     useWorkshopUi.getState().clearBoardRequest()
   }, [boardRequested])
 
+  // …and a MATTERS PENDING card or a Manor marker chip posts the RECORD it
+  // stands for. That is two hops — open the board, then open the thing on it
+  // — so the request is held here and handed down rather than left in the
+  // mailbox for a second consumer to find.
+  const recordRequested = useWorkshopUi((s) => s.recordRequested)
+  const [pendingRecord, setPendingRecord] = useState<{
+    kind: 'milestone' | 'card'
+    id: string
+  } | null>(null)
+  useEffect(() => {
+    if (!recordRequested) return
+    setBoardFor(recordRequested.ventureId)
+    setPendingRecord({ kind: recordRequested.kind, id: recordRequested.id })
+    useWorkshopUi.getState().clearRecordRequest()
+  }, [recordRequested])
+
   // upkeep on entry: heal markers, drop meta for events deleted Manor-side,
   // and true up my crew-ledger entries against my own sessions. All
   // sandbox-guarded (reconcileMarkers internally; the rest here).
@@ -133,7 +149,13 @@ export function WorkshopScreen() {
   // the board replaces the wing's furniture but keeps the sheets and the
   // toast mounted — the tab bar's + must reach BOOK BENCH TIME from either room
   const wing = board ? (
-    <Board venture={board} onBack={() => setBoardFor(null)} butler={butler} />
+    <Board
+      venture={board}
+      onBack={() => setBoardFor(null)}
+      openRecord={pendingRecord}
+      onRecordOpened={() => setPendingRecord(null)}
+      butler={butler}
+    />
   ) : (
     <div className="mt-4 flex flex-col gap-4">
       {active.length > 0 && <WorkshopBriefing />}
@@ -158,7 +180,10 @@ export function WorkshopScreen() {
             sessions={sessions}
             ventures={ventures}
             now={now}
-            onOpen={setBoardFor}
+            onOpen={(m) => {
+              setBoardFor(m.ventureId)
+              setPendingRecord({ kind: 'milestone', id: m.id })
+            }}
           />
           <div className="grid items-start gap-4 lg:grid-cols-[300px_1fr]">
             <Desk
@@ -438,7 +463,7 @@ function MattersPending({
   sessions: Record<string, SessionMeta>
   ventures: Venture[]
   now: number
-  onOpen: (ventureId: string) => void
+  onOpen: (milestone: Milestone) => void
 }) {
   const milestones = useWorkshopStore((s) => s.milestones)
   const workEntries = useWorkshopStore((s) => s.workEntries)
@@ -462,8 +487,9 @@ function MattersPending({
               <button
                 key={m.id}
                 type="button"
-                onClick={() => onOpen(m.ventureId)}
-                className="min-w-[230px] flex-1 rounded-xl border bg-panel-2 px-4 py-3.5 text-left"
+                aria-label={voice.workshop.editRow}
+                onClick={() => onOpen(m)}
+                className="min-w-[230px] flex-1 rounded-xl border bg-panel-2 px-4 py-3.5 text-left transition-colors hover:border-[var(--color-w-workshop)]"
                 style={{
                   borderColor: overdue
                     ? 'color-mix(in srgb, var(--color-danger) 40%, transparent)'

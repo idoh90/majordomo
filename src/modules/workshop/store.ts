@@ -103,6 +103,7 @@ interface WorkshopState {
   deleteThread: (id: string) => void
 
   addMilestone: (ventureId: string, title: string, on: string) => void
+  updateMilestone: (id: string, patch: Partial<Omit<Milestone, 'id' | 'ventureId'>>) => void
   setMilestoneDone: (id: string, done: boolean) => void
   deleteMilestone: (id: string) => void
 
@@ -440,6 +441,15 @@ export const useWorkshopStore = create<WorkshopState>()(
         }
         set((s) => ({ milestones: [...s.milestones, ms] }))
         syncMarker(msRef(ms.id), effectiveMsDay(ms, Date.now()), voice.workshop.markerMs(ms.title))
+      },
+      updateMilestone: (id, patch) => {
+        set((s) => ({
+          milestones: s.milestones.map((m) => (m.id === id ? { ...m, ...patch, id } : m)),
+        }))
+        // countFrom is deliberately NOT in any caller's patch: moving the day
+        // must not reset the hours already counted toward it
+        const ms = get().milestones.find((m) => m.id === id)
+        if (ms) syncMarker(msRef(id), effectiveMsDay(ms, Date.now()), voice.workshop.markerMs(ms.title))
       },
       setMilestoneDone: (id, done) => {
         set((s) => ({

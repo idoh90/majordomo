@@ -1460,6 +1460,7 @@ export const majordomoPack: VoicePack = {
     board: {
       back: 'THE SHELF',
       hang: '+ HANG A CARD',
+      amend: 'EDIT THIS CARD',
       empty: 'A clean bench, sir. Pin the first card.',
       hangFirst: '+ HANG A CARD',
       colOf: ({ col, total }) => `${col} / ${total}`,
@@ -1533,6 +1534,7 @@ export const majordomoPack: VoicePack = {
       titlePlaceholder: 'e.g. Re-rig the tail servo',
       msPlaceholder: 'Name the next marker…',
       msHint: "Each marker takes a chip on the Manor's week, sir.",
+      msEditHint: 'Moving the day keeps the hours already counted toward it.',
       theDay: 'THE DAY',
       ctaOpen: 'OPEN THE VENTURE',
       ctaRename: 'SAVE',
@@ -1541,7 +1543,9 @@ export const majordomoPack: VoicePack = {
       ctaHang: 'HANG IT',
       ctaSaveCard: 'SAVE',
       ctaMs: 'MARK THE DAY',
+      ctaSaveMs: 'SAVE',
       cancel: 'CANCEL',
+      doneEditing: 'LEAVE IT',
       takeDown: 'TAKE THIS CARD DOWN',
       takeDownTitle: 'Take this card down?',
       takeDownBody: ({ title, threads }) =>
@@ -1549,9 +1553,16 @@ export const majordomoPack: VoicePack = {
           ? `${title} comes off the wall, and the ${lower(threads)} ${plural(threads, 'thread', 'threads')} to it ${plural(threads, 'is', 'are')} cut. This cannot be undone.`
           : `${title} comes off the wall. This cannot be undone.`,
       takeDownYes: 'Take it down',
+      unmark: 'UNMARK THIS DAY',
+      unmarkTitle: 'Unmark this day?',
+      unmarkBody: (title) =>
+        `${title} goes, with its countdown and its chip on the Manor. This cannot be undone.`,
+      unmarkYes: 'Unmark it',
     },
     milestonesTitle: (name) => `MILESTONES — ${name}`,
     addMs: '+ ADD',
+    editMs: 'AMEND THIS MARKER',
+    editRow: 'Edit this milestone',
     toast: {
       benchStart: 'The bench is yours, sir.',
       benchStop: ({ h, m }) => {
@@ -1583,6 +1594,7 @@ export const majordomoPack: VoicePack = {
       dueSet: 'Noted. The chip has its day on the Manor.',
       dueCleared: 'No deadline. The chip leaves the Manor.',
       msAdded: 'Marked. The chip has its day on the Manor.',
+      msEdited: 'Amended. The chip follows the new day.',
       msDone: 'Struck. The chip leaves the Manor.',
       msUndone: 'Back on the board.',
       msGone: 'Unmarked.',

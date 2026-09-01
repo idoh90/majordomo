@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { localDayKey } from '../../core/dates'
+import { addDays, localDayKey, startOfLocalDay } from '../../core/dates'
 import { ConfirmDialog } from '../../core/ui/ConfirmDialog'
 import { Sheet } from '../../core/ui/Sheet'
 import { useNow } from '../../core/useNow'
@@ -16,6 +16,7 @@ import {
   StatusPill,
   Stepper,
   fdate,
+  fdatem,
   hhmm,
 } from './bits'
 import {
@@ -82,10 +83,17 @@ interface PlaceSpot {
 export function Board({
   venture,
   onBack,
+  openRecord,
+  onRecordOpened,
   butler,
 }: {
   venture: Venture
   onBack: () => void
+  /** a record the wing asked to open for amending — a MATTERS PENDING card,
+   *  or a marker chip on the Manor. Cleared through `onRecordOpened` so a
+   *  later visit does not reopen the same sheet. */
+  openRecord?: { kind: 'milestone' | 'card'; id: string } | null
+  onRecordOpened?: () => void
   butler: (msg: string) => void
 }) {
   const activeEvents = useEventsStore((s) => (s.sandbox ? s.sandbox.events : s.events))
@@ -99,6 +107,8 @@ export function Board({
 
   const [sheet, setSheet] = useState<'hang' | 'milestones' | 'column' | 'crew' | null>(null)
   const [editCard, setEditCard] = useState<BoardCard | null>(null)
+  /** the marker the milestones sheet should open on, when it was asked for */
+  const [msOpenOn, setMsOpenOn] = useState<string | null>(null)
   /** where a press on bare board asked for the new card to go */
   const [placeAt, setPlaceAt] = useState<PlaceSpot | null>(null)
   /** the heading whose column list is open — or was, behind a card sheet */
@@ -151,6 +161,21 @@ export function Board({
     setBackToColumn(true)
     setSheet('hang')
   }
+
+  // the wing handed over a record to open. A milestone opens the milestones
+  // sheet on it; a card opens its own sheet. Either way the request is handed
+  // back as consumed, so returning to this board later opens nothing.
+  useEffect(() => {
+    if (!openRecord) return
+    if (openRecord.kind === 'milestone') {
+      setMsOpenOn(openRecord.id)
+      setSheet('milestones')
+    } else {
+      const card = useWorkshopStore.getState().cards.find((c) => c.id === openRecord.id)
+      if (card) openEdit(card)
+    }
+    onRecordOpened?.()
+  }, [openRecord])
 
   const closeHangSheet = () => {
     setEditCard(null)
@@ -225,7 +250,10 @@ export function Board({
         </span>
         <button
           type="button"
-          onClick={() => setSheet('milestones')}
+          onClick={() => {
+            setMsOpenOn(null)
+            setSheet('milestones')
+          }}
           className="rounded-pill border px-3 py-1.5 font-display text-[9.5px] font-semibold tracking-[0.13em] transition-colors hover:text-ink [font-variant-numeric:tabular-nums]"
           style={{
             borderColor: 'color-mix(in srgb, var(--color-w-workshop) 35%, transparent)',
@@ -332,9 +360,13 @@ export function Board({
       />
       <MilestonesSheet
         open={sheet === 'milestones'}
-        onClose={() => setSheet(null)}
+        onClose={() => {
+          setSheet(null)
+          setMsOpenOn(null)
+        }}
         venture={venture}
         milestones={milestones.filter((m) => m.ventureId === venture.id)}
+        openOn={msOpenOn}
         now={now}
         butler={butler}
       />
@@ -2214,7 +2246,12 @@ function HangCardSheet({
 
   return (
     <Sheet open={open} onClose={onClose}>
-      <h2 className="card-title">{voice.workshop.board.hang.replace(/^\+\s*/, '')}</h2>
+      {/* the sheet has always said HANG A CARD, amending one included — and a
+          chip on the Manor now walks people straight into it, where "hang a
+          card" reads as an invitation to make a second one */}
+      <h2 className="card-title">
+        {editing ? voice.workshop.board.amend : voice.workshop.board.hang.replace(/^\+\s*/, '')}
+      </h2>
       <div className="mt-4 inline-flex gap-1 rounded-pill border border-line bg-panel p-1">
         {(['title', 'note', 'task', 'link'] as const).map((t) => (
           <button
@@ -2439,6 +2476,7 @@ function MilestonesSheet({
   onClose,
   venture,
   milestones,
+  openOn,
   now,
   butler,
 }: {
@@ -2446,29 +2484,89 @@ function MilestonesSheet({
   onClose: () => void
   venture: Venture
   milestones: Milestone[]
+  /** a marker the wing asked to be opened for amending (a MATTERS PENDING
+   *  card, or a chip on the Manor) */
+  openOn?: string | null
   now: number
   butler: (msg: string) => void
 }) {
+  /**
+   * The form below the list does double duty: with nothing selected it adds,
+   * and with a marker selected it amends that one. Keeping it in the SAME
+   * sheet rather than stacking a second one means the list stays on screen —
+   * which is the point, since re-dating a marker is usually done by looking
+   * at what sits either side of it.
+   */
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [onDays, setOnDays] = useState(14)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  /** the day the stepper counts FROM, frozen on open — `now` ticks, and a
+   *  sheet left open across midnight must not walk a marker forward on save */
+  const [from, setFrom] = useState(() => startOfLocalDay(new Date(now)).getTime())
+
+  const editing = editingId ? (milestones.find((m) => m.id === editingId) ?? null) : null
+  const seedTitle = editing?.title ?? ''
+  const seedDays = editing ? daysUntil(editing.on, from) : 14
+
+  useEffect(() => {
+    if (!open) {
+      setEditingId(null)
+      setConfirmDelete(false)
+      return
+    }
+    setFrom(startOfLocalDay(new Date(Date.now())).getTime())
+    // `now` is read for the freeze, never watched — see `from` above
+  }, [open])
+
+  // the wing hands over a marker to open on; a request for one that is gone
+  // is ignored, and the sheet is just a list again
+  useEffect(() => {
+    if (!open || !openOn) return
+    setEditingId(milestones.some((m) => m.id === openOn) ? openOn : null)
+  }, [open, openOn])
+
+  // load whichever marker is selected into the form — and clear it back to a
+  // fresh add when nothing is
+  useEffect(() => {
+    if (!open) return
+    setTitle(seedTitle)
+    setOnDays(seedDays)
+    setConfirmDelete(false)
+  }, [open, editingId, seedTitle, seedDays])
 
   const rows = [...pendingMilestones(milestones), ...milestones.filter((m) => m.done)]
-  const day = new Date(now + onDays * 86_400_000)
+  // "differs from the store", not "was touched" — the SpendSheet's rule
+  const dirty = title !== seedTitle || onDays !== seedDays
+  // amending has to REPRESENT the marker it opened on, so its range stretches
+  // to hold one already overdue, or dated beyond the reach adding allows
+  const minDays = editing ? Math.min(0, seedDays) : 1
+  const maxDays = editing ? Math.max(180, seedDays) : 180
+  const day = addDays(new Date(from), onDays)
 
-  const add = () => {
+  const save = () => {
     const trimmed = title.trim()
     if (!trimmed) {
       butler(voice.workshop.toast.titleFirst)
       return
     }
-    useWorkshopStore.getState().addMilestone(venture.id, trimmed, localDayKey(day))
+    const store = useWorkshopStore.getState()
+    if (editing) {
+      // countFrom is left alone: moving the day must not reset the hours
+      // already counted toward it
+      store.updateMilestone(editing.id, { title: trimmed, on: localDayKey(day) })
+      butler(voice.workshop.toast.msEdited)
+      setEditingId(null)
+      return
+    }
+    store.addMilestone(venture.id, trimmed, localDayKey(day))
     butler(voice.workshop.toast.msAdded)
     setTitle('')
     setOnDays(14)
   }
 
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={onClose} dirty={dirty}>
       <h2 className="card-title">{voice.workshop.milestonesTitle(venture.name.toUpperCase())}</h2>
       <div className="mt-2 flex flex-col">
         {rows.length === 0 && (
@@ -2477,8 +2575,12 @@ function MilestonesSheet({
         {rows.map((m, i) => {
           const days = daysUntil(m.on, now)
           const nextOne = !m.done && i === 0
+          const on = m.id === editingId
           return (
-            <div key={m.id} className="flex items-baseline gap-2.5 border-b border-line py-2.5 last:border-b-0">
+            <div
+              key={m.id}
+              className="flex items-baseline gap-2.5 border-b border-line py-2.5 last:border-b-0"
+            >
               <button
                 type="button"
                 aria-label={voice.workshop.done}
@@ -2493,15 +2595,19 @@ function MilestonesSheet({
                   background: m.done || nextOne ? (m.done ? 'var(--color-ink-faint)' : COPPER) : 'transparent',
                 }}
               />
-              <span
-                className="min-w-0 flex-1 truncate text-[13px] font-semibold"
+              <button
+                type="button"
+                aria-label={voice.workshop.editRow}
+                aria-pressed={on}
+                onClick={() => setEditingId(on ? null : m.id)}
+                className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold transition-colors"
                 style={{
-                  color: m.done ? 'var(--color-ink-faint)' : 'var(--color-ink)',
+                  color: on ? COPPER : m.done ? 'var(--color-ink-faint)' : 'var(--color-ink)',
                   textDecoration: m.done ? 'line-through' : 'none',
                 }}
               >
                 {m.title}
-              </span>
+              </button>
               <span
                 className="flex-none text-[11.5px] [font-variant-numeric:tabular-nums]"
                 style={{
@@ -2511,22 +2617,11 @@ function MilestonesSheet({
                 {fdate(dayKeyToDate(m.on))}
                 {!m.done && ` · ${voice.workshop.countdown(days)}`}
               </span>
-              <button
-                type="button"
-                aria-label="Remove"
-                onClick={() => {
-                  useWorkshopStore.getState().deleteMilestone(m.id)
-                  butler(voice.workshop.toast.msGone)
-                }}
-                className="relative flex-none text-[13px] text-ink-faint transition-colors after:absolute after:-inset-2.5 after:content-[''] hover:text-danger"
-              >
-                ×
-              </button>
             </div>
           )
         })}
       </div>
-      <SheetLabel>{voice.workshop.addMs}</SheetLabel>
+      <SheetLabel>{editing ? voice.workshop.editMs : voice.workshop.addMs}</SheetLabel>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -2535,13 +2630,52 @@ function MilestonesSheet({
       />
       <SheetLabel>{voice.workshop.sheet.theDay}</SheetLabel>
       <Stepper
-        label={`${voice.workshop.countdown(onDays)} — ${fdate(day)}`}
-        minWidth={170}
-        onDec={() => setOnDays((d) => Math.max(1, d - 1))}
-        onInc={() => setOnDays((d) => Math.min(180, d + 1))}
+        label={`${voice.workshop.countdown(onDays)} — ${fdatem(day)}`}
+        minWidth={200}
+        onDec={() => setOnDays((d) => Math.max(minDays, d - 1))}
+        onInc={() => setOnDays((d) => Math.min(maxDays, d + 1))}
       />
-      <div className="mt-3.5 text-xs italic text-ink-dim">{voice.workshop.sheet.msHint}</div>
-      <SheetActions cta={voice.workshop.sheet.ctaMs} onCancel={onClose} onSave={add} />
+      <div className="mt-3.5 text-xs italic text-ink-dim">
+        {editing ? voice.workshop.sheet.msEditHint : voice.workshop.sheet.msHint}
+      </div>
+      {editing && (
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          className="mt-5 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-[10px] border py-3 font-display text-[11px] font-bold uppercase tracking-[0.14em] transition-colors"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--color-danger) 45%, transparent)',
+            background: 'color-mix(in srgb, var(--color-danger) 10%, transparent)',
+            color: 'var(--color-danger)',
+          }}
+        >
+          <TrashGlyph />
+          {voice.workshop.sheet.unmark}
+        </button>
+      )}
+      <SheetActions
+        cta={editing ? voice.workshop.sheet.ctaSaveMs : voice.workshop.sheet.ctaMs}
+        // amending, CANCEL leaves the MARKER rather than the sheet: the list
+        // is what you came for, and closing it out from under a correction is
+        // the wrong half to throw away
+        onCancel={editing ? () => setEditingId(null) : onClose}
+        onSave={save}
+        cancelLabel={editing ? voice.workshop.sheet.doneEditing : undefined}
+      />
+      <ConfirmDialog
+        open={confirmDelete && !!editing}
+        title={voice.workshop.sheet.unmarkTitle}
+        message={editing ? voice.workshop.sheet.unmarkBody(editing.title) : undefined}
+        confirmLabel={voice.workshop.sheet.unmarkYes}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => {
+          if (!editing) return
+          useWorkshopStore.getState().deleteMilestone(editing.id)
+          setConfirmDelete(false)
+          setEditingId(null)
+          butler(voice.workshop.toast.msGone)
+        }}
+      />
     </Sheet>
   )
 }

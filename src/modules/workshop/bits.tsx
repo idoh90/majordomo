@@ -6,7 +6,10 @@ import type { VentureStatus } from './types'
 /** small furniture shared by the wing screen and the board */
 
 export const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+export const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 export const fdate = (d: Date) => `${WD[d.getDay()]} ${d.getDate()}`
+/** the same date with its month — a marker half a year out needs one */
+export const fdatem = (d: Date) => `${fdate(d)} ${MON[d.getMonth()]}`
 export const hhmm = (d: Date) =>
   `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 
@@ -110,10 +113,14 @@ export function SheetActions({
   cta,
   onCancel,
   onSave,
+  cancelLabel,
 }: {
   cta: string
   onCancel: () => void
   onSave: () => void
+  /** when the left button leaves something OTHER than the sheet — amending a
+   *  marker cancels the marker, not the list it sits in */
+  cancelLabel?: string
 }) {
   return (
     <div className="mt-5 flex justify-end gap-2.5">
@@ -122,7 +129,7 @@ export function SheetActions({
         onClick={onCancel}
         className="btn-soft px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.14em]"
       >
-        {voice.workshop.sheet.cancel}
+        {cancelLabel ?? voice.workshop.sheet.cancel}
       </button>
       <button
         type="button"

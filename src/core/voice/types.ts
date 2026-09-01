@@ -1306,6 +1306,8 @@ export interface VoicePack {
     board: {
       back: string
       hang: string
+      /** the same sheet, opened on a card already on the wall */
+      amend: string
       empty: string
       hangFirst: string
       colOf: (v: { col: number; total: number }) => string
@@ -1375,6 +1377,8 @@ export interface VoicePack {
       titlePlaceholder: string
       msPlaceholder: string
       msHint: string
+      /** replaces msHint on an amend: countFrom is NOT re-seeded by a move */
+      msEditHint: string
       theDay: string
       ctaOpen: string
       ctaRename: string
@@ -1383,7 +1387,10 @@ export interface VoicePack {
       ctaHang: string
       ctaSaveCard: string
       ctaMs: string
+      ctaSaveMs: string
       cancel: string
+      /** leaves the marker being amended and returns the form to adding */
+      doneEditing: string
       /** taking a card off the wall: the button, and the question it asks
        *  first. The label is an INSTRUCTION — `toast.cardGone` is the report
        *  afterwards, and the two must never be the same string. */
@@ -1391,9 +1398,18 @@ export interface VoicePack {
       takeDownTitle: string
       takeDownBody: (v: { title: string; threads: number }) => string
       takeDownYes: string
+      /** the same question for a marker: its chip and its countdown go too */
+      unmark: string
+      unmarkTitle: string
+      unmarkBody: (title: string) => string
+      unmarkYes: string
     }
     milestonesTitle: (name: string) => string
     addMs: string
+    /** the form's heading once a row on the list above it is being amended */
+    editMs: string
+    /** accessible name for a milestone row that opens for amending */
+    editRow: string
     toast: {
       benchStart: string
       benchStop: (v: { h: number; m: number }) => string
@@ -1420,6 +1436,7 @@ export interface VoicePack {
       dueSet: string
       dueCleared: string
       msAdded: string
+      msEdited: string
       msDone: string
       msUndone: string
       msGone: string
