@@ -19,6 +19,13 @@
  *     proves the window logic, not every hour of the day.
  *   · No DST coverage, exactly as the Manor harness has none.
  *   · The native <input type="time"> is driven by value, not by the OS wheel.
+ *   · The phone pass proves the confirm WALK, not the look of it. Nothing here
+ *     scores contrast, and the fortnight strip's hatched ghosts have no
+ *     assertion of any kind — they are read by eye, on the skins.
+ *
+ * RUN IT AGAINST A COMMERCIAL DEV SERVER. Under VITE_FOUNDER_SKIN=1 the voice
+ * pack renames the Watch to "THE NIGHT SHIFT", which R3's door regex matches
+ * in the tab nav — a false failure that looks exactly like a real one.
  */
 import { chromium } from 'playwright-core'
 
@@ -34,10 +41,12 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol
 const is = (name, got, want, tol = 0.001) =>
   near(got, want, tol) ? ok(name, `${got}`) : bad(name, `got ${got}, wanted ${want}`)
 
-async function fresh(browser, { width = 1440, height = 1100 } = {}) {
+async function fresh(browser, { width = 1440, height = 1100, touch = false } = {}) {
   const ctx = await browser.newContext({
     viewport: { width, height },
     deviceScaleFactor: 1,
+    isMobile: touch,
+    hasTouch: touch,
     timezoneId: TZ,
   })
   // the boot gate shows the LANDING to a browser with no majordomo* key; one
@@ -470,6 +479,116 @@ async function pencil(page) {
     : bad('P5 …and it stops drawing hatched', `hatch=${after.hatched}`)
 }
 
+/* ----------------------------------------------------------- on a phone */
+
+/**
+ * The same pencil-to-record walk, at 390 px.
+ *
+ * It gets its own pass rather than trusting the desktop one because BOTH week
+ * trees are in the DOM at every width — the desktop grid is `hidden md:block`,
+ * so on a phone it is display:none with all-zero rects. A selector that does
+ * not filter for what is actually RENDERED finds it, reports it hatched, and
+ * passes against a grid nobody can touch. (The Manor harness learned this
+ * first; its comment is the reason this one exists.)
+ *
+ * It matters because the fortnight strip's ghost columns are not interactive
+ * and its `title` tooltips do not exist on touch: the block on the week is
+ * the ONLY way a phone reader can answer the question the strip is asking.
+ */
+async function phone(browser) {
+  const { ctx, page } = await fresh(browser, { width: 390, height: 844, touch: true })
+  await page.evaluate(() => {
+    const d = new Date()
+    const at = (h, m) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).toISOString()
+    const s = window.__events.getState()
+    s.replaceAll([
+      ...s.events.filter((e) => e.kind !== 'sleep'),
+      {
+        id: 'pencil-phone',
+        source: 'watch',
+        kind: 'sleep',
+        title: 'Sleep',
+        start: at(9, 0),
+        end: at(15, 0),
+        updatedAt: new Date().toISOString(),
+      },
+    ])
+    window.__sleep.setState({ notes: {}, askedOn: null })
+  })
+  await page.waitForTimeout(600)
+
+  const shown = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('[data-event-block]')]
+      .filter((n) => {
+        const r = n.getBoundingClientRect()
+        return r.width > 0 && r.height > 0
+      })
+      .find((n) => /Sleep/.test(n.textContent || ''))
+    return b ? { hatched: b.className.includes('booked-hatch') } : null
+  })
+  if (!shown) {
+    bad('P6 the phone renders the pencilled night', 'no visible sleep block at 390 px')
+    await ctx.close()
+    return
+  }
+  shown.hatched
+    ? ok('P6 the phone renders the pencilled night, hatched')
+    : bad('P6 the phone renders the pencilled night, hatched', 'no booked-hatch')
+
+  const blk = page.locator('[data-event-block]:visible', { hasText: 'Sleep' }).first()
+  await blk.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(300)
+  await blk.tap()
+  await page.waitForTimeout(600)
+
+  // the morning offer above the week carries a CONFIRM IT chip of its own,
+  // sitting behind the open sheet — the sheet's door is the moon-marked one
+  const door = page.getByRole('button', { name: /\u263e CONFIRM IT/i }).first()
+  if (!(await door.count())) {
+    bad('P7 its sheet offers a confirmation, not a correction', 'no moon door on the sheet')
+    await ctx.close()
+    return
+  }
+  ok('P7 its sheet offers a confirmation, not a correction')
+  await door.tap()
+  await page.waitForTimeout(700)
+  const asked = await page.evaluate(() => /IS THAT HOW IT WENT/i.test(document.body.innerText))
+  asked
+    ? ok('P7 …and the night sheet opens asking, not prompting')
+    : bad('P7 …and the night sheet opens asking, not prompting', 'wrong sheet title')
+
+  const yes = page.getByRole('button', { name: /YES, THAT IS IT/i }).last()
+  if (!(await yes.count())) {
+    bad('P8 the phone can answer it', 'no confirm button')
+    await ctx.close()
+    return
+  }
+  await yes.tap()
+  await page.waitForTimeout(700)
+  const after = await page.evaluate(() => {
+    const e = window.__events.getState().events.find((x) => x.id === 'pencil-phone')
+    const st = window.__night.sleepStats(
+      window.__events.getState().events,
+      window.__sleep.getState().notes,
+      Date.now(),
+      8,
+    )
+    return {
+      ref: e ? e.sourceRef || '' : '',
+      hours: e ? (new Date(e.end) - new Date(e.start)) / 3600000 : null,
+      covered: st.covered,
+      pencilled: st.pencilled,
+    }
+  })
+  after.ref.startsWith('slept:')
+    ? ok('P8 confirming from the phone writes a record', after.ref)
+    : bad('P8 confirming from the phone writes a record', `ref="${after.ref}"`)
+  is('P8 …without inventing hours', after.hours, 6)
+  is('P8 …and the ledger counts it now', after.covered, 1)
+  is('P8 …with nothing left in pencil', after.pencilled, 0)
+  await ctx.close()
+}
+
 /* ------------------------------------------------ closed during a rehearsal */
 
 /**
@@ -720,6 +839,8 @@ try {
   const c = await fresh(browser)
   await pencil(c.page)
   await c.ctx.close()
+
+  await phone(browser)
 
   const r = await fresh(browser)
   await rehearsal(r.page)

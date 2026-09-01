@@ -95,7 +95,13 @@ technical version.
   no average, no debt, no body clock, a recovery scale of exactly 1 and not one
   sentence in the brief — asserted through the pure model AND through the live
   store, because the figures were wrong for a fortnight while every predicate
-  around them was right. Needs `npm run dev` up; exits non-zero
+  around them was right. P6–P8 walk the same pencil-to-record confirmation at
+  390 px, because BOTH week trees are in the DOM at every width and a selector
+  that does not filter for what is RENDERED passes against the desktop grid
+  nobody can touch. **Run it against a commercial dev server** — under
+  `VITE_FOUNDER_SKIN=1` the founder pack renames the Watch to "THE NIGHT
+  SHIFT", which R3's door regex matches in the tab nav and fails for a reason
+  that has nothing to do with sleep. Needs `npm run dev` up; exits non-zero
   on failure. `CHROME_PATH` / `NIGHT_BASE` / `NIGHT_TZ` override the browser, the
   origin and the clock (the offer's window is 04:00–22:00, so the default
   `Asia/Tokyo` is what puts "now" inside it). No DST coverage, and the native
