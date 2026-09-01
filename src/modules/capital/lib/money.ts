@@ -15,14 +15,29 @@ const ILS_COMPACT = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 1,
 })
 
+/**
+ * Intl writes a hyphen-minus; every sign this app draws by hand — the faint '−'
+ * before a debt, formatDelta's, formatPercent's — is a proper U+2212. A negative
+ * total is an ordinary reading for anyone whose mortgage outweighs their
+ * savings, and it must not look like a stray character beside the '−₪400K' on
+ * the row below it. Leading sign only: there is nothing else in ₪ output to hit.
+ */
+function minus(s: string): string {
+  return s.startsWith('-') ? `−${s.slice(1)}` : s
+}
+
 /** ₪482,000 */
 export function formatILS(n: number): string {
-  return ILS.format(Math.round(n))
+  // Math.round(-0.4) is -0, which Intl faithfully prints as a signed zero.
+  // NaN is deliberately NOT swallowed — a figure that cannot be computed should
+  // read as broken, not as nothing owed.
+  const r = Math.round(n)
+  return minus(ILS.format(Object.is(r, -0) ? 0 : r))
 }
 
 /** ₪482K — for tight spots (tiles, axis labels) */
 export function formatCompact(n: number): string {
-  return ILS_COMPACT.format(n).replace('ILS', '₪').replace('₪ ', '₪')
+  return minus(ILS_COMPACT.format(n).replace('ILS', '₪').replace('₪ ', '₪'))
 }
 
 /** signed, compact: +₪4.2K / −₪1.1K */

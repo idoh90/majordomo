@@ -13,7 +13,8 @@
     "vendor:exercises": "node scripts/vendor-exercises.mjs",
     "bell:probe": "node scripts/bell-probe.mjs",
     "check:night": "node scripts/night-harness.mjs",
-    "check:recast": "node scripts/recast-harness.mjs"
+    "check:recast": "node scripts/recast-harness.mjs",
+    "check:ledger": "node scripts/ledger-harness.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

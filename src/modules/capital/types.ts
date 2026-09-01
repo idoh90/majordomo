@@ -17,8 +17,17 @@ export interface Account {
 /**
  * A dated capture of every account's balance. The most recent snapshot IS the
  * current state — there is no separate "current balance" to keep in sync. Net
- * worth of a snapshot = Σ assets − Σ debts. Balances are stored as positive
- * magnitudes; the `debt` class is subtracted at compute time.
+ * worth of a snapshot = Σ assets − Σ debts.
+ *
+ * A liability's balance is what is OWED — a magnitude — and the `debt` class is
+ * subtracted at compute time. This used to be a convention the entry sheet did
+ * not enforce and the maths did not survive: a bank app shows a mortgage as
+ * −400,000, and `-bal` on that ADDED it, so ₪50,000 in the bank beside a
+ * ₪400,000 mortgage read ₪450,000. The sheet now refuses a minus on a debt row,
+ * and networth.ts subtracts the magnitude whatever the sign, so a blob written
+ * before that — or imported, or synced from a device that never saw it — still
+ * reads the only sane way. An ASSET's negative is untouched: an overdraft is a
+ * real minus and stays one.
  */
 export interface Snapshot {
   id: string

@@ -2175,6 +2175,8 @@ export const majordomoPack: VoicePack = {
       accounts === 1
         ? 'No quote for the marked account. Type its balance — your figure stands until quotes return.'
         : 'No quote for the marked accounts. Type their balances — your figures stand until quotes return.',
+    debtNoMinus:
+      'A debt is what you owe, so it goes in as a plain number. The row carries the minus for you.',
     recentEntries: 'RECENT ENTRIES',
     tenDayPartial: (covered, positions) => `${covered} of ${positions} positions`,
     totalsPartial: (currencies) =>

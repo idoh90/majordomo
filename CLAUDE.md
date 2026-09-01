@@ -105,12 +105,22 @@ technical version.
   Needs `npm run dev` up; exits non-zero on failure. `CHROME_PATH` / `RECAST_BASE`
   override the browser and the origin. Desktop clicks only — nothing here proves a
   thumb can reach the confirm's buttons.
+- `npm run check:ledger` — the **Ledger harness** (`scripts/ledger-harness.mjs`): drives
+  headless Chromium through the running dev server and asserts the Ledger's SIGN
+  contract — a debt subtracts however it was typed, liabilities read as a magnitude,
+  an overdraft stays a real negative, history does not leap on a sign alone, no figure
+  carries two minus glyphs, and the snapshot sheet refuses a minus on a debt row
+  without writing anything. Needs `npm run dev` up; exits non-zero on failure.
+  `CHROME_PATH` / `LEDGER_BASE` override the browser and origin. It scores the SIGN
+  only — spend pace, live prices, FX and the portfolio board are not covered.
 - No test runner **for the app at large**; verification is done in the browser. The
-  Manor, THE NIGHT and the Grounds' recast are the exceptions — their contracts are
-  numeric, and "looks plausible" is
-  exactly how a cross-midnight drag silently rewrote 13 h to 2 h, and how three taps
-  came to wipe three exercises and nine sets off a saved session. Re-run the harness
-  after touching `WeekGrid.tsx` / `ManorScreen.tsx`. Its B1/B2 checks read the
+  Manor, THE NIGHT, the Grounds' recast and the Ledger's sign are the exceptions —
+  their contracts are numeric, and "looks plausible" is
+  exactly how a cross-midnight drag silently rewrote 13 h to 2 h, how three taps came
+  to wipe three exercises and nine sets off a saved session, and how a mortgage typed
+  the way a bank app shows it counted as an ASSET. Re-run the Manor harness after
+  touching `WeekGrid.tsx` / `ManorScreen.tsx`, and the Ledger's after touching
+  `lib/networth.ts` / `SnapshotSheet.tsx`. The Manor's B1/B2 checks read the
   **brief's own exam clause**, and the brief types itself out on a first visit —
   they press SKIP before every read, so a fresh context does not measure a
   half-written sentence. It does NOT cover the mobile 350 ms long-press drag
@@ -887,6 +897,23 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   is just another door onto the same sheet. Each one-off row carries a **date**
   (`<input type=date>` clamped to the viewed month, keeping its time-of-day so
   same-day order holds) — the pager owns the month, the row owns the day.
+- **A debt is a MAGNITUDE, and both halves of that are load-bearing.** A liability
+  account's balance is what is OWED; `debt` subtracts at compute time. That was a
+  convention nothing enforced: bank apps show a mortgage as a negative, so that is
+  what people type, and `-bal` on a negative ADDED it — ₪50,000 in the bank beside a
+  ₪400,000 mortgage shouted **₪450,000** instead of −₪350,000, in the Vault, the
+  brief, the tile and permanently in the trend history, with a garbled `−-₪400K` on
+  the accounts row as the only tell. Two changes, and both are needed. The snapshot
+  sheet **refuses** a minus on a debt row (`voice.capital.debtNoMinus`, marker on the
+  row, nothing written) — refused and never flipped, on the budget field's reasoning:
+  clamping is the same silent rewrite. And `netWorthContribution` / `accountFigure`
+  (`lib/networth.ts`) subtract the magnitude **whatever the sign**, so an estate that
+  already holds one — stamped before the fix, imported, or synced from a device that
+  never saw it — reads right without rewriting a stored record. An **asset's** minus
+  is untouched: an overdraft is a real negative and must stay one. Anything totalling
+  or printing `liveAccountValue`'s raw figure goes through those two helpers first —
+  `Vault`'s `Figure` and the accounts row draw their own faint `−`, so they are handed
+  a magnitude, never a signed number.
 - **A typed row is never silently dropped.** Amounts are **signed**: a minus on a
   one-off row is a refund and subtracts through the month total, the card, the tile
   and the briefing (`SpendCard` clamps its bar at both ends — an unclamped negative
@@ -897,7 +924,10 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   clamping to 0 is the same silent rewrite. Nothing in this sheet displays one number
   and stores another.
 - **Money math** — `lib/money.ts` (`formatILS` uses **en-US locale so ₪ is an LTR
-  prefix** — he-IL scrambles word order inside the English UI), `ASSET_CLASSES`
+  prefix** — he-IL scrambles word order inside the English UI, and both formatters
+  rewrite Intl's hyphen-minus to the **U+2212** every sign this app draws by hand
+  already uses — a negative total is ordinary for anyone whose mortgage outweighs
+  their savings and must not read as a stray character beside the `−₪400K` below it), `ASSET_CLASSES`
   (labels + fixed categorical allocation colors). `<Amount>` blurs values (hover to
   reveal) when `blurAmounts` on.
 - **Currency is ₪** throughout. Crypto type exists in the model but has no feed yet;
@@ -1100,7 +1130,9 @@ auto-enter Training so they land on the right screen.
 - `?map=volume` — starts the body map in weekly-volume mode
 - `?debugmap` — rainbow-colors every muscle plate to spot gaps/overlaps
 - `window.__store` / `window.__strains` — training store handle + live strain map in dev
-- `window.__capital` — the Wayne Fund store handle in dev
+- `window.__capital` — the Wayne Fund store handle in dev · `window.__ledger` — the
+  pure net-worth model (`netWorthOf`, `liveNetWorth`, `netWorthContribution`, … — the
+  ledger harness scores the sign contract through it without a React round-trip)
 - `window.__study` — the Study store handle in dev
 - `window.__watch` — the Watch's shift-shape store handle in dev
 - `window.__sleep` / `window.__night` — THE NIGHT's store handle and its pure model

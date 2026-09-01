@@ -35,6 +35,7 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
   // number that was typed into it — this app does not take a figure and then
   // quietly overwrite it.
   const [typed, setTyped] = useState<Record<string, true>>({})
+  const [showProblems, setShowProblems] = useState(false)
 
   // Prefill on OPEN only. It used to re-seed whenever `accounts` or `snapshots`
   // changed — and this sheet has a "+ Add account" button of its own, so adding
@@ -51,6 +52,7 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
     }
     setBalances(seed)
     setTyped({})
+    setShowProblems(false)
   }, [open, editing]) // `accounts`/`snapshots` deliberately absent — see above
 
   // an account added while the sheet is open gets a field; nothing else moves
@@ -113,9 +115,29 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
     })
   }, [accounts, balances, editing, snapshots, parsed])
 
+  // A debt row asks what is OWED — a magnitude. A bank app shows a mortgage as
+  // −400,000 though, so that is what people type, and the app took it: the debt
+  // was ADDED, and ₪50,000 in the bank beside a ₪400,000 mortgage read ₪450,000
+  // in the biggest type on the screen. Refused, not silently flipped, for the
+  // reason the budget refuses one: clamping is the same quiet rewrite, and this
+  // row has to teach its convention once. The maths can no longer be fooled
+  // either (netWorthContribution), so an estate that already holds one reads
+  // right while this asks for it to be written the house's way.
+  const badDebts = useMemo(
+    () =>
+      accounts
+        .filter((a) => parsed.manual[a.id] && ASSET_CLASSES[a.assetClass].liability && stamped[a.id] < 0)
+        .map((a) => a.id),
+    [accounts, parsed, stamped],
+  )
+
   const previewNetWorth = netWorthOf({ id: '', takenAt: '', balances: stamped }, accounts)
 
   const save = () => {
+    if (badDebts.length > 0) {
+      setShowProblems(true)
+      return
+    }
     // one snapshot per local day: saving again today revises today's point
     // instead of stacking a second one on the trend chart
     const latest = latestSnapshot(snapshots)
@@ -153,6 +175,10 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
             {accounts.map((a) => {
               const liveStamped = !parsed.manual[a.id]
               const noQuote = parsed.noQuote[a.id]
+              // the debt row wears the minus itself, so the convention is
+              // legible before a single digit is typed
+              const isDebt = ASSET_CLASSES[a.assetClass].liability
+              const marked = showProblems && badDebts.includes(a.id)
               return (
                 <div key={a.id} className="flex items-center gap-3">
                   <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: ASSET_CLASSES[a.assetClass].color }} />
@@ -178,17 +204,23 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
                     </span>
                   ) : (
                     <div className="relative">
-                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink-faint">₪</span>
+                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink-faint">
+                        {isDebt ? '−₪' : '₪'}
+                      </span>
                       <input
                         type="number"
                         inputMode="decimal"
+                        min={isDebt ? 0 : undefined}
+                        aria-invalid={marked || undefined}
                         value={balances[a.id] ?? ''}
                         onChange={(e) => {
                           const v = e.target.value
                           setBalances((b) => ({ ...b, [a.id]: v }))
                           setTyped((t) => (t[a.id] ? t : { ...t, [a.id]: true }))
                         }}
-                        className="card w-32 py-2 pl-6 pr-2.5 text-right font-display text-base font-bold text-ink outline-none focus:border-accent/60"
+                        className={`card w-32 py-2 ${isDebt ? 'pl-8' : 'pl-6'} pr-2.5 text-right font-display text-base font-bold text-ink outline-none focus:border-accent/60 ${
+                          marked ? 'border-danger' : ''
+                        }`}
                       />
                     </div>
                   )}
@@ -200,6 +232,12 @@ export function SnapshotSheet({ open, editing = null, onClose, onAddAccount }: S
           {noQuoteCount > 0 && (
             <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
               {voice.capital.stampNoQuoteNote(noQuoteCount)}
+            </p>
+          )}
+
+          {showProblems && badDebts.length > 0 && (
+            <p className="mt-2 text-[12px] leading-relaxed text-danger">
+              {voice.capital.debtNoMinus}
             </p>
           )}
 

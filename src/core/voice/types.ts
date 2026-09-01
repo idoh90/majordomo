@@ -1567,6 +1567,10 @@ export interface VoicePack {
     /** the visible line under the list saying what those rows want (a title
      *  attribute is nothing on a phone) */
     stampNoQuoteNote: (accounts: number) => string
+    /** snapshot sheet: a debt row asks what is OWED, so a minus is refused there
+     *  — a bank app shows a mortgage as −400,000, and typing that made the debt
+     *  ADD to net worth instead of subtracting */
+    debtNoMinus: string
     /** recent one-off spends card title */
     recentEntries: string
     /** the 10-day P/L covers only the positions whose history actually arrived */
