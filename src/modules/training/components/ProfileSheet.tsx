@@ -28,10 +28,18 @@ export function ProfileSheet({ open, onClose }: ProfileSheetProps) {
     onClose()
   }
 
+  // "differs from the store", never "was touched" — the Ledger's rule. A sheet
+  // opened and read costs nothing to close; one holding a corrected weight asks
+  // first, because every macro on the Grounds is computed from these numbers and
+  // nothing downstream would ever say the edit failed to land.
+  const dirty = (Object.keys({ ...stored, ...draft }) as (keyof Profile)[]).some(
+    (k) => draft[k] !== stored[k],
+  )
+
   const maint = Math.round(restMaintenance(draft))
 
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={onClose} dirty={dirty}>
       <h2 className="mb-1 font-display text-xl font-bold tracking-wide">Profile &amp; nutrition</h2>
       <p className="mb-4 text-sm text-ink-dim">
         Your macros are computed from this. Rest-day maintenance ≈{' '}

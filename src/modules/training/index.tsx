@@ -5,6 +5,7 @@ import { useNow } from '../../core/useNow'
 import { useShellStore } from '../../core/store/shell'
 import { reconcileWorkoutBlocks } from './lib/blocks'
 import { thisWeekCount } from './lib/insights'
+import { useRecoveryScale } from '../../core/sleep/useSleep'
 import { computeStrains } from './lib/strain'
 import { useWorkoutStore } from './store'
 import { TrainingScreen } from './TrainingScreen'
@@ -18,7 +19,8 @@ function Upkeep() {
   const workouts = useWorkoutStore((s) => s.workouts)
   const now = useNow()
   const nowH = Math.floor(now / 3_600_000) * 3_600_000
-  const strains = useMemo(() => computeStrains(workouts, nowH), [workouts, nowH])
+  const scale = useRecoveryScale()
+  const strains = useMemo(() => computeStrains(workouts, nowH, scale), [workouts, nowH, scale])
 
   useEffect(() => {
     reconcileWorkoutBlocks(workouts)

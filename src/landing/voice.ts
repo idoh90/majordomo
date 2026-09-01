@@ -217,6 +217,36 @@ export const voice = {
   },
 
   /* -------------------------------------------------------------------------
+     The wrong address.
+
+     Served by Vercel at every path the deployment does not have, with a real
+     404 status. Two things it must do and one it must not:
+
+     - SAY WHAT HAPPENED, once, without apologising twice. The register is the
+       Majordomo's, so it states the fact and offers the way back.
+     - REASSURE A RESIDENT. Someone whose estate lives in this browser has just
+       been shown an unfamiliar page by their own app's domain; the second line
+       is there to say their records are not what went missing. It is true —
+       the estate is in localStorage and no URL reaches it.
+     - It must NOT say "sir". A stranger who mistyped a URL has not met the
+       butler yet, and the landing spends that word deliberately (see rule 1
+       at the top of this file).
+  ------------------------------------------------------------------------- */
+  notFound: {
+    /* the numeral is the one piece of jargon the page keeps: it is what the
+       visitor's browser and every search result will have already called this */
+    code: '404',
+    title: 'Nothing at this address',
+    metaTitle: 'Nothing at this address — Majordomo',
+    metaDescription: 'That page is not part of the estate.',
+    body: [
+      'The house keeps no record of this page. It may have been moved, or it may never have been here at all.',
+      'Nothing of yours is missing: your records live on your own device, not at an address.',
+    ],
+    back: 'Back to the estate',
+  },
+
+  /* -------------------------------------------------------------------------
      The legal pages. Everything below is user-facing copy AND the operative
      text of the agreement: the consent door's AGREE & ENTER points here.
      Honesty invariants that must survive any edit:
@@ -237,7 +267,7 @@ export const voice = {
        the document's <title> comes from here like everything else */
     metaTitle: 'Privacy — Majordomo',
     metaDescription: 'What Majordomo keeps, what it counts, and what it never does.',
-    updated: 'Last updated: 25 August 2026',
+    updated: 'Last updated: 31 August 2026',
     sections: [
       {
         h: 'The short version',
@@ -312,7 +342,7 @@ export const voice = {
     back: 'Back to the estate',
     metaTitle: 'Terms — Majordomo',
     metaDescription: 'The agreement for using Majordomo.',
-    updated: 'Last updated: 25 August 2026',
+    updated: 'Last updated: 31 August 2026',
     sections: [
       {
         h: 'Who we are, and what this is',

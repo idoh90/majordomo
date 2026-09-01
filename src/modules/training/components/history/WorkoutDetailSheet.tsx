@@ -7,6 +7,7 @@ import { formatClock, formatKm, runPaceSeconds, runTotalSeconds } from '../../li
 import { formatSets } from '../../lib/exercises'
 import { voice } from '../../../../core/voice'
 import { hoursBetween, relativeDayLabel, timeLabel } from '../../../../core/dates'
+import { useRecoveryScale } from '../../../../core/sleep/useSleep'
 import {
   MAX_STRAIN,
   REP_STYLES,
@@ -32,13 +33,14 @@ interface WorkoutDetailSheetProps {
 export function WorkoutDetailSheet({ workout, now, onClose, onEdit }: WorkoutDetailSheetProps) {
   const deleteWorkout = useWorkoutStore((s) => s.deleteWorkout)
   const heatRamp = SKINS[useShellStore((s) => s.skin)].heatRamp
+  const scale = useRecoveryScale()
   const [confirming, setConfirming] = useState(false)
 
   if (!workout) return null
   const w = workout
 
-  const activity = workoutActivity(w, now)
-  const phase = recoveryPhase(w, now)
+  const activity = workoutActivity(w, now, scale)
+  const phase = recoveryPhase(w, now, scale)
   const dt = hoursBetween(w.performedAt, now)
   const agoLabel = dt < 1 ? 'just now' : dt < 48 ? `${Math.round(dt)}h ago` : `${Math.round(dt / 24)}d ago`
   const style = repStyleOf(w)

@@ -45,6 +45,11 @@
   /* muted slate for blocks mirrored from an external calendar — deliberately
      quieter than every wing accent: foreign hours are context, not duty */
   --color-w-abroad: #8a94a6;
+  /* THE NIGHT. Cool indigo, and the one wing accent deliberately DIMMER than
+     the ink it sits beside: a night is the part of the week nothing else is
+     competing for, and a sleep block lit like a duty block would shout the
+     quietest hours of the day at you. */
+  --color-w-sleep: #6b7fb8;
 
   --font-display: "Big Shoulders", "Arial Narrow", system-ui, sans-serif;
 
@@ -688,6 +693,7 @@ html[data-skin='terminal'] {
   --color-w-ledger: #d8c95f;
   --color-w-study: #9d8cff;
   --color-w-workshop: #f0955c;
+  --color-w-sleep: #4a7f8f;
 
   /* the page is already true black, so the recess can only be black too —
      its border does the work of saying "this is cut in" */
@@ -720,6 +726,7 @@ html[data-skin='aurora'] {
   --color-w-ledger: #d8b46a;
   --color-w-study: #b294f5;
   --color-w-workshop: #e08d64;
+  --color-w-sleep: #7a6fc0;
 
   --color-trough: #120f21;
   --color-trough-line: #282247;

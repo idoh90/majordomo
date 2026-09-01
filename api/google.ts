@@ -49,6 +49,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+import { nodeHandler } from './_node.js'
 
 /* -------------------------------------------------------------------------- */
 /* environment                                                                */
@@ -101,8 +102,14 @@ const withTimeout =
     return fetch(input, { ...init, signal })
   }
 
-const REGISTRY_TIMEOUT_MS = 8_000
-const GOOGLE_TIMEOUT_MS = 10_000
+/**
+ * A `token` action is the longest walk in this file — the session, the row, the
+ * refresh grant, sometimes a rotation write — and all of it has to finish inside
+ * the deadline the bridge holds this handler to. Each wait is short enough that
+ * four of them still leave room.
+ */
+const REGISTRY_TIMEOUT_MS = 6_000
+const GOOGLE_TIMEOUT_MS = 8_000
 
 /** an OAuth exchange is two sequential upstream calls at most */
 export const maxDuration = 30
@@ -322,7 +329,21 @@ async function callback(req: Request): Promise<Response> {
 /* the handler                                                                */
 /* -------------------------------------------------------------------------- */
 
-export default async function handler(req: Request): Promise<Response> {
+/**
+ * The endpoint itself, written against the web standard — `Request` in,
+ * `Response` out. It is NOT the default export: Vercel's Node runtime calls a default
+ * export with Node's `(req, res)` pair and discards a `Response` handed back to
+ * it, which is a hang rather than an error. `./_node` reconciles the two shapes,
+ * and the bottom of this file is where that happens.
+ */
+async function serve(req: Request): Promise<Response> {
+  // A HEAD is a health probe. Answered first and answered empty: a consent walk
+  // must never be started by one, and a probe has no business learning whether
+  // this door is armed.
+  if (req.method === 'HEAD') {
+    return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } })
+  }
+
   // The kill switch, and it defaults to OFF — deploying this file must not by
   // itself open a door into anyone's calendar. A GET mid-walk while disarmed
   // is bounced rather than fed JSON: the caller is a browser being navigated.
@@ -506,3 +527,12 @@ export default async function handler(req: Request): Promise<Response> {
   if (dropError) return fail(503, 'unreachable')
   return ok({ ok: true })
 }
+
+/**
+ * What the platform actually calls.
+ *
+ * 20 seconds is a net, not a budget: every wait inside is bounded already, and
+ * the longest possible walk through them stays under it. Past that the caller
+ * gets a 504 from this house rather than silence until `maxDuration`.
+ */
+export default nodeHandler(serve, { deadlineMs: 20_000 })

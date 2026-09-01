@@ -63,11 +63,14 @@ export function projectedStrains(
   sel: MuscleSelection,
   draft: DraftSession,
   nowMs: number,
+  /** THE NIGHT's pull on the recovery clock — the preview must be drawn on
+   *  the same body the map behind it is */
+  scale = 1,
 ): StrainMap {
   const ids = Object.keys(sel) as MuscleId[]
   const primary = ids.filter((m) => sel[m] === 'primary')
   const secondary = ids.filter((m) => sel[m] === 'secondary')
-  if (primary.length === 0 && secondary.length === 0) return computeStrains(workouts, nowMs)
+  if (primary.length === 0 && secondary.length === 0) return computeStrains(workouts, nowMs, scale)
   // a draft is priced exactly like a saved session — same engine, same
   // constants, so the preview can never disagree with the map it previews
   const pending: Workout = {
@@ -81,7 +84,7 @@ export function projectedStrains(
     strainFeel: draft.strainFeel,
     repStyle: draft.repStyle,
   }
-  return computeStrains([...workouts, pending], nowMs)
+  return computeStrains([...workouts, pending], nowMs, scale)
 }
 
 /** each PPL day's full spread (primary + secondary) — the shape test is a

@@ -84,14 +84,38 @@ technical version.
   its blocks, an unfittable template isn't offered, QUICK ADD books on the slot
   its panel showed. Needs `npm run dev` up; exits
   non-zero on failure. `CHROME_PATH` / `MANOR_BASE` override the browser and origin.
+- `npm run check:night` — the **night harness** (`scripts/night-harness.mjs`): drives
+  headless Chromium through the running dev server and asserts THE NIGHT's numeric
+  contract — a night files under the morning it ENDED on, a missing night is a gap
+  and never a zero, debt credits a long night at half, the recovery coupling is
+  EXACTLY 1 below its four-night gate and capped either side of it, the morning
+  offer stops once the morning is written, and confirming a pencilled block turns
+  it into a record without inventing hours. Needs `npm run dev` up; exits non-zero
+  on failure. `CHROME_PATH` / `NIGHT_BASE` / `NIGHT_TZ` override the browser, the
+  origin and the clock (the offer's window is 04:00–22:00, so the default
+  `Asia/Tokyo` is what puts "now" inside it). No DST coverage, and the native
+  `<input type="time">` is driven by value rather than by the OS wheel.
+- `npm run check:recast` — the **recast harness** (`scripts/recast-harness.mjs`): drives
+  headless Chromium through the running dev server and asserts the Grounds'
+  edit-a-session contract — backing out of an edit lands on a method picker that says
+  it is standing over a record and marks the door that record came through, a method
+  change that would drop the session's exercises, sets, run figures or typed session
+  size names them before it does it, cancelling costs the record nothing, a costless
+  change is never interrupted, and a confirmed recast still does what it always did.
+  Needs `npm run dev` up; exits non-zero on failure. `CHROME_PATH` / `RECAST_BASE`
+  override the browser and the origin. Desktop clicks only — nothing here proves a
+  thumb can reach the confirm's buttons.
 - No test runner **for the app at large**; verification is done in the browser. The
-  Manor is the one exception — its contract is numeric, and "looks plausible" is
-  exactly how a cross-midnight drag silently rewrote 13 h to 2 h. Re-run the harness
+  Manor, THE NIGHT and the Grounds' recast are the exceptions — their contracts are
+  numeric, and "looks plausible" is
+  exactly how a cross-midnight drag silently rewrote 13 h to 2 h, and how three taps
+  came to wipe three exercises and nine sets off a saved session. Re-run the harness
   after touching `WeekGrid.tsx` / `ManorScreen.tsx`. Its B1/B2 checks read the
   **brief's own exam clause**, and the brief types itself out on a first visit —
   they press SKIP before every read, so a fresh context does not measure a
   half-written sentence. It does NOT cover the mobile 350 ms long-press drag
-  (not drivable by synthetic events) or DST.
+  (not drivable by synthetic events) or DST. Re-run `check:recast` after touching
+  `AddWorkoutSheet.tsx` / `MethodStep.tsx` / `lib/recast.ts`.
 
 ## Ship: it is live
 
@@ -148,7 +172,10 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
 - **`vercel.json` rationale** (the schema rejects `comment` keys, so it lives here):
   hashed `/assets/*` are content-addressed → `immutable`; **`sw.js` must never be
   cached** or the app can't learn it's stale; frame/sniff/referrer headers on
-  everything. The pre-landing `X-Robots-Tag: noindex` is GONE — the site is a
+  everything; `functions` pins each function's ceiling (bell 60 s, google 30 s)
+  so a hung invocation is killed on this project's terms rather than sitting on
+  the platform's 300 s default — the in-file `export const maxDuration` says the
+  same thing, deliberately twice. The pre-landing `X-Robots-Tag: noindex` is GONE — the site is a
   public product now, `index.html` says `index, follow`, and `public/robots.txt`
   + `public/sitemap.xml` (which lists `/`, `/privacy`, `/terms`) agree.
 - **The CSP is there for the supply chain, not for injection.** There is no
@@ -194,6 +221,45 @@ Everything else in that document (chat UI, context pack, read tools, write tools
 the sandbox bridge, the concierge, tiers and trials) is **not built**; do not
 describe it as existing.
 
+- **Every handler here is a WEB handler behind a Node bridge, and that is not a
+  style choice.** Vercel's Node runtime accepts exactly two shapes: a default
+  export called with Node's `(req, res)` pair, or NAMED per-method exports
+  (`export function GET(request: Request)`) written against the web standard. A
+  default export that takes a `Request` and returns a `Response` is neither — the
+  runtime calls it with `(req, res)` regardless, discards what it hands back, and
+  **nothing is ever written to the socket**. The caller waits with zero bytes
+  until the platform kills the invocation. That is what took both endpoints down
+  in Aug 2026: every request to `/api/bell` and `/api/google`, a `HEAD` that did
+  no work included, hung for 300 s and answered 504, and no Google account could
+  ever be connected. So both files keep their `Request → Response` bodies as
+  private functions and default-export `nodeHandler(fn, { deadlineMs })` from
+  **`api/_node.ts`** — underscore-prefixed, so Vercel bundles it and never routes
+  it. The bridge is also where the DEADLINE lives: a handler that has not
+  produced a response in 20 s gets a 504 written for it, because a hang is the
+  one failure a caller cannot tell from a slow success. `scripts/bell-serve.mjs`
+  now calls that same default export the way the platform does, so the local
+  runtime exercises the conversion instead of re-implementing it.
+- **Every relative import in `api/` must carry a `.js` extension, and the bridge
+  is why this matters at all.** Vercel does not bundle these files — it transpiles
+  each one on its own and copies the root `package.json` (`"type": "module"`) in
+  beside them, so the emitted `api/google.js` is loaded by Node's own ESM
+  resolver, which does not guess extensions. `import … from './_node'` therefore
+  ships a specifier that resolves to nothing: every function died at module load
+  with `ERR_MODULE_NOT_FOUND: Cannot find module '/var/task/api/_node'`, before a
+  line of handler code ran, which the platform reports as a bare
+  `FUNCTION_INVOCATION_FAILED` with no outgoing requests. That was Aug 2026's
+  SECOND api outage, and it was introduced by the fix for the first — `_node.ts`
+  was the first cross-file import this directory ever had. `_node.js` was in the
+  bundle the whole time; only the spelling was wrong. **`tsconfig.api.json` is
+  pinned to `moduleResolution: "nodenext"` so it stays wrong loudly**: the
+  extensionless form is now TS2835 in `npm run build` instead of a green build
+  and a dead deployment. Never relax that to `bundler` — nothing bundles this
+  directory, and the mode has to describe the runtime the files actually get.
+- **A `HEAD` is answered 204 first, before everything.** Before the kill switch,
+  before auth, before any upstream. A health probe must never start a consent
+  walk, ring the model, cost a household a slot, or become an oracle for whether
+  a door is armed. Every wait inside either file is bounded well under 15 s
+  (6 s registry, 8 s Google) so the whole walk finishes inside that deadline.
 - **`api/` is the only place in this project that holds a secret**, and the only
   reason it exists. Server env, Vercel project settings, never in git, never in the
   bundle: `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `BELL_ENABLED`.
@@ -274,16 +340,54 @@ one **consent door**, and the acceptance stamp that gates telemetry.
   `TermsPage`/`PrivacyPage` over the shared `LegalPage` shell → copy in
   `src/landing/voice.ts` → prerendered by `scripts/prerender.mjs`. **Adding a landing
   route means touching four fail-loud lists**: the rollup `input`, the prerender
-  route loop, `entry-server.tsx` (union + meta), and `audit.mjs` `ROUTES` — plus
-  `public/sitemap.xml` and the landing footer. The html must carry `__SITE_ORIGIN__`
-  in its canonical or the build throws.
-- **The SW must not answer for the legal pages**: `/privacy` and `/terms` are in
-  `navigateFallbackDenylist` (vite.config.ts) so an installed app's navigation gets
-  the document, not the precached shell. A new legal route needs the same entry.
+  route loop, `entry-server.tsx` (union + meta), and `audit.mjs` `ROUTES`/`PAGES` —
+  plus `public/sitemap.xml` and the landing footer. The html must carry
+  `__SITE_ORIGIN__` in its canonical or the build throws (the lone exception is
+  `404.html`, below).
+- **The SW answers for `/` AND NOTHING ELSE.** `navigateFallbackDenylist`
+  (vite.config.ts) ends in `/^\/[^?]/` — any path that is not the root. Workbox
+  tests these against `pathname + search`, which is exactly what lets that one rule
+  keep the fallback for `/?demo` / `/?landing` (the root with a query, and the only
+  reason `navigateFallback` still exists — a bare `/` is already answered by the
+  precache route via workbox's `directoryIndex`) while releasing every real path to
+  the network. `/api/`, `/privacy`, `/terms` and `/404` keep their own specific
+  entries, redundant under that rule today, so that narrowing it cannot silently
+  un-protect them. **The cost is stated and accepted**: a wrong address while
+  OFFLINE now gets the browser's error page rather than `404.html`. The app itself
+  still boots offline at `/` and at any `/?query` — verified with a live registered
+  worker, both online and with the network killed. The rule this replaced fell back
+  to the shell for everything, on the reasoning that "a stray deep link must never
+  dead-end offline"; the app has no router and publishes no deep links, so there was
+  no such link to strand — and the real cost was that the 404 page could never be
+  seen by anyone who had the app installed.
+- **`404.html` is the wrong address**, and it is served by CONVENTION, not by config:
+  Vercel hands `dist/404.html` to any path a static deployment does not have, with a
+  real 404 status. There is no rewrite and there must not be one — a rewrite answers
+  200, which tells a crawler the typo is a page. Before it existed, an unknown path
+  got the platform's own black NOT_FOUND card: the one screen a stranger could reach
+  that did not look like the product. It is a full landing-tree page (`NotFoundPage`
+  over `voice.notFound`, prerendered like the rest), and it deviates from the
+  four-list recipe above in exactly three ways, all deliberate:
+  · **no canonical** — an error page has no address of its own, it answers at every
+  address that is wrong. It buys the exemption from the `__SITE_ORIGIN__` throw by
+  declaring `noindex`, which is the one escape hatch `NOINDEX` in `vite.config.ts`
+  allows; a document with NEITHER still fails the build.
+  · **not in `sitemap.xml`, not in the footer** — that list is routes, and this is not one.
+  · **in `audit.mjs`'s `PAGES` (contrast) but not `ROUTES` (Lighthouse)** — it is a
+  page someone has to read, so AA still applies; but Lighthouse scores `noindex` as an
+  SEO failure, so scoring it would fail the gate for doing the correct thing.
+  It is also the ONE document carrying `<base href="/">`, and that is load-bearing:
+  the build's `base: './'` resolves assets against the REQUESTED path, so without it
+  the page would ask for `/a/b/assets/…` at `/a/b/c` and paint unstyled. Anything
+  added to its head must stay below that tag.
+  **Everyone sees it, residents included** — but only because the SW rule above was
+  changed to let them. That is worth knowing before touching either: shipping this
+  page WITHOUT that rule ships a page the owner can never see on his own machine,
+  which is exactly how it shipped first and exactly how it was caught.
 - **The legal copy carries honesty invariants** (stated in a comment block above it
   in `src/landing/voice.ts`): the public pages stay tracker-free (Vercel aggregate
   counts only); app analytics are named actions only; deletion is a mailbox
-  (`majordomocal@gmail.com` — `FALLBACK_CONTACT` in `site.config.ts`, duplicated in
+  (`majorcal@majordomocal.com` — `FALLBACK_CONTACT` in `site.config.ts`, duplicated in
   `scripts/prerender.mjs`, both overridden by a `CONTACT_EMAIL` Vercel env var)
   because no in-app deletion exists. Do not edit the documents into promising
   machinery the app does not have.
@@ -428,6 +532,8 @@ src/
     dates.ts      local-time day/week/streak helpers
     useNow.ts     ticking-now hook (minute interval + visibilitychange)
     ids.ts        makeId()   ·  storage.ts  storageAvailable()
+    sleep/        THE NIGHT (see below) — the only wing-shaped thing in core,
+                  because it has two consumers from birth
     store/shell.ts  app-wide store: { skin, weekStart, wing prefs } @
                   `majordomo-shell` v4
     ui/           index.css (skin bundles) + skins.ts (SKINS flags) +
@@ -534,7 +640,10 @@ the rest. It replaced the accordion of one row per wing. Design source is
   **THE PEN**, so every clause must be a whole sentence that survives its
   neighbours being deleted — none may open with "and" or refer to the one
   before it. Copy lives in `voice.briefing.brief.line` / `.counsel`; the areas
-  and their wing order live in `Pen.tsx` `AREA_GROUPS`.
+  and their wing order live in `Pen.tsx` `AREA_GROUPS`. THE NIGHT owns a group
+  there without being a wing: its two clauses (`sleep`, `rest`) used to hang off
+  the Watch, which meant sleep was invisible to anyone who had never stood a
+  shift.
 - **Facts come from the wings, never re-derived.** `facts.ts` calls each wing's
   `use…BriefingFacts()` — the very hook that wing's own panel calls — so a
   sentence on the Manor and a panel on a wing cannot quote different numbers. A
@@ -556,6 +665,74 @@ the rest. It replaced the accordion of one row per wing. Design source is
 - Charts are drawn with `preserveAspectRatio="none"`, so **anything circular
   must be an HTML element positioned in percent**, never an SVG `<circle>` —
   the Ledger's trend chart learned this first.
+
+### THE NIGHT — sleep (`src/core/sleep/`)
+
+Optional sleep tracking: two clock times a morning, the figures that fall out of
+them, and one scalar those figures hand the strain engine. It is **not a wing** —
+no tab, no screen, no ConsoleModule — it is a record type the Manor writes and
+the Grounds reads.
+
+- **It lives in `core/` and that is the extract-on-contact rule, not an
+  exception to it.** Two consumers exist the day it ships: the Manor writes and
+  reads nights, and the Grounds reads them through recovery. Modules may not
+  import each other, so `modules/sleep/` could never have fed `lib/strain.ts`.
+- **A night IS a calendar event** (`kind: 'sleep'`). There is no second table of
+  hours — one would be free to disagree with the week on screen. The store keeps
+  only what a block cannot carry: the optional rating and minutes awake, keyed by
+  event id (the Study's session-meta split, exactly).
+- **A record carries `sourceRef: 'slept:<wake day>'`; a pencil mark does not.**
+  The estate has always drawn six hours in after a night watch
+  (`modules/watch/lib.ts` `planWatchPost`) — that is a SUGGESTION, and counting it
+  as sleep reports a week of rest nobody took. `isNightRecord` / `isPencilledNight`
+  in `core/sleep/lib.ts` are the one pair of predicates that separate them, and
+  everything reads them: the hatch on the week (`.booked-hatch`, whose comment
+  already said "pencilled in on the estate's behalf" before this existed), the
+  Watch's cycle card, the morning offer's wording, the ledger's every figure.
+  Anything placed by hand is grandfathered as a record — dragging a block onto
+  the week and calling it sleep has always been a person asserting they slept.
+  **Never add `slept:` to `PROJECTION_PREFIXES`**: a night is a record and
+  records are carried.
+- **A night belongs to the morning it ENDED on.** That is the one convention that
+  survives a night shift — 23:30 → 07:10 and 09:00 → 15:00 are both Tuesday's
+  night — and it is why the sheet pages MORNINGS and derives the bedtime's date
+  from the two clocks rather than asking (`night/write.ts` `nightWindow`), which
+  makes a negative or 26-hour night unrepresentable. The Manor's own week line
+  still splits a cross-midnight block across two columns; the two figures differ
+  at week edges by design, the way `WeekAttribution`'s two modes do.
+- **A night with no record is a GAP, never a zero.** Averages state what they
+  averaged over, debt skips absent nights entirely, and the instruments draw
+  nothing at all where a night is missing — which is what the `'band'` DialKind
+  was added for (`briefing/dials.ts`, `geometry.ts`). A zero-height bar is a
+  claim that somebody slept nothing.
+- **The recovery coupling is the only place sleep moves another wing's numbers**,
+  and it is deliberately small, capped and gated. `recoveryEffect` returns a
+  scalar that multiplies the strain engine's per-muscle recovery clock
+  (`lib/strain.ts` `muscleClock`) — above 1 the same session takes longer to
+  leave you. It is **EXACTLY 1** when the settings switch is off or when fewer
+  than four of the trailing seven nights are on file, so an estate that ignores
+  this system is never quietly being modelled. Range 0.88–1.20. The input is two
+  times typed on a phone, so every surface that shows it also prints the caveat
+  (`SleepRecoveryNote` in the Grounds; `voice.night.recovery.caveat`).
+- **Every caller of `computeStrains` passes that scalar** — read it from
+  `useRecoveryScale()`. The default of 1 exists for the pure-math probes
+  (`window.__engine`, the recovery scan's inner loop); a SURFACE that omits it is
+  a surface reading a different body from the one beside it.
+- **The body-clock instrument measures against a MEDIAN MIDPOINT, not the clock
+  face.** Each night draws as a band relative to the middle of a usual night, so
+  a daytime sleep and a night sleep are the same shape at different offsets and
+  nothing has to wrap around midnight. Regularity decays exponentially
+  (τ = 120 min) rather than linearly for the same reason: a straight line steep
+  enough to separate an ordinary week bottoms out at three hours of spread, and
+  a shift worker runs four or five as a matter of course.
+- **Doors in**: the ☾ NIGHT button in the Manor's nav row (always there, never
+  asks for anything), the morning offer above the week (`NightPrompt` — one
+  morning only, 04:00–22:00, dismissible for the day, switchable off), a sleep
+  block's own popover/mobile sheet, and QUICK ADD's Sleep template. The offer
+  changes from a request to a confirmation when the estate has already pencilled
+  the night in.
+- **Never begs.** No streaks, no backlog of missed mornings, no congratulation
+  for a long night. It states hours and moves on.
 
 ### Import boundaries (enforced by `eslint.config.js`, `npm run lint`)
 
@@ -620,6 +797,13 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   they carry **fixed ids and a constant `createdAt`** so two devices seeding
   independently produce identical records instead of eight shapes.
 
+- **`majordomo-sleep` v1** (`core/sleep/store.ts`) — THE NIGHT: `notes` (the optional
+  extras a night was given — a 1–5 rating, minutes awake — keyed by EVENT id, the
+  Study's session-meta split), plus `targetH`, `coupling`, `morningPrompt`,
+  `askedOn`. The nights themselves are `majordomo-events` entries; there is no
+  second table of hours, deliberately. `targetH`/`coupling` SYNC (they change what
+  every sleep figure means); `morningPrompt`/`askedOn` do not (whether one screen
+  puts a line above the week at breakfast is a fact about that device).
 - **`majordomo-briefing` v1** (`app/manor/briefing/prefs.ts`) — THE PEN: which
   clauses the brief covers, whether advice is written, and which four dials are
   on the board. Deliberately **never synced** — which dials one screen shows is
@@ -628,7 +812,7 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
 
 **Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
 `majordomo-events` / `majordomo-study` / `majordomo-workshop` / `majordomo-watch` /
-`majordomo-briefing`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+`majordomo-sleep` / `majordomo-briefing`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
 boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
 still applies; the old keys are left in place as insurance and never read again.
 
@@ -658,6 +842,13 @@ live-priced holdings** via Twelve Data. `index.tsx` is the ConsoleModule
   line; the accounts list flips `· live` to `· held`. The **portfolio board is the
   exception** — it keeps per-row market values and labels them in their own currency
   (`unconvertedCurrency`), which is honest because the row says which currency it is.
+  **Strict must never mean unwritable, though**: a priced account with no live figure
+  gets an ordinary field in Update balances, prefilled with its last saved balance and
+  tagged `no quote` (`SnapshotSheet`). It was read-only there, so one holding plus a
+  missing quote — no key, offline, a rate-limited tier, a ticker nobody prices — left an
+  account with no balance box anywhere in the app, and a deposit into it could not be
+  recorded at all. The stamp stays strict either way: live when there is a live figure,
+  otherwise whatever the person typed, never cost basis and never a rate-1 conversion.
 - **Prices** (`lib/prices.ts`, `lib/holdings.ts`) — Twelve Data `/quote` (batched by
   exchange) + `/exchange_rate` for FX. Prices are in each holding's **native currency**;
   net worth converts to ₪ via `fx` (currency→ILS). `refreshPrices()` (a store action)
@@ -768,6 +959,9 @@ ConsoleModule: Tile = sessions this week vs goal; `Upkeep` owns the DEV
   ±15% corrector (DOMS ≠ hypertrophy). Secondary muscles ×0.5. Grounded in the
   hypertrophy/recovery literature (see [[workout-recovery-science]] memory). Strain
   is always recomputed from raw workouts — never persisted — so constants tune freely.
+  **THE NIGHT multiplies the per-muscle clock** (`muscleClock(m, scale)`): an
+  under-slept week stretches every muscle's timeline together, capped at ±20 % and
+  neutral until four of seven nights are on file — see the THE NIGHT section.
 - **Weekly volume mode** — `modules/training/lib/volume.ts` estimates "effective hard
   sets" per muscle over a **trailing 7 days** (deliberately not the calendar week —
   no Monday reset), classifies each against RP-style MEV/MAV/MRV `LANDMARKS`, and the
@@ -892,6 +1086,7 @@ auto-enter Training so they land on the right screen.
 - `?consent` — shows the consent door (DEV never shows it unprompted; accepting
   stamps the shell store, so clear `majordomo-shell` to see it again)
 - `?manor=month` — opens the Manor in month view · `window.__events` — events store
+- `?night` — opens THE NIGHT's sheet on this morning (screenshot aid)
 - `?console=training|capital` — start the shell inside that console
 - `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by
   the **shell** store (founder machines also accept the seven legacy skin ids)
@@ -909,10 +1104,15 @@ auto-enter Training so they land on the right screen.
 - `window.__capital` — the Wayne Fund store handle in dev
 - `window.__study` — the Study store handle in dev
 - `window.__watch` — the Watch's shift-shape store handle in dev
+- `window.__sleep` / `window.__night` — THE NIGHT's store handle and its pure model
+  (`nightsIn`, `sleepStats`, `recoveryEffect`, … — the night harness scores
+  attributions and debts through it without a React round-trip)
 - `window.__engine` — the strain module (sample `recoveryEnvelope(t, style, muscleFactor, nf)`
   to plot recovery curves without React round-trips)
 - `window.__volume` / `window.__trainNext` — the volume estimator and the
   train-next selector (probe `sessionBudget`/`sessionSets`/`trainNext` the same way)
+- `window.__recast` — what a mid-edit method change would cost (`recastLoss`), the
+  model behind the add sheet's guard
 - `window.__nutrition` — the nutrition module (`dailyTargets`, `bmr`, … for macro checks)
 
 ## Environment quirk (this machine's Claude browser pane)

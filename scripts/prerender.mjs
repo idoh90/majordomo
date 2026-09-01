@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 /* ---------------------------------------------------------------------------
-   Prerender the landing's two routes into dist/*.html.
+   Prerender the landing's routes — and its not-found page — into dist/*.html.
 
    Runs after the client build. It compiles src/landing/entry-server.tsx for
    node, renders each route to a string, and splices it into the
@@ -33,7 +33,7 @@ const ssrDir = join(root, '.ssr')
 /* Fallback duplicated from site.config.ts (FALLBACK_CONTACT): this script is
    plain node and cannot import TypeScript. It only feeds the SSR bundle's
    `define`; the shipped HTML got the real value from vite.config.ts. */
-const contact = (process.env.CONTACT_EMAIL ?? '').trim() || 'majordomocal@gmail.com'
+const contact = (process.env.CONTACT_EMAIL ?? '').trim() || 'majorcal@majordomocal.com'
 
 await build({
   root,
@@ -82,7 +82,12 @@ const preloads = WANTED.map((re) => {
   return `<link rel="preload" href="/assets/${hit}" as="font" type="font/woff2" crossorigin>`
 }).join('')
 
-for (const route of ['index', 'privacy', 'terms']) {
+/* '404' rides along with the real routes: it is prerendered for exactly the
+   same reason they are — the page must be legible on the first frame, and an
+   error page that needs a bundle to say what went wrong is a worse error
+   page. It differs only in carrying no canonical (see the NOINDEX note in
+   vite.config.ts) and in staying out of the sitemap, which lists routes. */
+for (const route of ['index', 'privacy', 'terms', '404']) {
   const file = join(dist, `${route}.html`)
   let html = await readFile(file, 'utf8')
   html = html.replace('</head>', `${preloads}</head>`)

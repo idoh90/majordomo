@@ -231,7 +231,9 @@ export function Instrument({
                   {dial.points[scrub].label}
                 </div>
                 <div className="stat-num text-[12.5px] text-ink">
-                  {dial.fmt(dial.points[scrub].v)}
+                  {dial.fmtPoint
+                    ? dial.fmtPoint(dial.points[scrub])
+                    : dial.fmt(dial.points[scrub].v)}
                 </div>
               </div>
             </>

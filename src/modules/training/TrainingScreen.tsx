@@ -17,6 +17,7 @@ import { TopMusclesChart } from './components/insights/TopMusclesChart'
 import { WeeklyChart } from './components/insights/WeeklyChart'
 import { WeeklyGoalCard } from './components/insights/WeeklyGoalCard'
 import { reconcileWorkoutBlocks } from './lib/blocks'
+import { useRecoveryScale } from '../../core/sleep/useSleep'
 import { computeStrains } from './lib/strain'
 import { useWorkoutStore } from './store'
 import { useTrainingUi } from './uiStore'
@@ -24,7 +25,10 @@ import { useTrainingUi } from './uiStore'
 export function TrainingScreen() {
   const workouts = useWorkoutStore((s) => s.workouts)
   const now = useNow()
-  const strains = useMemo(() => computeStrains(workouts, now), [workouts, now])
+  // THE NIGHT's pull on the recovery clock — the body map, the recovery card
+  // and the Manor's chips all read the same one
+  const scale = useRecoveryScale()
+  const strains = useMemo(() => computeStrains(workouts, now, scale), [workouts, now, scale])
 
   // a session logged here reaches the Manor the moment it is saved — the same
   // pass also heals an edited time, and takes the block away with a deletion

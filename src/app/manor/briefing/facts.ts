@@ -1,4 +1,5 @@
 import { useEventsStore } from '../../../core/events/store'
+import { useSleepBriefingFacts } from '../../../core/sleep/useSleep'
 import { useNow } from '../../../core/useNow'
 import type { BriefFacts } from '../../../core/voice/types'
 import { useLedgerBriefingFacts } from '../../../modules/capital/Briefing'
@@ -32,6 +33,10 @@ export function useBriefFacts(): BriefFacts {
   const events = useEventsStore((s) => s.events)
 
   const watch = useWatchBriefingFacts()
+  // THE NIGHT gates ITSELF: the hook returns null until a night is on file,
+  // because an estate that has never written one down has no sleep to report
+  // and the brief must not turn that silence into a sentence about zero.
+  const sleep = useSleepBriefingFacts()
   const grounds = useGroundsBriefingFacts()
   const study = useStudyBriefingFacts()
   const workshop = useWorkshopBriefingFacts()
@@ -56,6 +61,7 @@ export function useBriefFacts(): BriefFacts {
 
   return {
     watch: hasShifts ? watch : null,
+    sleep,
     grounds,
     study: subjects.some((s) => !s.archived) ? study : null,
     workshop: ventures.some((v) => !v.archived) ? workshop : null,

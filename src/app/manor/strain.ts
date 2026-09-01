@@ -27,8 +27,8 @@ export interface DayStrain {
   forecast: boolean
 }
 
-function hotAt(workouts: Workout[], atMs: number): DayStrain['hot'] {
-  const strains = computeStrains(workouts, atMs)
+function hotAt(workouts: Workout[], atMs: number, scale: number): DayStrain['hot'] {
+  const strains = computeStrains(workouts, atMs, scale)
   return (Object.keys(strains) as MuscleId[])
     .filter((m) => strains[m] >= HOT)
     .map((m) => ({ id: m, label: MUSCLES[m].label, strain: strains[m] }))
@@ -44,13 +44,16 @@ export function dayStrains(
   workouts: Workout[],
   windows: { start: Date; end: Date }[],
   now: number,
+  /** THE NIGHT's pull on the recovery clock (core/sleep). The calendar's own
+   *  strain chips must be drawn on the same body the Grounds' map is. */
+  scale = 1,
 ): DayStrain[] {
   return windows.map((w) => {
     const span = w.end.getTime() - w.start.getTime()
     let best: DayStrain['hot'] = []
     let bestKey = -1
     for (let i = 0; i < SAMPLES; i++) {
-      const hot = hotAt(workouts, w.start.getTime() + (span * i) / SAMPLES)
+      const hot = hotAt(workouts, w.start.getTime() + (span * i) / SAMPLES, scale)
       const key = hot.length * 100 + (hot[0]?.strain ?? 0)
       if (key > bestKey) {
         bestKey = key

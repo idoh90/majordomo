@@ -11,7 +11,9 @@
     "audit": "node scripts/audit.mjs",
     "check:manor": "node scripts/manor-harness.mjs",
     "vendor:exercises": "node scripts/vendor-exercises.mjs",
-    "bell:probe": "node scripts/bell-probe.mjs"
+    "bell:probe": "node scripts/bell-probe.mjs",
+    "check:night": "node scripts/night-harness.mjs",
+    "check:recast": "node scripts/recast-harness.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

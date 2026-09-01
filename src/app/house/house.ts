@@ -124,6 +124,9 @@ export interface HouseInputs {
   spendItems: SpendItem[]
   recurring: RecurringExpense[]
   monthlyBudget: number
+  /** THE NIGHT's pull on the recovery clock (core/sleep) — the rail's
+   *  readiness figure must read the same body the Grounds' map does */
+  sleepScale: number
   /** the wing's own ₪ formatter — core has no idea what currency this is */
   formatMoney: (n: number) => string
 }
@@ -156,7 +159,7 @@ export function computeHouse(i: HouseInputs): HouseModel {
   const counts = weeklyCounts(i.workouts, nowDate, WEEKS, i.weekStart).map((b) => b.count)
   const groundsNow = counts[counts.length - 1] ?? 0
   const groundsPrev = counts[counts.length - 2] ?? null
-  const strains = computeStrains(i.workouts, i.nowH)
+  const strains = computeStrains(i.workouts, i.nowH, i.sleepScale)
   const ready = readiness(strains)
 
   /* ----------------------------------------------------------------- study */

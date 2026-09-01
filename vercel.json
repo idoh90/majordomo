@@ -5,6 +5,10 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
+  "functions": {
+    "api/bell.ts": { "maxDuration": 60 },
+    "api/google.ts": { "maxDuration": 30 }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",

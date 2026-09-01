@@ -325,13 +325,23 @@ export function RunStep({ fields, onChange, onContinue, easy: held }: RunStepPro
         </span>
       </div>
 
+      {/* A run states its size as a distance (which the pace turns into a
+          clock) or as a clock carried over from an edit. With neither, there is
+          no run to record — the saved session knew neither how far nor how long,
+          drew a row of em-dashes on the RUNS card and still took half an hour of
+          the Manor's week off the block fallback. The sheet already says a pace
+          needs a distance; now it means it. */}
       <button
         type="button"
+        disabled={seconds <= 0}
         onClick={() => onContinue(prefill)}
-        className="btn-cta mt-6 w-full py-3.5 text-lg transition active:scale-[0.99]"
+        className="btn-cta mt-6 w-full py-3.5 text-lg transition active:scale-[0.99] disabled:opacity-30"
       >
         Continue
       </button>
+      {seconds <= 0 && (
+        <p className="mt-2 text-center text-xs text-ink-faint">{voice.grounds.runNeedsDetail}</p>
+      )}
     </div>
   )
 }

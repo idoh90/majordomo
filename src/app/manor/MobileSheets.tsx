@@ -8,6 +8,8 @@ import { voice } from '../../core/voice'
 import { useWorkshopStore } from '../../modules/workshop/store'
 import { BenchForm, CustomEventForm, Stepper, TitleField, type QuickAddPick } from './fields'
 import { KIND_META, eventMeta, hhmm } from './kinds'
+import { isPencilledNight } from '../../core/sleep/lib'
+import { useManorUi } from './uiStore'
 import type { NearWatch } from './nearWatch'
 
 /**
@@ -152,6 +154,7 @@ export function MobileQuickAddSheet({
 export function MobileEventSheet({
   open,
   event,
+  sandbox,
   hotNames,
   near,
   onClose,
@@ -161,6 +164,8 @@ export function MobileEventSheet({
 }: {
   open: boolean
   event: CalendarEvent | null
+  /** a what-if is open — the night door is closed while one is */
+  sandbox: boolean
   /** muscles still hot on this event's day (training events only) */
   hotNames: string[]
   near: NearWatch | null
@@ -229,10 +234,35 @@ export function MobileEventSheet({
             </div>
           ) : (
             <>
+              {/* A night's own sheet, not the generic time editor — the hours
+                  are only half of it, and a pencilled block wants confirming
+                  rather than correcting. It takes the primary position here
+                  because on a phone this sheet IS the popover, and MOVE is
+                  rarely what you want with a night that already happened. */}
+              {/* …and the same door, closed the same way (see EventPopover) */}
+              {e.kind === 'sleep' && !sandbox && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose()
+                    useManorUi.getState().requestNight(localDayKey(e.end))
+                  }}
+                  className="btn-cta mt-3.5 h-12 w-full font-display text-[13.5px] font-semibold tracking-[0.18em]"
+                  style={{
+                    background: 'var(--color-w-sleep)',
+                    color: 'var(--color-bg)',
+                    boxShadow: 'none',
+                  }}
+                >
+                  ☾ {isPencilledNight(e) ? voice.night.prompt.pencilCta : voice.night.openLabel}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onMove}
-                className="btn-cta mt-3.5 h-12 w-full font-display text-[13.5px] font-semibold tracking-[0.18em]"
+                className={`${
+                  e.kind === 'sleep' && !sandbox ? 'card mt-2 h-11' : 'btn-cta mt-3.5 h-12'
+                } w-full font-display text-[13.5px] font-semibold tracking-[0.18em]`}
               >
                 {voice.manor.eventSheet.move}
               </button>

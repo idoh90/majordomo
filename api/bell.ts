@@ -50,6 +50,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
+import { nodeHandler } from './_node.js'
 
 /* -------------------------------------------------------------------------- */
 /* environment                                                                */
@@ -145,6 +146,10 @@ const ALLOWED_ORIGINS = new Set([
  * sits there until the platform kills it, which reads to the caller as a hang
  * rather than as a fact plus a remedy. The app's own sign-in path made the same
  * decision for the same reason, with the same order of magnitude.
+ *
+ * Six seconds rather than eight because two of these land in one ring — the
+ * session, then the meter — and both have to finish inside the deadline the
+ * bridge holds this handler to.
  */
 const withTimeout =
   (ms: number): typeof fetch =>
@@ -155,7 +160,7 @@ const withTimeout =
     return fetch(input, { ...init, signal })
   }
 
-const REGISTRY_TIMEOUT_MS = 8_000
+const REGISTRY_TIMEOUT_MS = 6_000
 
 /**
  * Streaming a reply takes as long as it takes, and the platform's default
@@ -331,7 +336,22 @@ async function verifyUser(token: string): Promise<Door> {
 /* the handler                                                                */
 /* -------------------------------------------------------------------------- */
 
-export default async function handler(req: Request): Promise<Response> {
+/**
+ * The ring itself, written against the web standard — `Request` in, `Response`
+ * out. It is NOT the default export: Vercel's Node runtime calls a default
+ * export with Node's `(req, res)` pair and discards a `Response` handed back to
+ * it, which is a hang rather than an error. `./_node` bridges the two shapes,
+ * and the bottom of this file is where that happens.
+ */
+async function ring(req: Request): Promise<Response> {
+  // A HEAD is a health probe and this endpoint is an event stream: there is no
+  // body to describe and no work worth doing. Answered before the kill switch is
+  // read, so a probe cannot be used to ask whether the Bell is armed, and before
+  // anything is claimed, so a probe can never cost a household a slot.
+  if (req.method === 'HEAD') {
+    return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } })
+  }
+
   if (req.method !== 'POST') return fail(405, 'POST only')
 
   // The kill switch, and it defaults to OFF. Merging this file and deploying it
@@ -666,3 +686,14 @@ export default async function handler(req: Request): Promise<Response> {
     },
   })
 }
+
+/**
+ * What the platform actually calls.
+ *
+ * 20 seconds is the wait for the reply's HEADERS, not for the reply: the stream
+ * is handed over the moment its status is known and may then run to
+ * `maxDuration`. It sits above the two registry waits that precede it (6s each)
+ * and well below the 60 above, so a stalled dependency is refused as a fact
+ * instead of being killed as a timeout.
+ */
+export default nodeHandler(ring, { deadlineMs: 20_000 })

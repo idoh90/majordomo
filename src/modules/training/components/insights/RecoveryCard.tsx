@@ -4,8 +4,10 @@ import { useShellStore } from '../../../../core/store/shell'
 import { SKINS } from '../../../../core/ui/skins'
 import { Hinted } from '../../../../core/ui/Hint'
 import { voice } from '../../../../core/voice'
+import { useRecoveryEffect } from '../../../../core/sleep/useSleep'
 import { recoveryOutlook } from '../../lib/recovery'
 import { strainToColor } from '../../lib/strainColor'
+import { SleepRecoveryNote } from './SleepRecoveryNote'
 
 /**
  * RECOVERY — the mobile design's hot-muscle rows: name, how worn, and when
@@ -21,9 +23,10 @@ export function RecoveryCard({ workouts, now }: { workouts: Workout[]; now: numb
   const skin = SKINS[useShellStore((s) => s.skin)]
   // hour-rounded so the minute tick doesn't re-run the scan
   const nowH = Math.floor(now / 3_600_000) * 3_600_000
+  const sleep = useRecoveryEffect()
   const rows = useMemo(
-    () => (workouts.length ? recoveryOutlook(workouts, nowH) : []),
-    [workouts, nowH],
+    () => (workouts.length ? recoveryOutlook(workouts, nowH, sleep.scale) : []),
+    [workouts, nowH, sleep.scale],
   )
   if (rows.length === 0) return null
 
@@ -32,6 +35,7 @@ export function RecoveryCard({ workouts, now }: { workouts: Workout[]; now: numb
       <Hinted tip={voice.hints.grounds.recovery}>
         <h2 className="card-title">{voice.grounds.recoveryTitle}</h2>
       </Hinted>
+      <SleepRecoveryNote />
       <div className="mt-2.5 flex flex-col gap-2">
         {rows.map((r) => {
           const color = strainToColor(r.strain, skin.heatRamp)

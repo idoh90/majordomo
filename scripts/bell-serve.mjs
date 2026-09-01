@@ -88,7 +88,7 @@ console.log(`    BELL_MODEL                 ${process.env.BELL_MODEL ?? 'claude-
 console.log(`    BELL_DAILY_FREE            ${process.env.BELL_DAILY_FREE ?? '5 (default)'}`)
 
 /* -------------------------------------------------------------------------- */
-/* compile api/bell.ts                                                        */
+/* compile the function                                                      */
 /* -------------------------------------------------------------------------- */
 
 const require = createRequire(import.meta.url)
@@ -101,10 +101,12 @@ try {
   process.exit(1)
 }
 
-const source = path.join(ROOT, 'api', 'bell.ts')
-if (!fs.existsSync(source)) {
-  console.error(`\n  Could not find ${source}\n`)
-  process.exit(1)
+for (const name of ['_node', 'bell']) {
+  const file = path.join(ROOT, 'api', `${name}.ts`)
+  if (!fs.existsSync(file)) {
+    console.error(`\n  Could not find ${file}\n`)
+    process.exit(1)
+  }
 }
 
 // Inside node_modules so the compiled file resolves `@anthropic-ai/sdk` and
@@ -114,16 +116,28 @@ const outDir = path.join(ROOT, 'node_modules', '.cache', 'bell-local')
 const outFile = path.join(outDir, 'bell.mjs')
 fs.mkdirSync(outDir, { recursive: true })
 
-const compiled = ts.transpileModule(fs.readFileSync(source, 'utf8'), {
-  fileName: 'bell.ts',
-  compilerOptions: {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    verbatimModuleSyntax: false,
-  },
-})
-fs.writeFileSync(outFile, compiled.outputText)
+// `api/bell.ts` imports the Node bridge as `./_node.js` — the spelling Node's
+// own ESM resolver needs, and the one the deployed function uses. Here the emit
+// is `.mjs` (this cache directory sits inside node_modules, which has no
+// `"type": "module"` of its own to make a bare `.js` an ES module), so the one
+// specifier is repointed at the emitted twin. Both spellings are matched: an
+// extensionless `./_node` is the bug that took production down in Aug 2026, and
+// this rewrite must not be the thing that hides it coming back.
+for (const name of ['_node', 'bell']) {
+  const compiled = ts.transpileModule(fs.readFileSync(path.join(ROOT, 'api', `${name}.ts`), 'utf8'), {
+    fileName: `${name}.ts`,
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      verbatimModuleSyntax: false,
+    },
+  })
+  fs.writeFileSync(
+    path.join(outDir, `${name}.mjs`),
+    compiled.outputText.replace(/(from\s+['"])\.\/_node(?:\.js)?(['"])/g, '$1./_node.mjs$2'),
+  )
+}
 
 let handler
 try {
@@ -139,34 +153,20 @@ if (typeof handler !== 'function') {
 }
 
 /* -------------------------------------------------------------------------- */
-/* the bridge                                                                 */
+/* the route                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/** Node's request object into the Web `Request` the handler is written against. */
-function toRequest(req) {
-  const headers = new Headers()
-  for (const [k, v] of Object.entries(req.headers)) {
-    if (v === undefined) continue
-    // Hop-by-hop headers belong to this connection, not to the request.
-    if (k === 'connection' || k === 'keep-alive' || k === 'transfer-encoding') continue
-    for (const one of Array.isArray(v) ? v : [v]) headers.append(k, one)
-  }
-
-  const url = `http://${req.headers.host ?? `localhost:${PORT}`}${req.url}`
-  const hasBody = req.method !== 'GET' && req.method !== 'HEAD'
-
-  return new Promise((resolve, reject) => {
-    if (!hasBody) return resolve(new Request(url, { method: req.method, headers }))
-    const chunks = []
-    req.on('data', (c) => chunks.push(c))
-    req.on('error', reject)
-    req.on('end', () =>
-      resolve(new Request(url, { method: req.method, headers, body: Buffer.concat(chunks) })),
-    )
-  })
-}
-
-const server = http.createServer(async (req, res) => {
+/**
+ * There is no bridge here any more, and that is the point.
+ *
+ * This file used to convert Node's `(req, res)` into the `Request` the handler
+ * wanted and write the `Response` back out itself — a second, hand-rolled copy
+ * of the conversion, which meant the one thing it could not test was the
+ * conversion. `api/_node.ts` does that job in production, `api/bell.ts` exports
+ * it as its default, and this file now calls that default exactly the way
+ * Vercel's Node runtime does. What passes here is closer to what deploys.
+ */
+const server = http.createServer((req, res) => {
   const started = Date.now()
   const label = `${req.method} ${req.url}`
 
@@ -177,54 +177,10 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  let response
-  try {
-    response = await handler(await toRequest(req))
-  } catch (e) {
-    console.error(`    ${label} -> the handler threw:`, e?.message ?? e)
-    res.writeHead(500, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ error: 'the handler threw — see the server console' }))
-    return
-  }
+  const hungUp = () => (res.writableEnded ? '' : ' (client hung up)')
+  res.on('close', () => console.log(`    ${label} -> ${res.statusCode}${hungUp()}  ${Date.now() - started}ms`))
 
-  for (const [k, v] of response.headers) res.setHeader(k, v)
-  res.writeHead(response.status)
-  // Events must leave as they are produced; a buffered butler is a silent one.
-  res.socket?.setNoDelay(true)
-
-  if (!response.body) {
-    res.end()
-    console.log(`    ${label} -> ${response.status}  ${Date.now() - started}ms`)
-    return
-  }
-
-  const reader = response.body.getReader()
-
-  // The caller hanging up has to reach the handler, or its `cancel()` path — and
-  // the meter write inside it — is never exercised here. This is the one piece
-  // of platform behaviour worth imitating faithfully, because whether a hang-up
-  // is metered is an open question about this endpoint.
-  let hungUp = false
-  res.on('close', () => {
-    if (res.writableEnded) return
-    hungUp = true
-    reader.cancel(new Error('client hung up')).catch(() => {})
-  })
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (!res.write(Buffer.from(value))) await new Promise((r) => res.once('drain', r))
-    }
-  } catch {
-    /* the consumer went away mid-stream — `close` above has already cancelled */
-  } finally {
-    if (!res.writableEnded) res.end()
-    console.log(
-      `    ${label} -> ${response.status}${hungUp ? ' (client hung up)' : ''}  ${Date.now() - started}ms`,
-    )
-  }
+  handler(req, res)
 })
 
 server.listen(PORT, () => {

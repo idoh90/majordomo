@@ -9,6 +9,7 @@ import {
 } from '../core/backup'
 import { localDayKey } from '../core/dates'
 import { useAuthStore } from '../core/auth/store'
+import { useSleepStore } from '../core/sleep/store'
 import { useShellStore } from '../core/store/shell'
 import { offReason } from '../core/sync/gate'
 import { disableTelemetry } from '../core/telemetry'
@@ -216,6 +217,18 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
               />
               <Divider />
               <AnalyticsToggle />
+            </Section>
+
+            {/* THE NIGHT sits directly above THE GROUNDS on purpose: the one
+                switch in it that changes another wing's numbers changes THAT
+                wing's, and a reader who has just turned the coupling on should
+                be looking at the section it acts on. */}
+            <Section title={voice.night.settings.group}>
+              <NightTarget />
+              <Divider />
+              <SleepCouplingToggle />
+              <Divider />
+              <MorningPromptToggle />
             </Section>
 
             <Section title={voice.settings.groupGrounds}>
@@ -555,6 +568,83 @@ function AnalyticsToggle() {
 }
 
 /* ------------------------------------------------------------- appearance */
+
+/* ------------------------------------------------------------- the night */
+
+/**
+ * Hours a night, as a stepper rather than a slider: it is a number people know
+ * about themselves ("eight", "seven and a half"), not one they hunt for by
+ * feel. Zero is a real answer and says so — it takes the target line off every
+ * chart and stops the ledger keeping score at all, which is the honest setting
+ * for someone who wants the hours recorded and does not want to be marked
+ * against them.
+ */
+function NightTarget() {
+  const targetH = useSleepStore((s) => s.targetH)
+  const setTarget = useSleepStore((s) => s.setTarget)
+  const V = voice.night.settings
+  return (
+    <div className="py-2">
+      <div className="flex items-center gap-3">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13.5px] text-ink">{V.targetLabel}</span>
+          <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-faint">
+            {V.targetBlurb}
+          </span>
+        </span>
+        <span className="flex flex-none items-center gap-1.5">
+          <button
+            type="button"
+            aria-label={`${V.targetLabel} down`}
+            onClick={() => setTarget(Math.max(0, targetH - 0.5))}
+            className="card flex h-9 w-9 items-center justify-center text-[15px] leading-none transition-colors hover:border-accent"
+          >
+            −
+          </button>
+          <span className="stat-num w-[64px] text-center text-[14px] text-ink">
+            {targetH > 0 ? `${targetH} h` : V.targetNone}
+          </span>
+          <button
+            type="button"
+            aria-label={`${V.targetLabel} up`}
+            onClick={() => setTarget(Math.min(14, targetH + 0.5))}
+            className="card flex h-9 w-9 items-center justify-center text-[15px] leading-none transition-colors hover:border-accent"
+          >
+            +
+          </button>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function SleepCouplingToggle() {
+  const on = useSleepStore((s) => s.coupling)
+  const set = useSleepStore((s) => s.setCoupling)
+  return (
+    <Toggle
+      label={voice.night.settings.couplingLabel}
+      blurb={voice.night.settings.couplingBlurb}
+      on={on}
+      onChange={set}
+    />
+  )
+}
+
+function MorningPromptToggle() {
+  const on = useSleepStore((s) => s.morningPrompt)
+  const set = useSleepStore((s) => s.setMorningPrompt)
+  return (
+    <Toggle
+      label={voice.night.settings.promptLabel}
+      blurb={voice.night.settings.promptBlurb}
+      on={on}
+      onChange={set}
+    />
+  )
+}
+
+/* -------------------------------------------------------------- guidance */
 
 function PanelTipsToggle() {
   const on = useShellStore((s) => s.panelTips)

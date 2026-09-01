@@ -12,6 +12,19 @@ import {
   resolveOrigin,
 } from './site.config'
 
+/* A document may skip the origin token only by declaring itself noindex —
+   which today is 404.html and nothing else. An error page has no canonical
+   URL because it has no address: it answers at every address that is wrong.
+   The guard's job is unchanged either way — a page carrying NEITHER a
+   canonical nor a noindex is a page whose own address was forgotten, and it
+   still fails the build.
+
+   \s+ between the attributes, not a single space: Prettier wraps a long meta
+   tag across three lines, and a regex that assumes one space silently stops
+   matching the day someone adds max-image-preview to it. (The same lesson
+   scripts/prerender.mjs learned about its description tag.) */
+const NOINDEX = /<meta\s+name="robots"\s+content="[^"]*\bnoindex\b/i
+
 /* ---------------------------------------------------------------------------
    The page's own address, filled in at build time.
 
@@ -23,7 +36,8 @@ import {
    Every hook here THROWS on a missing token rather than passing the file
    through untouched. A file that quietly stops being wired up is the exact
    failure this replaced: it builds, it deploys, and it is wrong in a way only
-   a crawler notices.
+   a crawler notices. The one document exempt from the canonical is 404.html,
+   which buys the exemption by declaring itself noindex — see NOINDEX above.
 --------------------------------------------------------------------------- */
 function siteAddress(env: Record<string, string | undefined>): Plugin {
   const origin = resolveOrigin(env)
@@ -49,10 +63,12 @@ function siteAddress(env: Record<string, string | undefined>): Plugin {
     transformIndexHtml: {
       order: 'post',
       handler(html, ctx) {
-        if (!html.includes(ORIGIN_TOKEN)) {
+        if (!html.includes(ORIGIN_TOKEN) && !NOINDEX.test(html)) {
           throw new Error(
-            `${ctx.filename} carries no ${ORIGIN_TOKEN}. Every route needs a canonical ` +
-              `URL, and it must come from site.config.ts rather than being typed in.`,
+            `${ctx.filename} carries no ${ORIGIN_TOKEN} and does not declare itself noindex. ` +
+              `Every route needs a canonical URL, and it must come from site.config.ts ` +
+              `rather than being typed in — or the document must say plainly that it is ` +
+              `not a route, the way 404.html does.`,
           )
         }
         return fill(html)
@@ -115,10 +131,16 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       rollupOptions: {
-        /* Three documents: the landing (which doubles as the app shell once
-           the boot gate speaks) and its two legal pages. scripts/prerender.mjs
-           fills each with markup after this build. */
-        input: { index: 'index.html', privacy: 'privacy.html', terms: 'terms.html' },
+        /* Four documents: the landing (which doubles as the app shell once
+           the boot gate speaks), its two legal pages, and the not-found page
+           Vercel serves at every path the deployment does not have.
+           scripts/prerender.mjs fills each with markup after this build. */
+        input: {
+          index: 'index.html',
+          privacy: 'privacy.html',
+          terms: 'terms.html',
+          '404': '404.html',
+        },
       },
     },
     plugins: [
@@ -173,20 +195,47 @@ export default defineConfig(({ mode }) => {
           // every user's install for nobody's benefit. The landing's Wing
           // screenshots (shots/) are the same story at ten times the size.
           globIgnores: ['og.png', 'shots/**'],
-          // any unknown path falls back to the shell — there is no router, but a
-          // stray deep link must never dead-end offline
+          // The app is served at "/" and nowhere else, so this exists for the
+          // ROOT WITH A QUERY: "/?demo", "/?landing", "/?console=capital". A bare
+          // "/" is already answered by the precache route (workbox's directoryIndex
+          // resolves it to index.html), but a query string is not ignored when
+          // matching a cache key, so without this a resident opening "/?landing"
+          // offline would get nothing.
           navigateFallback: 'index.html',
-          // …except the server's own routes. `api/` is a real backend on the same
-          // origin, and an offline shell that answers for it would turn "the Bell
-          // is unreachable" into "the Bell replied with an HTML page" — a failure
-          // the caller cannot read and cannot retry sensibly. Nothing under /api
-          // is a navigation today, so this changes nothing yet; it is here so the
-          // chat UI does not discover it the hard way.
-          // The legal pages are real documents of their own: without these two
-          // entries an installed user tapping Terms or Privacy got the app
-          // shell back from the precache instead of the page the law and the
-          // consent door both point at.
-          navigateFallbackDenylist: [/^\/api\//, /^\/privacy$/, /^\/terms$/],
+          // Everything the fallback must NOT answer for. Workbox tests these
+          // against `url.pathname + url.search` (see workbox-routing's
+          // NavigationRoute._match), which is what lets the last rule separate a
+          // real path from a query on the root.
+          //
+          // The first four are specific and stay specific: `api/` is a real
+          // backend on the same origin, and an offline shell answering for it
+          // would turn "the Bell is unreachable" into "the Bell replied with an
+          // HTML page" — a failure the caller cannot read and cannot retry
+          // sensibly. The legal pages are real documents the law and the consent
+          // door both point at; without their entries an installed user tapping
+          // Terms got the app shell back instead. They are redundant under the
+          // last rule TODAY, and kept anyway so that narrowing the last rule
+          // cannot silently un-protect them.
+          //
+          // The last rule is the general one: any path that is not "/" is not
+          // this app's address. It used to be absent, and the cost was that the
+          // 404 page could never be seen by anyone who had the app installed —
+          // the shell answered first, at every wrong address, so a resident
+          // typing a typo got their own calendar at a URL that does not exist.
+          // The old comment here reasoned that "a stray deep link must never
+          // dead-end offline"; the app has no router and publishes no deep
+          // links, so there is no such link to strand. What it does cost is
+          // real and small: a wrong address while OFFLINE now gets the
+          // browser's own error page rather than 404.html, because the SW is
+          // no longer the one answering and the precached copy is keyed to
+          // "/404". That trade was made deliberately — see CLAUDE.md.
+          navigateFallbackDenylist: [
+            /^\/api\//,
+            /^\/privacy$/,
+            /^\/terms$/,
+            /^\/404$/,
+            /^\/[^?]/,
+          ],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           // Quotes are a live-network luxury: serve the cache when it answers,
