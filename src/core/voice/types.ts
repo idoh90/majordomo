@@ -526,7 +526,10 @@ export interface VoicePack {
     }
     /** the butler's briefing: greetings + contextual heads-up lines. Prose,
      *  not notifications — no dismissal, they expire with their condition.
-     *  Voice bible: dry, at most one sentence-final "sir", never begs. */
+     *  Voice bible: dry, at most one sentence-final "sir", never begs.
+     *  THE VALET prints these same lines verbatim on its own surface, where
+     *  they DO carry a device-local wave-off; that belongs to the bubble, not
+     *  to the strip, and the wording has to work in both. See `butler`. */
     headsUp: {
       /** the 1st of the month */
       monthGreeting: (month: string) => string
@@ -686,6 +689,69 @@ export interface VoicePack {
       promptLabel: string
       promptBlurb: string
     }
+  }
+  /**
+   * THE VALET — the butler bubble: one line, once, then a quiet chip in the
+   * corner. He carries what the wings already know to anywhere in the house,
+   * so a thing forgotten is not only visible on the Manor.
+   *
+   * The register is Appendix B, held tighter here than anywhere else in the
+   * pack, because a floating element is the easiest thing in the app to turn
+   * into a nag: dry, composed, at most TWO sentence-final "sir" across this
+   * whole section. Never begs, never guilts, never counts a streak or a
+   * backlog — he holds ONE matter and says it once. No emoji.
+   *
+   * An OFFER is not a tutorial. The playbook is explicit that a screen
+   * needing explanation is a wrong screen, so an offer names what a room is
+   * for in one sentence, is made once in the life of an estate, and is never
+   * repeated or reworded into a second attempt.
+   *
+   * The eight classic lines are NOT here: the bubble prints
+   * `manor.headsUp.*` verbatim, because one fact must read the same in both
+   * places. Keys are named for the MATTER rather than the sentence, so a
+   * Bell-written butler can change the engine underneath stable copy — the
+   * same trick the onboarding stages play (see `onboarding` below).
+   */
+  butler: {
+    matter: {
+      /** homework whose day has already gone */
+      overdueHomework: (n: number) => string
+      /** a milestone's date has passed with the milestone still open */
+      overdueMilestone: (v: { venture: string; title: string }) => string
+      /** a delivery promised for an hour that has now passed */
+      overdueDelivery: (v: { venture: string; title: string }) => string
+      /** bench sessions still owed their report */
+      workshopReport: (n: number) => string
+      /** a bench clock left running — `since` is a clock time, never an elapsed
+       *  count: what he prints has to still be true an hour from now */
+      benchLong: (v: { since: string }) => string
+      /** the Google grant lapsed; the fix is the consent walk again */
+      gcalReconnect: string
+      /** sync stopped, waiting to be told which estate is the real one */
+      syncChoice: string
+      /** the Vault is quoting prices it cannot stand behind */
+      pricesDegraded: string
+    }
+    /** the room offers — one sentence each, spoken once, never again */
+    offer: {
+      study: string
+      workshop: string
+      ledger: string
+      night: string
+      gcal: string
+    }
+    /** the way through. `go` is the default; the others where it reads wrong */
+    cta: {
+      go: string
+      settings: string
+      write: string
+    }
+    /** waved off until tomorrow — his own, not the night offer's */
+    dismiss: string
+    /** accessible name of the folded chip */
+    chipAria: string
+    /** settings → GUIDANCE (the hints toggle's shape, not the settings pack's) */
+    settings: { toggle: string; blurb: string }
   }
   watch: {
     onDuty: string

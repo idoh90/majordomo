@@ -9,6 +9,7 @@ import {
   awaitingReport,
   bookedHoursBeforeExam,
   daysUntil,
+  dueHomeworkCount,
   examProgress,
   nextExam,
   studyStats,
@@ -43,7 +44,7 @@ export function useStudyBriefingFacts(): StudyBriefingFacts {
   const nowDate = new Date(now)
 
   const weekEndKey = localDayKey(stats.weekEnd)
-  const dueCount = homework.filter((h) => !h.done && h.due && h.due < weekEndKey).length
+  const dueCount = dueHomeworkCount(homework, weekEndKey)
 
   // scope the syllabus figure to the subject the headline is already talking
   // about. Averaged over every subject it sat next to the Dossier's own

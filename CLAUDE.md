@@ -638,6 +638,39 @@ Grounds is open** and reaches the add sheet via a one-shot mailbox
 into the shell for this. (`ConsoleModule.Tile/Icon/status/tagline` currently
 have no consumers — kept as scaffolding for wing-management later.)
 
+### THE VALET — the butler bubble (`src/app/butler/`)
+
+One line, once, then a quiet chip in the corner — the heads-ups engine carried
+off the Manor to wherever the reader is standing.
+
+- **It is a SECOND RENDERER, never a second engine.** `app/manor/headsUps.ts`
+  computes every condition and returns `matters`; the Manor's strip prints the
+  first two `strip: true` ones as prose, the bubble shows the single loudest of
+  all of them. That file's own history is the reason (`the two used to compute
+  this separately and contradict each other on screen`) — never re-derive a
+  fact here that a wing already knows.
+- **The cap gates PRINTING, not collecting.** `HEADS_UP_CAP` used to stop the
+  engine mid-sweep, so conditions after the second hit never ran. Invisible
+  while the strip was the only reader; wrong the moment something asked "what
+  is the loudest thing in the house?".
+- **`urgency` is the dials.ts scale** (examclock 8 at the top, ambient 1–3), so
+  the bubble and the instrument board agree about what is loud.
+- **`Go` is DATA, never a closure** — the engine names the room, the component
+  posts to the mailboxes (`useNavStore`, the Manor's quick-add/night, the
+  Workshop's board, `authUi`, `settingsUi`). Navigate-only, always: it opens the
+  room that owns the deed and never performs it (THE PATTERN's precedent).
+- **Silence is the default.** Nothing at all with no records, during the
+  onboarding walk, or under `navigator.webdriver` — the harnesses drive `?demo`,
+  whose fixtures guarantee matters, and a fixed corner element can swallow a
+  click meant for the grid. The stated cost: **no automated coverage of this
+  component**; verify it by hand with `?butler`. A what-if sandbox blocks a new
+  announcement but not the chip.
+- **A room offer is not a tutorial** (playbook: a screen needing explanation is
+  a wrong screen). It needs an estate ≥ 7 days old, no other matter waiting, a
+  wing not switched off — and happens exactly once in the life of the estate.
+- `settingsUi.ts` is the second opener of the settings page, the way `authUi` is
+  the second opener of the login door.
+
 ### THE BRIEFING (`src/app/manor/briefing/`)
 
 Below the week grid: **one written brief**, **four instruments**, and a shelf of
@@ -819,9 +852,17 @@ specifiers — dynamic `import()` isn't checked; it's a guardrail, not security.
   a fact about that device, like the bench timer. `picks: null` means the house
   is still choosing, and it keeps choosing until a chip is placed.
 
+- **`majordomo-butler` v1** (`app/butler/store.ts`) — THE VALET's ledger: the
+  kill switch, `waved` (matterKey → day waved off), `announced` (matterKey → day
+  last spoken) and `introduced` (rooms already offered, once ever). Both day
+  books are **pruned on every write** — they only answer "was this today?", so
+  yesterday's entries are litter. `announced` is PERSISTED and that is the whole
+  of "announce once": a reload is not a new morning. Deliberately **never
+  synced**, like `panelTips` and the briefing's dial picks.
+
 **Storage keys** are `majordomo-shell` / `majordomo-training` / `majordomo-capital` /
 `majordomo-events` / `majordomo-study` / `majordomo-workshop` / `majordomo-watch` /
-`majordomo-sleep` / `majordomo-briefing`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
+`majordomo-sleep` / `majordomo-briefing` / `majordomo-butler`. The three pre-pivot `batman-*` blobs are adopted verbatim on first
 boot (`adoptLegacyKey` in `core/storage.ts`) so each store's own zustand migrate chain
 still applies; the old keys are left in place as insurance and never read again.
 
@@ -1116,6 +1157,9 @@ auto-enter Training so they land on the right screen.
   stamps the shell store, so clear `majordomo-shell` to see it again)
 - `?manor=month` — opens the Manor in month view · `window.__events` — events store
 - `?night` — opens THE NIGHT's sheet on this morning (screenshot aid)
+- `?butler` — forces THE VALET's card open on the current top matter, and is the
+  ONLY way to see it under automation (it stands down for `navigator.webdriver`)
+  · `window.__butler` — its ledger store
 - `?console=training|capital` — start the shell inside that console
 - `?skin=midnight|terminal|aurora` — forces (and persists) a preset — handled by
   the **shell** store (founder machines also accept the seven legacy skin ids)

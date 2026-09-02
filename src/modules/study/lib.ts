@@ -201,6 +201,26 @@ export function nextExam(exams: Exam[], now: number): Exam | null {
  * heal pass (chip deleted Manor-side, overdue trailing, day drift).
  */
 
+/**
+ * Undone homework whose day has already gone, oldest first.
+ *
+ * The Manor chip for one of these already trails to today (`effectiveHwDay`),
+ * which says WHERE it sits but never that it is late. This is the predicate
+ * behind saying so — shared rather than re-filtered, so the wing and the
+ * butler cannot disagree about what counts as overdue.
+ */
+export function overdueHomework(homework: Homework[], now: number): Homework[] {
+  const today = localDayKey(new Date(now))
+  return homework
+    .filter((h) => !h.done && h.due !== undefined && h.due < today)
+    .sort((a, b) => a.due!.localeCompare(b.due!))
+}
+
+/** undone homework due on or before `weekEndKey` — the wing's own week count */
+export function dueHomeworkCount(homework: Homework[], weekEndKey: string): number {
+  return homework.filter((h) => !h.done && h.due && h.due < weekEndKey).length
+}
+
 /** the local day a homework's chip should sit on — overdue trails to today */
 export function effectiveHwDay(hw: Homework, now: number): string | null {
   if (hw.done || !hw.due) return null

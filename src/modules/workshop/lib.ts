@@ -290,6 +290,28 @@ export function daysSinceTouched(
  * Only `task` cards count. Notes and links are reference, not work: counting
  * them would mean pinning a datasheet made the venture look less finished.
  */
+/**
+ * The longest-quiet BUILDING venture, or null — sparks and shipped work owe
+ * no hours. Extracted from the Workshop's own briefing so anything else that
+ * wants to say "this one has gone quiet" measures it the same way.
+ */
+export function quietVenture(
+  events: CalendarEvent[],
+  sessions: Record<string, SessionMeta>,
+  ventures: Venture[],
+  now: number,
+  entries?: Record<string, WorkEntry>,
+  minDays = 7,
+): { venture: Venture; days: number } | null {
+  let quiet: { venture: Venture; days: number } | null = null
+  for (const v of ventures) {
+    if (v.archived || v.status !== 'building') continue
+    const d = daysSinceTouched(events, sessions, v, now, entries)
+    if (d !== null && d >= minDays && (!quiet || d > quiet.days)) quiet = { venture: v, days: d }
+  }
+  return quiet
+}
+
 export interface TaskProgress {
   done: number
   total: number

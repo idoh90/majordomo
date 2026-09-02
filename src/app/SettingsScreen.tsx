@@ -22,6 +22,8 @@ import { ProfileSheet } from '../modules/training/components/ProfileSheet'
 import { useWorkoutStore } from '../modules/training/store'
 import type { Workout } from '../modules/training/types'
 import { useAuthUi } from './authUi'
+import { useButlerStore } from './butler/store'
+import { useSettingsUi } from './settingsUi'
 import { CalendarsSheet } from './gcal/CalendarsSheet'
 import { openFrontDoor } from './frontDoor'
 import { nudgeWing, useWings } from './wings'
@@ -57,6 +59,16 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
 
   const authStatus = useAuthStore((s) => s.status)
   const registryShut = offReason()
+
+  // THE VALET can ask for a specific sheet, not just the page — the reconnect
+  // matter and the calendar offer both land inside CALENDARS. One-shot: the
+  // request is cleared the moment it is honoured, so a later reopen is plain.
+  const settingsRequest = useSettingsUi((s) => s.request)
+  useEffect(() => {
+    if (!open || settingsRequest === null) return
+    if (settingsRequest === 'calendars') setCalendarsOpen(true)
+    useSettingsUi.getState().clear()
+  }, [open, settingsRequest])
 
   // Esc closes the page, but only when nothing it opened is in front of it —
   // otherwise one key would dismiss the sheet AND the page under it
@@ -134,6 +146,8 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
             </Section>
 
             <Section title={voice.settings.groupGuidance}>
+              <ButlerToggle />
+              <Divider />
               <PanelTipsToggle />
               <Divider />
               <Row
@@ -645,6 +659,19 @@ function MorningPromptToggle() {
 }
 
 /* -------------------------------------------------------------- guidance */
+
+function ButlerToggle() {
+  const off = useButlerStore((s) => s.off)
+  const setOff = useButlerStore((s) => s.setOff)
+  return (
+    <Toggle
+      label={voice.butler.settings.toggle}
+      blurb={voice.butler.settings.blurb}
+      on={!off}
+      onChange={(v) => setOff(!v)}
+    />
+  )
+}
 
 function PanelTipsToggle() {
   const on = useShellStore((s) => s.panelTips)

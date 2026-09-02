@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { voice } from '../core/voice'
 import { SettingsScreen } from './SettingsScreen'
+import { useSettingsUi } from './settingsUi'
 
 /**
  * The gear — the one way into the settings, and now nothing more than that.
@@ -16,6 +17,14 @@ export function SettingsMenu() {
     () =>
       import.meta.env.DEV && new URLSearchParams(window.location.search).get('sheet') === 'skin',
   )
+
+  // the other opener: THE VALET renders at the shell's root and cannot reach
+  // this state, so it posts instead. The page consumes which sheet was asked
+  // for; this only has to know the page should be up.
+  const requested = useSettingsUi((s) => s.request)
+  useEffect(() => {
+    if (requested !== null) setOpen(true)
+  }, [requested])
 
   return (
     <>

@@ -7,10 +7,10 @@ import { voice } from '../../core/voice'
 import type { WorkshopBriefingFacts } from '../../core/voice/types'
 import {
   awaitingReport,
-  daysSinceTouched,
   daysUntil,
   milestoneProgress,
   nextMilestone,
+  quietVenture,
   taskProgress,
   ventureOfEvent,
   workshopStats,
@@ -42,12 +42,10 @@ export function useWorkshopBriefingFacts(): WorkshopBriefingFacts {
   const nameOf = (id: string) => ventures.find((v) => v.id === id)?.name ?? '—'
 
   // the longest-quiet BUILDING venture — sparks and shipped work owe no hours
-  let quiet: WorkshopBriefingFacts['quiet'] = null
-  for (const v of active) {
-    if (v.status !== 'building') continue
-    const d = daysSinceTouched(events, sessions, v, now, workEntries)
-    if (d !== null && d >= 7 && (!quiet || d > quiet.days)) quiet = { venture: v.name, days: d }
-  }
+  const quietest = quietVenture(events, sessions, active, now, workEntries)
+  const quiet: WorkshopBriefingFacts['quiet'] = quietest
+    ? { venture: quietest.venture.name, days: quietest.days }
+    : null
 
   const upcoming = events
     .filter((e) => e.kind === 'workshop' && !e.allDay && new Date(e.start).getTime() > now)
