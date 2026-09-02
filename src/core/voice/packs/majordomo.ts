@@ -1153,7 +1153,17 @@ export const majordomoPack: VoicePack = {
     enrol: 'ADD A SUBJECT',
     mattersPending: 'EXAMS AHEAD',
     noExams: 'No exams coming up.',
-    countdown: (days) => (days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`),
+    examsSat: 'ALREADY SAT',
+    countdown: (days) =>
+      days < 0
+        ? days === -1
+          ? 'a day ago'
+          : `${-days} days ago`
+        : days === 0
+          ? 'today'
+          : days === 1
+            ? 'tomorrow'
+            : `in ${days} days`,
     hoursToward: (h) => `${h.toFixed(1)} h logged toward it`,
     desk: 'THE DESK',
     book: 'BOOK / LOG A SESSION',
@@ -1212,6 +1222,9 @@ export const majordomoPack: VoicePack = {
       addHomework: 'ADD HOMEWORK',
       addExam: 'ADD AN EXAM',
       addTopic: (name) => `ADD A TOPIC — ${name}`,
+      editHomework: 'EDIT HOMEWORK',
+      editExam: 'EDIT THE EXAM',
+      editTopic: (name) => `EDIT A TOPIC — ${name}`,
       bookHintPast: 'That time has already passed. This saves as done, and the ring moves now.',
       bookHintFuture: 'This goes straight onto the Manor.',
       goalZeroHint: 'A goal of zero just keeps the ring quiet. Hours are still counted.',
@@ -1223,7 +1236,10 @@ export const majordomoPack: VoicePack = {
       ctaHw: 'ADD IT',
       ctaExam: 'MARK THE DATE',
       ctaTopic: 'ADD TOPIC',
+      ctaSave: 'SAVE',
+      remove: 'DELETE',
       cancel: 'CANCEL',
+      examEditHint: 'Moving the day keeps the hours already counted toward it.',
     },
     toast: {
       markedDone: 'Marked done. The ring moves.',
@@ -1239,6 +1255,12 @@ export const majordomoPack: VoicePack = {
       hwUndone: 'Back on the list.',
       examNoted: 'Noted. The countdown starts.',
       topicAdded: 'Added to the syllabus.',
+      hwEdited: 'Amended.',
+      hwRemoved: 'Deleted. The chip leaves the Manor.',
+      examEdited: 'Amended. The countdown follows the new date.',
+      examRemoved: 'Deleted. The countdown stops.',
+      topicEdited: 'Amended.',
+      topicRemoved: 'Removed from the syllabus.',
       archived: 'Archived. The ring leaves the row.',
       filed: 'Filed.',
       nameFirst: 'It needs a name first.',
@@ -1249,6 +1271,19 @@ export const majordomoPack: VoicePack = {
     archiveTitle: 'Archive this subject?',
     archiveBody: (name) => `${name} keeps its history. It just leaves the ring row.`,
     archiveYes: 'Archive',
+    deleteHwTitle: 'Delete this homework?',
+    deleteHwBody: (title) => `${title} goes, and its chip leaves the Manor. There is no undoing it.`,
+    deleteExamTitle: 'Delete this exam?',
+    deleteExamBody: (title) =>
+      `${title} goes, with its countdown and its day on the Manor. There is no undoing it.`,
+    deleteTopicTitle: 'Delete this topic?',
+    deleteTopicBody: (title) => `${title} leaves the syllabus, and the count is taken again without it.`,
+    deleteYes: 'Delete',
+    editRow: {
+      homework: 'Edit this homework',
+      exam: 'Edit this exam',
+      topic: 'Edit this topic',
+    },
     tileUntilExam: 'until the next exam',
     tileWeekRead: 'studied this week',
     briefingExam: ({ subject, days, hours }) => {
@@ -1468,6 +1503,7 @@ export const majordomoPack: VoicePack = {
     board: {
       back: 'THE SHELF',
       hang: '+ HANG A CARD',
+      amend: 'EDIT THIS CARD',
       empty: 'A clean bench, sir. Pin the first card.',
       hangFirst: '+ HANG A CARD',
       colOf: ({ col, total }) => `${col} / ${total}`,
@@ -1541,6 +1577,7 @@ export const majordomoPack: VoicePack = {
       titlePlaceholder: 'e.g. Re-rig the tail servo',
       msPlaceholder: 'Name the next marker…',
       msHint: "Each marker takes a chip on the Manor's week, sir.",
+      msEditHint: 'Moving the day keeps the hours already counted toward it.',
       theDay: 'THE DAY',
       ctaOpen: 'OPEN THE VENTURE',
       ctaRename: 'SAVE',
@@ -1549,7 +1586,9 @@ export const majordomoPack: VoicePack = {
       ctaHang: 'HANG IT',
       ctaSaveCard: 'SAVE',
       ctaMs: 'MARK THE DAY',
+      ctaSaveMs: 'SAVE',
       cancel: 'CANCEL',
+      doneEditing: 'LEAVE IT',
       takeDown: 'TAKE THIS CARD DOWN',
       takeDownTitle: 'Take this card down?',
       takeDownBody: ({ title, threads }) =>
@@ -1557,9 +1596,16 @@ export const majordomoPack: VoicePack = {
           ? `${title} comes off the wall, and the ${lower(threads)} ${plural(threads, 'thread', 'threads')} to it ${plural(threads, 'is', 'are')} cut. This cannot be undone.`
           : `${title} comes off the wall. This cannot be undone.`,
       takeDownYes: 'Take it down',
+      unmark: 'UNMARK THIS DAY',
+      unmarkTitle: 'Unmark this day?',
+      unmarkBody: (title) =>
+        `${title} goes, with its countdown and its chip on the Manor. This cannot be undone.`,
+      unmarkYes: 'Unmark it',
     },
     milestonesTitle: (name) => `MILESTONES — ${name}`,
     addMs: '+ ADD',
+    editMs: 'AMEND THIS MARKER',
+    editRow: 'Edit this milestone',
     toast: {
       benchStart: 'The bench is yours, sir.',
       benchStop: ({ h, m }) => {
@@ -1591,6 +1637,7 @@ export const majordomoPack: VoicePack = {
       dueSet: 'Noted. The chip has its day on the Manor.',
       dueCleared: 'No deadline. The chip leaves the Manor.',
       msAdded: 'Marked. The chip has its day on the Manor.',
+      msEdited: 'Amended. The chip follows the new day.',
       msDone: 'Struck. The chip leaves the Manor.',
       msUndone: 'Back on the board.',
       msGone: 'Unmarked.',

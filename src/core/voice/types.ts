@@ -1180,7 +1180,14 @@ export interface VoicePack {
     enrol: string
     mattersPending: string
     noExams: string
-    /** days until an exam (today / tomorrow / in N days) */
+    /** the quiet list under the cards: exams whose day has already gone */
+    examsSat: string
+    /**
+     * Days until an exam (today / tomorrow / in N days), and BACKWARDS for one
+     * already sat — the amend sheet's stepper can be wound into the past, and
+     * a negative reading 'today' is how a date sat months ago claimed to be
+     * this morning's.
+     */
     countdown: (days: number) => string
     hoursToward: (h: number) => string
     desk: string
@@ -1241,6 +1248,10 @@ export interface VoicePack {
       addHomework: string
       addExam: string
       addTopic: (name: string) => string
+      /** the same three sheets reopened on a record that already exists */
+      editHomework: string
+      editExam: string
+      editTopic: (name: string) => string
       bookHintPast: string
       bookHintFuture: string
       goalZeroHint: string
@@ -1252,7 +1263,12 @@ export interface VoicePack {
       ctaHw: string
       ctaExam: string
       ctaTopic: string
+      /** amending, rather than adding — one CTA for all three sheets */
+      ctaSave: string
+      remove: string
       cancel: string
+      /** replaces examHint on an amend: countFrom is NOT re-seeded by a move */
+      examEditHint: string
     }
     toast: {
       markedDone: string
@@ -1267,6 +1283,12 @@ export interface VoicePack {
       hwUndone: string
       examNoted: string
       topicAdded: string
+      hwEdited: string
+      hwRemoved: string
+      examEdited: string
+      examRemoved: string
+      topicEdited: string
+      topicRemoved: string
       archived: string
       filed: string
       nameFirst: string
@@ -1279,6 +1301,20 @@ export interface VoicePack {
     archiveTitle: string
     archiveBody: (name: string) => string
     archiveYes: string
+    /** delete confirm dialogs — each says what else goes with the record */
+    deleteHwTitle: string
+    deleteHwBody: (title: string) => string
+    deleteExamTitle: string
+    deleteExamBody: (title: string) => string
+    deleteTopicTitle: string
+    deleteTopicBody: (title: string) => string
+    deleteYes: string
+    /** accessible names for the docket rows that open their edit sheet */
+    editRow: {
+      homework: string
+      exam: string
+      topic: string
+    }
     /** menu-tile labels */
     tileUntilExam: string
     tileWeekRead: string
@@ -1383,6 +1419,8 @@ export interface VoicePack {
     board: {
       back: string
       hang: string
+      /** the same sheet, opened on a card already on the wall */
+      amend: string
       empty: string
       hangFirst: string
       colOf: (v: { col: number; total: number }) => string
@@ -1452,6 +1490,8 @@ export interface VoicePack {
       titlePlaceholder: string
       msPlaceholder: string
       msHint: string
+      /** replaces msHint on an amend: countFrom is NOT re-seeded by a move */
+      msEditHint: string
       theDay: string
       ctaOpen: string
       ctaRename: string
@@ -1460,7 +1500,10 @@ export interface VoicePack {
       ctaHang: string
       ctaSaveCard: string
       ctaMs: string
+      ctaSaveMs: string
       cancel: string
+      /** leaves the marker being amended and returns the form to adding */
+      doneEditing: string
       /** taking a card off the wall: the button, and the question it asks
        *  first. The label is an INSTRUCTION — `toast.cardGone` is the report
        *  afterwards, and the two must never be the same string. */
@@ -1468,9 +1511,18 @@ export interface VoicePack {
       takeDownTitle: string
       takeDownBody: (v: { title: string; threads: number }) => string
       takeDownYes: string
+      /** the same question for a marker: its chip and its countdown go too */
+      unmark: string
+      unmarkTitle: string
+      unmarkBody: (title: string) => string
+      unmarkYes: string
     }
     milestonesTitle: (name: string) => string
     addMs: string
+    /** the form's heading once a row on the list above it is being amended */
+    editMs: string
+    /** accessible name for a milestone row that opens for amending */
+    editRow: string
     toast: {
       benchStart: string
       benchStop: (v: { h: number; m: number }) => string
@@ -1497,6 +1549,7 @@ export interface VoicePack {
       dueSet: string
       dueCleared: string
       msAdded: string
+      msEdited: string
       msDone: string
       msUndone: string
       msGone: string

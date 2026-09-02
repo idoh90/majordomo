@@ -18,6 +18,7 @@ import { track } from '../../core/telemetry'
 import { voice } from '../../core/voice'
 import { useIsMobile } from '../useIsMobile'
 import { KIND_META, eventMeta, hhmm, markerMeta } from './kinds'
+import { markerHome } from './markerHome'
 import { ManorLegend } from './Legend'
 import { TILT, TILT_MOBILE, useGhostTilt } from './dragTilt'
 import { useWorkshopStore } from '../../modules/workshop/store'
@@ -1250,18 +1251,28 @@ const DayHeader = memo(function DayHeader({
       )}
       {markers.map((m) => {
         const mm = markerMeta(m)
-        return (
-          <span
+        const home = markerHome(m)
+        const label = `${mm.glyph ? `${mm.glyph} ` : ''}${m.title}`
+        const cls = 'mt-1 inline-block rounded-[5px] px-1.5 py-px text-[10px] tracking-[0.08em]'
+        const style = {
+          color: mm.color,
+          border: `1px solid color-mix(in srgb, ${mm.color} 55%, transparent)`,
+          background: `color-mix(in srgb, ${mm.color} 10%, transparent)`,
+        }
+        return home ? (
+          <button
             key={m.id}
-            className="mt-1 inline-block rounded-[5px] px-1.5 py-px text-[10px] tracking-[0.08em]"
-            style={{
-              color: mm.color,
-              border: `1px solid color-mix(in srgb, ${mm.color} 55%, transparent)`,
-              background: `color-mix(in srgb, ${mm.color} 10%, transparent)`,
-            }}
+            type="button"
+            title={home.hint}
+            onClick={home.open}
+            className={`${cls} transition-[filter] hover:brightness-125`}
+            style={style}
           >
-            {mm.glyph ? `${mm.glyph} ` : ''}
-            {m.title}
+            {label}
+          </button>
+        ) : (
+          <span key={m.id} className={cls} style={style}>
+            {label}
           </span>
         )
       })}
@@ -2291,10 +2302,22 @@ function MobileWeek({
           </span>
           {markersByCol[active].map((m) => {
             const mm = markerMeta(m)
-            return (
+            const home = markerHome(m)
+            const label = `${mm.glyph ? `${mm.glyph} ` : ''}${m.title}`
+            return home ? (
+              <button
+                key={m.id}
+                type="button"
+                title={home.hint}
+                onClick={home.open}
+                className="truncate text-[10px] underline decoration-dotted underline-offset-2"
+                style={{ color: mm.color }}
+              >
+                {label}
+              </button>
+            ) : (
               <span key={m.id} className="truncate text-[10px]" style={{ color: mm.color }}>
-                {mm.glyph ? `${mm.glyph} ` : ''}
-                {m.title}
+                {label}
               </span>
             )
           })}
