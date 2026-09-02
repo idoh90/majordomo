@@ -19,6 +19,13 @@
  *     proves the window logic, not every hour of the day.
  *   · No DST coverage, exactly as the Manor harness has none.
  *   · The native <input type="time"> is driven by value, not by the OS wheel.
+ *   · The phone pass proves the confirm WALK, not the look of it. Nothing here
+ *     scores contrast, and the fortnight strip's hatched ghosts have no
+ *     assertion of any kind — they are read by eye, on the skins.
+ *
+ * RUN IT AGAINST A COMMERCIAL DEV SERVER. Under VITE_FOUNDER_SKIN=1 the voice
+ * pack renames the Watch to "THE NIGHT SHIFT", which R3's door regex matches
+ * in the tab nav — a false failure that looks exactly like a real one.
  */
 import { chromium } from 'playwright-core'
 
@@ -34,10 +41,12 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol
 const is = (name, got, want, tol = 0.001) =>
   near(got, want, tol) ? ok(name, `${got}`) : bad(name, `got ${got}, wanted ${want}`)
 
-async function fresh(browser, { width = 1440, height = 1100 } = {}) {
+async function fresh(browser, { width = 1440, height = 1100, touch = false } = {}) {
   const ctx = await browser.newContext({
     viewport: { width, height },
     deviceScaleFactor: 1,
+    isMobile: touch,
+    hasTouch: touch,
     timezoneId: TZ,
   })
   // the boot gate shows the LANDING to a browser with no majordomo* key; one
@@ -143,6 +152,68 @@ async function model(page) {
 
     /* --- no target means no score kept --- */
     out.noTargetDebt = N.sleepStats(three, {}, now, 0, 14).debtH
+
+    /* --- A FORTNIGHT OF THE ESTATE'S OWN PENCIL IS NOT A FORTNIGHT OF SLEEP.
+       This is the whole reason the ledger asks for records. A shift worker
+       who posts a roster and never touches the sleep feature used to collect
+       an average, a debt and a body clock built entirely out of six-hour
+       blocks the app drew itself — and, once four of them landed in a
+       trailing week, a slowed recovery clock on the Grounds. --- */
+    const pencils = []
+    for (let i = 0; i < 7; i++) {
+      pencils.push(
+        ev(`pc${i}`, iso(2026, 6, 4 + i, 9, 0), iso(2026, 6, 4 + i, 15, 0), { source: 'watch' }),
+      )
+    }
+    const pStats = N.sleepStats(pencils, {}, now, 8, 14)
+    out.pencilCovered = pStats.covered
+    out.pencilCovered7 = pStats.covered7
+    out.pencilAvg = pStats.avgH
+    out.pencilDebt = pStats.debtH
+    out.pencilCounted = pStats.pencilled
+    out.pencilNoLast = pStats.last === null
+    out.pencilNoRegularity = pStats.regularity === null
+    out.pencilNoUsual = pStats.usual === null
+    out.pencilScale = N.recoveryEffect(pStats, true).scale
+    out.pencilApplied = N.recoveryEffect(pStats, true).applied
+
+    /* --- confirming one of them makes exactly that one count --- */
+    const oneConfirmed = pencils.map((e, i) =>
+      i === 0 ? { ...e, sourceRef: N.sleptRef('2026-06-04') } : e,
+    )
+    const c1 = N.sleepStats(oneConfirmed, {}, now, 8, 14)
+    out.oneCovered = c1.covered
+    out.oneAvg = c1.avgH
+    out.onePencilled = c1.pencilled
+
+    /* --- a leftover pencil beside a record does not lengthen the night --- */
+    const mixedRecord = ev('mr', iso(2026, 6, 9, 23, 0), iso(2026, 6, 10, 7, 0), {
+      sourceRef: N.sleptRef('2026-06-10'),
+    })
+    const mixedPencil = ev('mp', iso(2026, 6, 10, 9, 0), iso(2026, 6, 10, 15, 0), {
+      source: 'watch',
+    })
+    const mixed = N.nightsIn([mixedRecord, mixedPencil], {}, new Date(2026, 5, 1), new Date(2026, 5, 11))
+    out.mixedRows = mixed.length
+    out.mixedHours = mixed[0] ? mixed[0].hours : null
+    out.mixedBlocks = mixed[0] ? mixed[0].blocks : null
+
+    /* --- but the two surfaces that turn a pencil INTO a record still see it,
+       and a record beside one still wins --- */
+    const found = N.nightOf([pencil], {}, new Date(2026, 5, 7))
+    out.offerSees = found !== null
+    out.offerPencilled = found ? found.pencilled : null
+    out.offerHours = found ? found.hours : null
+    const preferred = N.nightOf([mixedRecord, mixedPencil], {}, new Date(2026, 5, 10))
+    out.preferredPencilled = preferred ? preferred.pencilled : null
+    out.preferredHours = preferred ? preferred.hours : null
+
+    /* --- the fortnight strip carries the pencil apart from the hours --- */
+    const pSeries = N.nightlySeries([pencil], {}, new Date(2026, 5, 7, 20, 0).getTime(), 3)
+    const tail = pSeries[pSeries.length - 1]
+    out.seriesPencilH = tail.pencilledH
+    out.seriesPencilHas = tail.has
+    out.seriesPencilHours = tail.hours
     return out
   })
 
@@ -186,6 +257,48 @@ async function model(page) {
   r.restedScale >= 0.88 && r.restedScale < 1
     ? ok('N9 a long week quickens it, also capped', `${r.restedScale}`)
     : bad('N9 a long week quickens it, also capped', `${r.restedScale}`)
+
+  /* N10–N13 — the pencil never becomes sleep, but never becomes invisible */
+
+  is('N10 a week of pencil marks is no nights on file', r.pencilCovered, 0)
+  is('N10 …nor any in the trailing seven', r.pencilCovered7, 0)
+  is('N10 …it averages nothing', r.pencilAvg, 0)
+  is('N10 …it owes nothing', r.pencilDebt, 0)
+  r.pencilNoLast && r.pencilNoRegularity && r.pencilNoUsual
+    ? ok('N10 …and there is no last night, body clock or usual shape')
+    : bad(
+        'N10 …and there is no last night, body clock or usual shape',
+        `last=${!r.pencilNoLast} reg=${!r.pencilNoRegularity} usual=${!r.pencilNoUsual}`,
+      )
+  is('N10 …they are counted as pencil and nowhere else', r.pencilCounted, 7)
+
+  is('N11 the recovery clock stays EXACTLY 1 on the estate\u2019s own guesses', r.pencilScale, 1)
+  r.pencilApplied === false
+    ? ok('N11 …and says it is modelling nothing')
+    : bad('N11 …and says it is modelling nothing', 'applied=true on pencil marks')
+
+  is('N12 confirming one makes exactly that one count', r.oneCovered, 1)
+  is('N12 …at the hours it was drawn with', r.oneAvg, 6)
+  is('N12 …leaving the other six as pencil', r.onePencilled, 6)
+
+  is('N13 a leftover pencil is one night, not two', r.mixedRows, 1)
+  is('N13 …of the record\u2019s length, not the pair added up', r.mixedHours, 8)
+  is('N13 …built from the record alone', r.mixedBlocks, 1)
+
+  r.offerSees && r.offerPencilled === true
+    ? ok('N14 the morning offer still sees a pencil mark', `${r.offerHours} h`)
+    : bad('N14 the morning offer still sees a pencil mark', `found=${r.offerSees}`)
+  is('N14 …at the hours the estate drew', r.offerHours, 6)
+  r.preferredPencilled === false
+    ? ok('N14 …and a record beside one wins')
+    : bad('N14 …and a record beside one wins', `pencilled=${r.preferredPencilled}`)
+  is('N14 …reading the record', r.preferredHours, 8)
+
+  is('N15 the fortnight strip carries the pencil apart', r.seriesPencilH, 6)
+  is('N15 …without counting it as slept', r.seriesPencilHours, 0)
+  r.seriesPencilHas === false
+    ? ok('N15 …and the morning still reads as unwritten')
+    : bad('N15 …and the morning still reads as unwritten', 'has=true on a pencil mark')
 }
 
 /* ------------------------------------------------------- the writing path */
@@ -366,6 +479,116 @@ async function pencil(page) {
     : bad('P5 …and it stops drawing hatched', `hatch=${after.hatched}`)
 }
 
+/* ----------------------------------------------------------- on a phone */
+
+/**
+ * The same pencil-to-record walk, at 390 px.
+ *
+ * It gets its own pass rather than trusting the desktop one because BOTH week
+ * trees are in the DOM at every width — the desktop grid is `hidden md:block`,
+ * so on a phone it is display:none with all-zero rects. A selector that does
+ * not filter for what is actually RENDERED finds it, reports it hatched, and
+ * passes against a grid nobody can touch. (The Manor harness learned this
+ * first; its comment is the reason this one exists.)
+ *
+ * It matters because the fortnight strip's ghost columns are not interactive
+ * and its `title` tooltips do not exist on touch: the block on the week is
+ * the ONLY way a phone reader can answer the question the strip is asking.
+ */
+async function phone(browser) {
+  const { ctx, page } = await fresh(browser, { width: 390, height: 844, touch: true })
+  await page.evaluate(() => {
+    const d = new Date()
+    const at = (h, m) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).toISOString()
+    const s = window.__events.getState()
+    s.replaceAll([
+      ...s.events.filter((e) => e.kind !== 'sleep'),
+      {
+        id: 'pencil-phone',
+        source: 'watch',
+        kind: 'sleep',
+        title: 'Sleep',
+        start: at(9, 0),
+        end: at(15, 0),
+        updatedAt: new Date().toISOString(),
+      },
+    ])
+    window.__sleep.setState({ notes: {}, askedOn: null })
+  })
+  await page.waitForTimeout(600)
+
+  const shown = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('[data-event-block]')]
+      .filter((n) => {
+        const r = n.getBoundingClientRect()
+        return r.width > 0 && r.height > 0
+      })
+      .find((n) => /Sleep/.test(n.textContent || ''))
+    return b ? { hatched: b.className.includes('booked-hatch') } : null
+  })
+  if (!shown) {
+    bad('P6 the phone renders the pencilled night', 'no visible sleep block at 390 px')
+    await ctx.close()
+    return
+  }
+  shown.hatched
+    ? ok('P6 the phone renders the pencilled night, hatched')
+    : bad('P6 the phone renders the pencilled night, hatched', 'no booked-hatch')
+
+  const blk = page.locator('[data-event-block]:visible', { hasText: 'Sleep' }).first()
+  await blk.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(300)
+  await blk.tap()
+  await page.waitForTimeout(600)
+
+  // the morning offer above the week carries a CONFIRM IT chip of its own,
+  // sitting behind the open sheet — the sheet's door is the moon-marked one
+  const door = page.getByRole('button', { name: /\u263e CONFIRM IT/i }).first()
+  if (!(await door.count())) {
+    bad('P7 its sheet offers a confirmation, not a correction', 'no moon door on the sheet')
+    await ctx.close()
+    return
+  }
+  ok('P7 its sheet offers a confirmation, not a correction')
+  await door.tap()
+  await page.waitForTimeout(700)
+  const asked = await page.evaluate(() => /IS THAT HOW IT WENT/i.test(document.body.innerText))
+  asked
+    ? ok('P7 …and the night sheet opens asking, not prompting')
+    : bad('P7 …and the night sheet opens asking, not prompting', 'wrong sheet title')
+
+  const yes = page.getByRole('button', { name: /YES, THAT IS IT/i }).last()
+  if (!(await yes.count())) {
+    bad('P8 the phone can answer it', 'no confirm button')
+    await ctx.close()
+    return
+  }
+  await yes.tap()
+  await page.waitForTimeout(700)
+  const after = await page.evaluate(() => {
+    const e = window.__events.getState().events.find((x) => x.id === 'pencil-phone')
+    const st = window.__night.sleepStats(
+      window.__events.getState().events,
+      window.__sleep.getState().notes,
+      Date.now(),
+      8,
+    )
+    return {
+      ref: e ? e.sourceRef || '' : '',
+      hours: e ? (new Date(e.end) - new Date(e.start)) / 3600000 : null,
+      covered: st.covered,
+      pencilled: st.pencilled,
+    }
+  })
+  after.ref.startsWith('slept:')
+    ? ok('P8 confirming from the phone writes a record', after.ref)
+    : bad('P8 confirming from the phone writes a record', `ref="${after.ref}"`)
+  is('P8 …without inventing hours', after.hours, 6)
+  is('P8 …and the ledger counts it now', after.covered, 1)
+  is('P8 …with nothing left in pencil', after.pencilled, 0)
+  await ctx.close()
+}
+
 /* ------------------------------------------------ closed during a rehearsal */
 
 /**
@@ -493,6 +716,77 @@ async function coupling(page) {
     return N.recoveryEffect(st, false).scale
   })
   is('C4 the settings switch returns it to exactly 1', off, 1)
+
+  /* C5 — the same thing the pure model asserts, driven through the real
+     store: a roster of night watches leaves seven six-hour blocks on the
+     week that nobody typed. With the coupling ON and the gate wide open,
+     the clock must still read exactly 1. */
+  await page.evaluate(() => {
+    const iso = (d, h, m) => {
+      const x = new Date()
+      x.setDate(x.getDate() - d)
+      x.setHours(h, m, 0, 0)
+      return x.toISOString()
+    }
+    const pencils = []
+    for (let i = 1; i <= 7; i++) {
+      pencils.push({
+        id: `pw${i}`,
+        source: 'watch',
+        kind: 'sleep',
+        title: 'Sleep',
+        start: iso(i, 9, 0),
+        end: iso(i, 15, 0),
+        updatedAt: new Date().toISOString(),
+      })
+    }
+    const s = window.__events.getState()
+    s.replaceAll([...s.events.filter((e) => e.kind !== 'sleep'), ...pencils])
+    window.__sleep.setState({ notes: {}, targetH: 8, coupling: true })
+  })
+  await page.waitForTimeout(700)
+
+  const pencilled = await page.evaluate(() => {
+    const N = window.__night
+    const st = N.sleepStats(
+      window.__events.getState().events,
+      window.__sleep.getState().notes,
+      Date.now(),
+      window.__sleep.getState().targetH,
+    )
+    const e = N.recoveryEffect(st, window.__sleep.getState().coupling)
+    return { scale: e.scale, applied: e.applied, covered: st.covered, pencil: st.pencilled, debt: st.debtH, avg: st.avg7H }
+  })
+  is('C5 a week of blocks the estate drew is no nights on file', pencilled.covered, 0)
+  is('C5 …reported as pencil instead', pencilled.pencil, 7)
+  is('C5 …averaging nothing', pencilled.avg, 0)
+  is('C5 …owing nothing', pencilled.debt, 0)
+  is('C5 …and the recovery clock stays EXACTLY 1', pencilled.scale, 1)
+  pencilled.applied === false
+    ? ok('C5 …with the coupling switched ON, and it says so')
+    : bad('C5 …with the coupling switched ON, and it says so', 'applied=true')
+
+  // and the brief must not report any of it as a night that was slept
+  const skip = page.getByRole('button', { name: /skip/i })
+  if (await skip.count()) {
+    try {
+      await skip.first().click({ timeout: 800 })
+    } catch {
+      /* the brief had already finished typing */
+    }
+  }
+  await page.waitForTimeout(600)
+  const said = await page.evaluate(() => document.body.innerText)
+  /* Every shape the sleep clause can take, because the estate's pencil marks
+     are a week old here and it would reach for the "last night on file"
+     wording rather than "you slept last night". A regex for one phrasing is
+     a test that passes on the broken build. */
+  const claimed = said.match(
+    /You slept [^.]*\.|The last night on file[^.]*\.|That averages[^.]*\.|The fortnight is[^.]*short of[^.]*\./i,
+  )
+  !claimed
+    ? ok('C6 the brief claims no night the reader never wrote down')
+    : bad('C6 the brief claims no night the reader never wrote down', claimed[0])
 }
 
 /* --------------------------------------------------------------- the dials */
@@ -545,6 +839,8 @@ try {
   const c = await fresh(browser)
   await pencil(c.page)
   await c.ctx.close()
+
+  await phone(browser)
 
   const r = await fresh(browser)
   await rehearsal(r.page)
