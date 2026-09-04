@@ -42,6 +42,11 @@ export type TelemetryEvent =
   | 'butler_open'
   /** THE VALET's way-through was taken — same closed vocabulary */
   | 'butler_followed'
+  /** THE PLAN page was opened by hand (the settings row; never the dev param) */
+  | 'plan_open'
+  /** the Pro card's button was pressed — carries the billing cycle shown and
+   *  whether an account was signed in, never who */
+  | 'upgrade_tapped'
   /** the settings switch turned analytics off — the last event a device sends */
   | 'telemetry_off'
 

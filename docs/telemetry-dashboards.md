@@ -37,6 +37,8 @@ policy says usage counts are pseudonymous; there is no reason to hold IPs.
 | `signed_in` | a genuine sign-in (not a session restore) | — |
 | `crew_shared` / `crew_joined` | venture sharing (the viral loop) | — |
 | `pwa_installed` | added to a home screen | — |
+| `plan_open` | THE PLAN page opened from settings | — |
+| `upgrade_tapped` | the Pro card's button pressed | `cycle`: monthly / yearly, `account`: signed in? |
 | `telemetry_off` | someone switched analytics off | — |
 
 Every user also carries a `$session_id`, so session counts and durations work.

@@ -12,7 +12,7 @@ import { useAuthStore } from '../core/auth/store'
 import { useSleepStore } from '../core/sleep/store'
 import { useShellStore } from '../core/store/shell'
 import { offReason } from '../core/sync/gate'
-import { disableTelemetry } from '../core/telemetry'
+import { disableTelemetry, track } from '../core/telemetry'
 import { ConfirmDialog } from '../core/ui/ConfirmDialog'
 import { Sheet } from '../core/ui/Sheet'
 import { SKINS, SKIN_IDS } from '../core/ui/skins'
@@ -24,6 +24,7 @@ import type { Workout } from '../modules/training/types'
 import { useAuthUi } from './authUi'
 import { useButlerStore } from './butler/store'
 import { useSettingsUi } from './settingsUi'
+import { usePlanUi } from './plan/planUi'
 import { CalendarsSheet } from './gcal/CalendarsSheet'
 import { openFrontDoor } from './frontDoor'
 import { nudgeWing, useWings } from './wings'
@@ -166,6 +167,22 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
                 label={voice.settings.frontDoorLabel}
                 blurb={voice.settings.frontDoorBlurb}
                 onClick={openFrontDoor}
+              />
+            </Section>
+
+            {/* the offer. Counted here and not in the mailbox, so the dev
+                param and any future opener that is not a person do not read
+                as interest. The page renders at the shell's root, above this
+                one — closing this first keeps one screen on the stack. */}
+            <Section title={voice.plan.settingsGroup}>
+              <Row
+                label={voice.plan.settingsLabel}
+                blurb={voice.plan.settingsBlurb}
+                onClick={() => {
+                  track('plan_open')
+                  onClose()
+                  usePlanUi.getState().setOpen(true)
+                }}
               />
             </Section>
 

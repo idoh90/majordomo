@@ -191,6 +191,56 @@ body {
   }
 }
 
+/* ── THE PLAN ─────────────────────────────────────────────────────────────
+   The upgrade page's motion. The ring's highlight turns on a registered
+   custom property so the conic gradient can animate its angle at all — a
+   plain --var interpolates as a string, which is to say it jumps. */
+@property --plan-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes plan-sheen {
+  to {
+    --plan-angle: 360deg;
+  }
+}
+
+/* the cards arrive from a visible state, per the rule above */
+@keyframes plan-rise {
+  from {
+    opacity: 0.35;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* a figure changing hands: the new price rises into its place */
+@keyframes plan-figure {
+  from {
+    opacity: 0.3;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* the roster lighting, one wing after the next */
+@keyframes plan-lit {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 input[type='datetime-local'] {
   color-scheme: dark;
 }
@@ -665,6 +715,82 @@ input[type='datetime-local'] {
     user-select: none;
     -webkit-mask-image: linear-gradient(0deg, #000 0%, transparent 82%);
     mask-image: linear-gradient(0deg, #000 0%, transparent 82%);
+  }
+
+  /* ---------------------------------------------------------------- THE PLAN
+     The Pro card. Brass (--color-ember) is the page's accent on the landing's
+     reasoning: it is the one colour the app never spends on data, so a card
+     wearing it reads as an offer and not as a wing. Two pseudo-elements do
+     the work — a hairline ring a highlight travels round, and a spotlight
+     that follows the pointer — and both sit at z -1 inside the card's own
+     stacking context: above its material, below everything written on it,
+     so neither can shade the copy or catch a press. */
+  .plan-pro {
+    position: relative;
+    isolation: isolate;
+    --plan-accent: var(--color-ember);
+    --mx: 50%;
+    --my: 0%;
+    border-color: color-mix(in srgb, var(--plan-accent) 42%, var(--color-line));
+    /* a faint brass bloom down from the top edge, so the card reads as the
+       offer before anyone hovers it; the panel's own material stays under it */
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--plan-accent) 7%, transparent),
+      transparent 42%
+    );
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--plan-accent) 10%, transparent),
+      0 30px 70px -36px color-mix(in srgb, var(--plan-accent) 55%, transparent);
+  }
+  /* the ring: a conic hairline, masked to the card's outer edge. The
+     padding IS the ring's width; the composite cuts the content box out of
+     the border box and leaves only that one pixel. */
+  .plan-pro::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: conic-gradient(
+      from var(--plan-angle),
+      transparent 0turn,
+      transparent 0.6turn,
+      color-mix(in srgb, var(--plan-accent) 85%, white) 0.74turn,
+      transparent 0.88turn
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: plan-sheen 9s linear infinite;
+  }
+  /* the spotlight: --mx/--my are written by the card's own pointer handler */
+  .plan-pro::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(
+      380px circle at var(--mx) var(--my),
+      color-mix(in srgb, var(--plan-accent) 14%, transparent),
+      transparent 62%
+    );
+    opacity: 0;
+    transition: opacity 360ms var(--ease-fold-in);
+  }
+  @media (hover: hover) {
+    .plan-pro:hover::after {
+      opacity: 1;
+    }
   }
 }
 

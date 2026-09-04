@@ -14,6 +14,33 @@ export interface BriefingChip {
   value: string
 }
 
+/** one arrangement's card on THE PLAN page */
+export interface PlanTierCopy {
+  /** the short tag the reader is looking for: BASIC / PRO */
+  tag: string
+  /** the house's own name for the arrangement */
+  name: string
+  /** the butler's one line about it */
+  tagline: string
+  /** under the wing roster: how many of the five, and whose choice */
+  rosterNote: string
+  /** under the preset swatches */
+  presetNote: string
+  /** the card's own short list — never repeats what the roster already said */
+  points: string[]
+  cta: string
+}
+
+/** one row of the particulars: a cell is a tick (true), a dash (false) or a
+ *  word of its own ("One" / "All five") */
+export interface PlanRow {
+  label: string
+  /** the line that unfolds under the row when it is pressed */
+  note: string
+  basic: boolean | string
+  pro: boolean | string
+}
+
 /** The body map's volume bands, restated here because core may not import a
  *  console module. It must stay in step with VolumeStatus in
  *  modules/training/lib/volume.ts — the map passes one straight in as a key. */
@@ -1980,6 +2007,68 @@ export interface VoicePack {
     termsLink: string
     privacyLink: string
     agree: string
+  }
+  /**
+   * THE PLAN — the upgrade page. Two arrangements: Basic, which is what every
+   * estate has today, and Pro. The prices live in app/plan/plans.ts; this is
+   * the copy, and the particulars table is copy too (a cell is a tick, a dash
+   * or a word), so the whole page is a content drop. Register as everywhere:
+   * it states what each arrangement is and what it costs, and never begs.
+   */
+  plan: {
+    /** the settings door */
+    settingsGroup: string
+    settingsLabel: string
+    settingsBlurb: string
+    /** the page chrome */
+    title: string
+    close: string
+    eyebrow: string
+    headline: string
+    /** typed once, in the butler's own hand */
+    intro: string
+    /** the billing toggle; `cycleSave` carries the yearly discount as a whole percent */
+    /** the toggle's accessible name */
+    cycleLabel: string
+    cycleMonthly: string
+    cycleYearly: string
+    cycleSave: (pct: number) => string
+    /** the chip on the arrangement the house is on today */
+    current: string
+    /** the two roster labels on every card */
+    wingsLabel: string
+    presetsLabel: string
+    basic: PlanTierCopy & {
+      /** the figure where Pro prints a price */
+      price: string
+      priceNote: string
+    }
+    pro: PlanTierCopy & {
+      /** after the figure: "$6.99 a month" / "$59 a year" */
+      perMonth: string
+      perYear: string
+      /** under the monthly figure — that a year exists, and what it costs */
+      orYearly: (price: string) => string
+      /** under the yearly figure — what it comes to a month */
+      yearlyNote: (perMonth: string) => string
+      /** under the CTA, signed out: an account comes first */
+      needsAccount: string
+      /** under the CTA, always: what upgrading never touches */
+      reassurance: string
+      /** the CTA was pressed and there is no till yet — fact, then remedy */
+      notOpen: string
+    }
+    /** the comparison table */
+    particulars: string
+    colBasic: string
+    colPro: string
+    /** what a tick and a dash say to a screen reader */
+    included: string
+    notIncluded: string
+    rows: PlanRow[]
+    faqTitle: string
+    faq: { q: string; a: string }[]
+    footnote: string
   }
   /**
    * The first-time setup — the butler, scripted.

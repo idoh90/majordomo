@@ -23,6 +23,7 @@ import { Butler } from './butler/Butler'
 import { Onboarding } from './onboarding/Onboarding'
 import { useOnboarding } from './onboarding/store'
 import { ConsentDoor } from './ConsentDoor'
+import { PlanScreen } from './plan/PlanScreen'
 
 // DEV-only: the consent door answers ?consent and nothing else — the Manor
 // harness and every screenshot param drive bare URLs and must not meet a wall
@@ -144,6 +145,9 @@ function Shell() {
       </div>
 
       <TabBar view={view} onNav={setView} />
+
+      {/* the offer, the same way: null until someone walks to it from settings */}
+      <PlanScreen />
 
       {/* a door, not a wall — renders nothing until asked for */}
       <LoginScreen />

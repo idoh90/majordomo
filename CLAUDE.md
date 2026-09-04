@@ -710,6 +710,41 @@ off the Manor to wherever the reader is standing.
 - `settingsUi.ts` is the second opener of the settings page, the way `authUi` is
   the second opener of the login door.
 
+### THE PLAN — the upgrade page (`src/app/plan/`)
+
+Two arrangements, Basic and Pro, on one full-screen page: settings → YOUR PLAN,
+or `?plan` in DEV. It is an **offer, not a paywall** — nothing is gated on it.
+Every estate is on Basic and every wing, preset and bridge stays open to
+everyone exactly as today; the page only says which card is current.
+
+- **Every figure comes from `plans.ts`**: `PRO_PRICE` (the playbook's §7 figures,
+  $6.99 a month / $59 a year — proposals until a till exists, as PRODUCT.md
+  says), the yearly saving COMPUTED from them so the toggle's chip cannot drift,
+  `CURRENT_PLAN`, and **`checkout()` — the one seam Stripe lands in.** Today it
+  answers `notOpen` and the card prints that under its button rather than
+  pretending a purchase happened. A signed-out household is sent through the
+  login door first (a subscription hangs on an account); a shut registry skips
+  straight to the till's answer.
+- **The copy, the particulars table and the questions are all `voice.plan`.** A
+  cell in the table is a tick, a dash or a word ("One" / "All five"), so the
+  whole page is a content drop. What Pro lists is the playbook's split MINUS
+  anything with no code behind it (no report cards, no push briefings) and MINUS
+  the Bell, whose tier PRODUCT.md says is undecided; add a row there, not here.
+- **Brass (`--color-ember`) is the page's accent**, on the landing's reasoning:
+  the one colour the app never spends on data, so a card wearing it reads as an
+  offer and not as a wing. The Pro card's ring (`.plan-pro::before`, a conic
+  hairline turning on a registered `--plan-angle`) and its pointer spotlight
+  (`::after`, fed `--mx`/`--my` straight from the element, no render) both sit at
+  z −1 inside the card's own stacking context — above its material, below its
+  copy. The intro types once per session in the brief's cadence; reduced motion
+  lands on the finished line.
+- **Opened through `planUi.ts`** (the `authUi` pattern) and mounted at the
+  shell's root at z-46: above the settings page that opens it (which closes
+  itself first, so one screen is on the stack), below the login door (z-50). Esc
+  closes it unless that door is standing in front. Two telemetry events, both in
+  submit handlers: `plan_open` (the settings row — never the dev param) and
+  `upgrade_tapped` (`cycle`, `account`).
+
 ### THE BRIEFING (`src/app/manor/briefing/`)
 
 Below the week grid: **one written brief**, **four instruments**, and a shelf of
@@ -1211,6 +1246,9 @@ auto-enter Training so they land on the right screen.
   stamps the shell store, so clear `majordomo-shell` to see it again)
 - `?manor=month` — opens the Manor in month view · `window.__events` — events store
 - `?night` — opens THE NIGHT's sheet on this morning (screenshot aid)
+- `?plan` — opens THE PLAN (the upgrade page) on load — screenshot aid. Pair it
+  with `?demo` in a fresh browser: a browser holding no estate is shown the
+  landing, and the page lives inside the app
 - `?butler` — forces THE VALET's card open on the current top matter, and is the
   ONLY way to see it under automation (it stands down for `navigator.webdriver`)
   · `window.__butler` — its ledger store
