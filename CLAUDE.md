@@ -480,9 +480,8 @@ the Google account to iPhone/Mac Calendar (no CalDAV, no ICS — deliberate).
 `GCAL_ENABLED` kill switch defaulting OFF, `ALLOWED_ORIGINS` grown by
 `localhost:3000` for `vercel dev`, the same `verifyUser` seam) runs the OAuth
 walk and holds `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`; the refresh token
-lives in `gcal_accounts` (`supabase/migrations/0006_gcal.sql` — RLS on, ZERO
-policies, service_role the only door), and the browser only ever sees hour-long
-access tokens, in memory. The consent walk returns to `?gcal=connected|denied|
+lives in **Supabase Vault**, and the browser only ever sees hour-long access
+tokens, in memory. The consent walk returns to `?gcal=connected|denied|
 error` — never `?code=`, which Supabase's `detectSessionInUrl` would eat — and
 its `state` is an HMAC over `{user, origin, 10 min}` keyed off the client
 secret, so there is no nonce table. Scopes: `calendar.app.created` +
@@ -515,16 +514,45 @@ their own calendar.
   it judges a window one day narrower than the fetch so edge disagreements
   never flap); a Google-side deletion of OUR event does not delete the estate
   record — the next push re-creates it ("when in doubt, resurrect").
+- **The refresh token is never readable text at rest** (`0007_gcal_vault.sql`).
+  `gcal_accounts` (`0006_gcal.sql` — RLS on, ZERO policies, every grant revoked,
+  service_role the only door) keeps `refresh_token_id`, a uuid POINTER; the
+  ciphertext is in `vault.secrets` and the key that opens it is the platform's,
+  outside the database and outside its dumps. 0006's posture protected the ROW
+  and not the BYTES — a `pg_dump`, a PITR branch, a CSV exported at 1 a.m. all
+  carried a live credential, and the revokes were one convenience-`grant` away
+  from publishing it to every signed-in browser. Three service_role-only
+  security-definer functions are the whole access surface: `gcal_connect`
+  (store + upsert the row in one call, `calendar_id` untouched so a reconnect
+  cannot forget the Majordomo calendar), `gcal_rotate_token` (Google rotating a
+  token mid-grant; never an upsert, so a household disconnected on another
+  device cannot reconnect itself), and **`gcal_refresh_token` — the only path to
+  plaintext anywhere in this system.** If that one is ever granted more widely,
+  the whole hole is back. `vault` is not an exposed schema, so PostgREST cannot
+  reach it at all. An `after delete` trigger takes the secret out with the row —
+  by any route, the `auth.users` cascade included — and swallows its own
+  failure on purpose: a trigger that raised would make deleting an account
+  impossible, and what it leaves is an already-revoked blob that the next
+  reconnect adopts by name. `google_email` deliberately stays plaintext: it is
+  the "connected as …" label and nothing else (the consent walk's `login_hint`
+  is the household's own Supabase email), so it is not a credential and the
+  same address already sits in `auth.users`.
 - **`majordomo-gcal` is device-local bookkeeping** (the push ledger, toggles,
   connection cache) — like `majordomo-sync`: never estate, never exported,
   never synced. The ledger only advances on confirmed writes, so it may
   under-claim (idempotent re-push) but never over-claim (a lost edit).
-- **Arming is four manual acts**, none in git: create the Google Cloud OAuth
+- **Arming is five manual acts**, none in git: create the Google Cloud OAuth
   client (Web app; redirect URIs `https://majordomocal.com/api/google`, the
   vercel.app twin, and `http://localhost:3000/api/google` — NOT 5173, which
   never serves `api/`), set the three env vars in Vercel (`GOOGLE_CLIENT_ID`,
-  `GOOGLE_CLIENT_SECRET`, `GCAL_ENABLED=1`), paste `0006_gcal.sql` in full, and
-  add the scopes + a test user on the consent screen. **While the consent
+  `GOOGLE_CLIENT_SECRET`, `GCAL_ENABLED=1`), **enable the `supabase_vault`
+  extension** (Database → Extensions — `0007` refuses to run without it, which
+  is the correct direction: no vault, no custody), paste `0006_gcal.sql` and
+  then `0007_gcal_vault.sql` in full, and add the scopes + a test user on the
+  consent screen. **0007 and the `api/google.ts` deploy that goes with it are a
+  PAIR** — the old code selects a column 0007 drops, the new code calls
+  functions 0007 creates — so between them the connect/refresh door is shut.
+  Paste first, then deploy; the window costs a failed SYNC NOW and nothing more. **While the consent
   screen sits in Testing mode, Google expires refresh tokens after 7 days** —
   weekly reconnects until verification lands, and the sensitive read scope's
   review takes weeks: start it early (playbook §3.3.1 said so first).
