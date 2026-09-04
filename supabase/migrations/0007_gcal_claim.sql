@@ -36,9 +36,10 @@
 -- household: the victim's own bookings are pushed out to a stranger's calendar
 -- on the next sync, and the stranger's events are mirrored into their Manor.
 --
--- So a walk is bound to one tab. Before asking for a consent URL the client
--- mints a walk secret and keeps it in sessionStorage — one tab's business, dead
--- when the tab is — and sends only its sha256. That hash rides in the signed
+-- So a walk is bound to the browser that begins it. Before asking for a consent
+-- URL the client mints a walk secret, keeps it to itself (sessionStorage first,
+-- with a short-lived localStorage copy for the installed-app case where the
+-- consent screen leaves the standalone context) and sends only its sha256. That hash rides in the signed
 -- state, lands in the column below, and the claim has to present the RAW secret
 -- beside `n`. A browser handed a link it did not earn holds no walk secret and
 -- never claims at all. Neither half of this works alone: the session decides
@@ -47,11 +48,25 @@
 --
 -- WHAT A ROW IS.
 --
--- A live Google refresh token, in the open, for at most ten minutes. Treat it
--- with `gcal_accounts`'s manners and then some: RLS on with ZERO policies, the
--- grants revoked underneath it, and `api/google.ts` holding the service_role
--- key as the only door. The app never sees this table; it never sees a refresh
--- token at all.
+-- A live Google refresh token, in the open, CLAIMABLE for at most ten minutes.
+-- Treat it with `gcal_accounts`'s manners and then some: RLS on with ZERO
+-- policies, the grants revoked underneath it, and `api/google.ts` holding the
+-- service_role key as the only door. The app never sees this table; it never
+-- sees a refresh token at all.
+--
+-- Claimable and RESIDENT are two different lifetimes, and the difference is
+-- stated here rather than glossed, because this is where somebody will come to
+-- decide whether the table needs retention handling. `expires_at` is enforced
+-- on the claim, so a row past it can never be spent. Nothing enforces when the
+-- row LEAVES: the sweep below runs from `api/google.ts`, on the OAuth callback
+-- and again on every claim, so a walk that ends either way takes the expired
+-- rows with it. What no sweep reaches is a household that starts a walk,
+-- abandons it, and never walks again — its row sits until somebody does. A
+-- pg_cron job would close that, and it is deliberately NOT here: this schema is
+-- pasted by hand into a free project and must not depend on an extension being
+-- enabled, and the residue is one row per abandoned walk on an estate that has
+-- stopped connecting. If this table ever holds more than a handful, that is the
+-- signal to add the job rather than to widen the window.
 --
 -- WHAT IS DELIBERATELY NOT A COLUMN: a user id. There is no household attached
 -- to a parked grant, because attaching one is the bug — the whole point of the
@@ -78,7 +93,7 @@ create table if not exists gcal_pending (
   -- the credential in question, waiting to be filed
   refresh_token text        not null,
   -- sha256 of the WALK secret, hex — the one the finishing browser minted into
-  -- its own sessionStorage before the walk began, carried here off the signed
+  -- its own storage before the walk began, carried here off the signed
   -- state. NOT NULL, and that is load-bearing rather than tidy: a row that
   -- cannot prove which walk it belongs to is a row that must never have
   -- existed. It would be a live refresh token claimable by anyone holding the
@@ -105,9 +120,11 @@ delete from gcal_pending where walk_hash is null;
 alter table gcal_pending alter column walk_hash set not null;
 
 -- The sweep's index. `api/google.ts` deletes everything past its expiry on
--- every callback — an abandoned walk's row is not litter, it is a live refresh
--- token nothing else has a reason to look at again — and that sweep is the
--- only query in this schema that does not go through the primary key.
+-- every callback AND on every claim — an abandoned walk's row is not litter, it
+-- is a live refresh token nothing else has a reason to look at again — and that
+-- sweep is the only query in this schema that does not go through the primary
+-- key. Both ends of a walk sweep, so the table is tidied by traffic; see the
+-- retention paragraph above for what traffic cannot reach.
 create index if not exists gcal_pending_expiry_idx on gcal_pending (expires_at);
 
 -- ---------------------------------------------------------------------------

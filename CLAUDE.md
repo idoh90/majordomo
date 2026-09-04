@@ -176,7 +176,14 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   offline by killing the server and reloading** — not by trusting the config.
 - **The registry (accounts) is a PAUSING free-tier Supabase project.** Project
   `majordomo`, ref `xigbgvuakguqmfulfaqe`; schema lives in `supabase/migrations/`
-  (nothing runs it automatically — paste it into the SQL editor). Supabase pauses
+  (nothing runs it automatically — paste it into the SQL editor). **That ref is
+  now written into two committed files besides the env vars** — the CSP's
+  `connect-src` in `vercel.json` and `.github/workflows/keep-supabase-awake.yml`
+  — so moving to a new project is three edits, not one. Miss the CSP and sign-in
+  and realtime die at the browser with a console violation and no server-side
+  tell, which is not where anyone looks first; the two-places rule for absolute
+  URLs further down covers ORIGINS THIS APP SERVES, and this is not one of
+  them. Supabase pauses
   a free project after ~7 days idle, and **a paused project's API hostname stops
   resolving entirely** — `DNS name does not exist`, which is indistinguishable
   from a deleted project and has already been misdiagnosed as one, at the cost of
@@ -296,6 +303,48 @@ describe it as existing.
   one failure a caller cannot tell from a slow success. `scripts/bell-serve.mjs`
   now calls that same default export the way the platform does, so the local
   runtime exercises the conversion instead of re-implementing it.
+- **The SOCKET is its third job, and it falls here because nothing else in
+  `api/` can reach it.** All three duties below cost the household billed minutes
+  or a live secret, not one of them is a correctness bug inside a handler, and
+  each was found the hard way.
+  · **The caller's departure.** A handler is handed a `Request` and hands back a
+  `Response`; it cannot see that the tab closed. `nodeHandler` arms an
+  `AbortController` on the socket's `close` and passes its signal into the
+  `Request` — armed BEFORE the body is buffered, since that is the longest
+  anybody waits here. Until it existed a caller who left was invisible for the
+  whole pre-response window, the 6 s registry round trip included, and the house
+  went on paying an upstream (and, in the Bell, a household slot) for a reply
+  nobody would ever read. It is guarded on `writableEnded`, because a signal
+  that cries abort over every healthy response is a signal nobody trusts on the
+  one occasion it means it.
+  **The bridge only ARMS it; where it is obeyed is each handler's own call, and
+  neither obeys it everywhere.** `api/bell.ts` folds it into `verifyUser` and
+  the model call, and deliberately WITHHOLDS it from the meter — an aborted
+  claim is not a claim undone, and an aborted `bell_note_tokens` is words the
+  household read and was never charged for. `api/google.ts` folds it into
+  `verifyUser` and nowhere else: every other upstream there is either the OAuth
+  code exchange or a write of a household's credential, and abandoning one of
+  those halfway strands a live Google grant that nothing later comes back for.
+  Do not thread it further "for consistency" — the two rope-line comments say
+  why in their own words, and they were written after a review found this entry
+  claiming both files were covered when only one was.
+  · **Backpressure that can end.** `drain` is an event only a live connection
+  ever sends, so a reader who hangs up with the buffer full used to park the
+  invocation until the platform's ceiling: sixty billed seconds of silence. The
+  wait races `drain` against `close` and `error`, returns early if the socket is
+  already gone, and takes all three listeners off whichever wins — the Bell's
+  stream meets backpressure hundreds of times in one reply, and a listener left
+  behind on each announces itself as a MaxListeners warning long after the cause.
+  · **What a log line may repeat, which is the PATH and nothing else.** Node
+  hands over the target with its query attached, and on `/api/google` that query
+  IS a live authorization code beside a `state` still inside the ten minutes it
+  was signed for. The two `console.error` lines fire on exactly the two occasions
+  that matter most — a handler past its deadline, a handler that threw — so a
+  slow upstream on the consent walk wrote a usable code and a usable state into
+  Vercel's log store, where they outlive the walk by months and are readable by
+  anyone with dashboard access. Everything goes through `pathOf`. **Never log
+  `req.url` in this directory**, and never widen a log line here to be helpful:
+  no line has ever needed the query to be useful.
 - **Every relative import in `api/` must carry a `.js` extension, and the bridge
   is why this matters at all.** Vercel does not bundle these files — it transpiles
   each one on its own and copies the root `package.json` (`"type": "module"`) in
@@ -491,12 +540,13 @@ the Google account to iPhone/Mac Calendar (no CalDAV, no ICS — deliberate).
 walk and holds `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`; the refresh token
 lives in `gcal_accounts` (`supabase/migrations/0006_gcal.sql` — RLS on, ZERO
 policies, service_role the only door), and the browser only ever sees hour-long
-access tokens, in memory. The consent walk returns to `?gcal=pending&n=…`
-(or `denied`/`error`) — never `?code=`, which Supabase's `detectSessionInUrl`
-would eat — and its `state` is an HMAC over `{origin, expiry, salt, walk hash}`
-keyed off the client secret. Scopes: `calendar.app.created` +
-`calendar.events.readonly` — the app can never edit an event the user made in
-their own calendar.
+access tokens, in memory — those, and the two one-walk secrets below, are the
+whole of what this server ever hands out. The consent walk returns to
+`?gcal=pending&n=…` (or `denied`/`error`) — never `?code=`, which Supabase's
+`detectSessionInUrl` would eat — and its `state` is an HMAC over
+`{origin, expiry, salt, walk hash}` keyed off the client secret. Scopes:
+`calendar.app.created` + `calendar.events.readonly` — the app can never edit an
+event the user made in their own calendar.
 
 - **THE CONSENT WALK TAKES TWO SECRETS, and both halves are scar tissue.** The
   state used to carry the household's `user_id` and the callback filed the
@@ -510,12 +560,24 @@ their own calendar.
   That browser POSTs `{action:'claim'}` with its OWN bearer, and the grant is
   filed under the id that token verifies to. The claim is single-use and the
   DELETE returns the row in one statement, so two claims cannot both win.
+  · **The CLAIM is single-use; the STATE is not** — say it that way round, because
+  a comment here once said "single use" and meant the wrong noun. Nothing marks a
+  state spent, so inside its ten minutes one `begin` still drives as many
+  callbacks as there are people willing to approve. The binding below is what
+  makes that worthless: every row a reused state parks carries the ORIGINATOR's
+  walk hash, so the browser that actually approved holds nothing that matches and
+  never claims. **The residual, written down rather than left to be
+  rediscovered**: it pays only if the originator also gets that browser's `n`,
+  which lives in its address bar (stripped before boot finishes) and in the
+  platform's own request log — so GCAL-01 is now "needs an `n` leak" rather than
+  "impossible". Closing it properly wants a used-state record that outlives the
+  claim; judged more machinery than it earns while the binding stands.
   · Fixing only that opens the **mirror image**, which cost a review round to
   catch: an attacker finishes the walk with their own Google account and
   forwards the `?gcal=pending&n=…` link to a signed-in victim, whose app would
   claim it and point that household at the attacker's calendar. So a walk is
-  also bound to the tab that began it. `connectGoogle()` mints a **walk secret**
-  into `sessionStorage` (`majordomo-gcal-walk`) and sends only its sha256; that
+  also bound to the browser that began it. `connectGoogle()` mints a **walk
+  secret** into its own storage (`majordomo-gcal-walk`) and sends only its sha256; that
   hash rides in the signed state onto the parked row, and the claim must present
   the raw secret. A browser handed a link it did not earn holds none and never
   claims at all. **Neither half works alone** — the session says whose
@@ -526,6 +588,21 @@ their own calendar.
   SUFFICIENT. PKCE rides along, its verifier derived from the state under a
   domain-separated HMAC rather than stored, so there is still nothing to migrate
   for it.
+  · **A claim answers ONE refusal for five different causes** — malformed,
+  unknown, already spent, expired, and presented by a browser that cannot prove
+  it walked this walk all come home as `expired`, in the same words. That is the
+  design and not laziness: anything finer is an oracle for whoever recovered an
+  `n` from a request log, telling them whether the grant is still live and
+  whether the only thing they are short of is the walk secret. The remedy is
+  identical in every case besides — walk the consent screen again. A registry
+  that could not be REACHED is the one refusal allowed its own code, because its
+  remedy differs (try again) and it says nothing about the secret.
+  · **A wrong walk secret BURNS the grant**, and that is a decision rather than
+  an oversight waiting to be tidied. The row is already gone — the claim deletes
+  and returns in one statement — and a browser presenting a secret it cannot
+  match is a browser being walked through a handoff it did not start. The honest
+  owner of the walk pays one more consent screen; the attacker's parked token is
+  destroyed rather than left waiting for a second victim to click.
 - **Everything with judgment runs on the CLIENT** (`src/app/gcal/service.ts`,
   triggered like estate sync: sign-in, visibility, online, a 5 s-debounced edit,
   SYNC NOW; never while a what-if sandbox is open). One cycle: pull Google's
@@ -556,15 +633,67 @@ their own calendar.
   connection cache) — like `majordomo-sync`: never estate, never exported,
   never synced. The ledger only advances on confirmed writes, so it may
   under-claim (idempotent re-push) but never over-claim (a lost edit).
-- **`majordomo-gcal-walk` is the ONE thing this app keeps in `sessionStorage`**,
-  and the storage is the point rather than an implementation detail: a walk is
-  one tab's business, must not outlive the tab, and must be invisible to a tab
-  that never started one — while surviving the top-level navigation out to
-  Google and back. `localStorage` would satisfy none of the first three. It is
-  a live credential half, so it is read and deleted in the same breath
-  (`takeWalk()`), and it is out of reach of `core/backup.ts` for free: the
-  export reads `localStorage` against an allow-list, so this key can never ride
-  into a file somebody mails themselves.
+- **`majordomo-gcal-walk` is the only CREDENTIAL this app keeps in
+  `sessionStorage`** — the other resident there is the onboarding walk's resume
+  key (`majordomo-onboard`, `app/onboarding/store.ts`), which is there for the
+  same reason: an OAuth redirect must not drop a half-finished run. `sessionStorage`
+  is the lifetime this wants — one tab's business, dead when the tab is, and
+  preserved across the navigation out to Google and back — and it is the first
+  place the record is written. **It is written to `localStorage` as well**, and
+  that is a concession to a platform rather than a relaxation: an INSTALLED app
+  may hand a cross-origin navigation to the system browser or a custom tab, and
+  a consent screen that happens outside the standalone context comes home to a
+  `sessionStorage` that never held anything — which made Google unconnectable
+  from an installed app, permanently and silently, while the screen blamed the
+  reader for using another browser. What the second carrier costs is
+  invisibility between two tabs of one profile; what it does NOT cost is the
+  binding, which is the whole of the security — a browser handed a finished link
+  it did not earn holds no record matching THAT walk's hash in either carrier.
+  The `localStorage` copy is fenced by a `mintedAt` no wider than the server's
+  own state TTL (10 min) instead of by the tab's lifetime, it is read and
+  deleted in the same breath (`takeWalk()`), and it stays out of
+  `core/backup.ts` for free: that export reads `localStorage` against an
+  ALLOW-list, so a key nobody added can never ride into a file somebody mails
+  themselves. The record also carries the **household that began the walk**, and
+  a claim by a different signed-in account is refused rather than filed.
+- **The claim step's quiet rules on the client** (`service.ts`), each one a bug
+  already paid for. At most ONE claim in the air per tab: boot alone has two
+  callers (the tail, and the auth subscription firing on loading → signedIn)
+  with a third available from visibility, and since the secret is single-use at
+  the server, the losers were told the grant does not exist and painted *granted
+  but never completed* over a connection that had just succeeded — sending the
+  reader back through consent to mint a second Google grant on top of a live
+  one. **A non-retryable refusal asks the household before it says that**, for
+  the same reason by another door: a claim whose reply is lost in transit was
+  still spent at the server, and `status` answering *connected* outranks the
+  claim's own verdict. A parked grant SURVIVES boot's first
+  `loading → signedOut`, which is what a visitor who has simply not signed in
+  yet looks like; only a genuine sign-out drops it — and because a session that
+  arrives afterwards need not be the one that walked, the claim also refuses an
+  account that does not match the walk's recorded owner. Every terminal outcome
+  hands the tab back to the ordinary status-then-cycle, and the verdict it
+  leaves on screen rides a MODULE variable (`standingLine`) rather than an
+  argument: `initAuth()` resolves through a dynamic import, so the boot tail's
+  own handback always returns at the door and the real one happens in the auth
+  subscription a tick later. **Nothing sweeps the walk record on an ordinary
+  boot** — a BACK out of the consent screen with the bfcache missing is a boot,
+  and destroying a live walk there told its owner it had been begun in another
+  browser while the grant they went on to authorise sat parked and unclaimable.
+  It is swept when the return door says the walk is over, and otherwise ages out
+  on its own `mintedAt`.
+- **None of this walk can be driven by a harness, and that is stated rather
+  than solved.** There is no live consent screen, no registry and no deployed
+  function to drive from a dev machine, so the walk is verified by hand on a
+  deployed origin — and `?demo` disarms the bridge outright (`core/sync/gate.ts`),
+  which is also why the Manor and night harnesses never go near it. When a
+  reconnect fails, the sentence on screen is deliberately the same for five
+  causes: read the function log, which carries the path and never the query.
+  **The one case still owed a hand check is the INSTALLED app on iOS and on an
+  Android WebAPK**: where the consent navigation leaves the standalone context,
+  the two-carrier walk record above is what is meant to carry the binding home.
+  It has been reasoned through and never driven, and the failure it guards is
+  silent and total rather than degraded — so walk it once on a real home-screen
+  install of each before treating the bridge as proven there.
 - **Arming is five manual acts, and two of them have an ORDER**, none in git:
   create the Google Cloud OAuth client (Web app; redirect URIs
   `https://majordomocal.com/api/google`, the vercel.app twin, and
@@ -1232,6 +1361,12 @@ auto-enter Training so they land on the right screen.
   plus a quieter next week) — screenshot aid
 - `?consent` — shows the consent door (DEV never shows it unprompted; accepting
   stamps the shell store, so clear `majordomo-shell` to see it again)
+- `?gcal=` and `n=` are **NOT on this list and must never join it** — they are
+  the Google walk's production return door, stripped by `initGcal()` before the
+  rest of boot runs, and `n` is half of a live credential. A dev aid that forged
+  one would be forging a claim. Nothing to simulate anyway: the demo interlock
+  above disarms the bridge on any origin that has ever been `?demo`'d, so no
+  screenshot or harness run reaches Google.
 - `?manor=month` — opens the Manor in month view · `window.__events` — events store
 - `?night` — opens THE NIGHT's sheet on this morning (screenshot aid)
 - `?butler` — forces THE VALET's card open on the current top matter, and is the

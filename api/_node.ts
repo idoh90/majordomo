@@ -36,6 +36,11 @@
  * waiting forever (`drained`), and it decides what a log line is allowed to say
  * (`pathOf`). None of the three is a correctness bug inside a handler. Each of
  * them costs the household either billed minutes or a live secret.
+ *
+ * Arming the departure is where this file's authority ends. It hands both
+ * handlers the same signal and neither is expected to obey it everywhere: a
+ * wait that has spent nothing may be abandoned, a write that would strand a
+ * credential or a meter entry may not. Each call site carries its own reason.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -281,13 +286,21 @@ export const nodeHandler =
 
     // The caller's departure, made visible to the handler.
     //
-    // Both files already compose `init.signal` into every upstream fetch they
-    // make; until now there was simply nothing to compose, because the `Request`
-    // carried no signal at all. So a browser that closed its tab stayed
-    // invisible for the entire window before a response came back — the six
-    // second registry round-trip included — and the house went on paying an
-    // upstream, and in the Bell's case a household slot, for a reply nobody was
-    // ever going to read.
+    // This file only ARMS it. Until now a `Request` carried no signal at all, so
+    // a browser that closed its tab stayed invisible for the entire window
+    // before a response came back — the six second registry round-trip
+    // included — and the house went on paying an upstream, and in the Bell's
+    // case a household slot, for a reply nobody was ever going to read.
+    //
+    // What each handler does with it is ITS decision, and neither takes it
+    // everywhere. `api/bell.ts` folds it into the session check and the model
+    // call, and deliberately withholds it from the meter (aborting a claim is
+    // not a claim undone). `api/google.ts` folds it into the session check
+    // alone: everything else there is either the OAuth code exchange or a write
+    // of a household's credential, and abandoning one of those halfway strands
+    // a live Google grant nothing later comes back for. Read the comment at the
+    // call site before adding one; consistency is not the goal here, and both
+    // of those files say why in their own words.
     //
     // `close` fires on a healthy finished response too, so it is guarded the way
     // `sendBody`'s own hang-up is: `writableEnded` is set the moment we call

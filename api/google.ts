@@ -80,12 +80,11 @@
  * events into the Manor. An exfiltration in the opposite direction, out of the
  * same hole.
  *
- * So a walk is now bound to the one tab that began it. Before asking for a
+ * So a walk is now bound to the browser that began it. Before asking for a
  * consent URL the client mints a WALK SECRET — 32 CSPRNG bytes, base64url — and
- * keeps it in sessionStorage: one tab's business, gone when the tab is,
- * invisible to a tab that never started a walk, and preserved across the
- * top-level navigation out to Google and back, which is precisely the lifetime
- * wanted. Only its sha256 is sent, to `begin`, and that hash rides in the
+ * keeps it in its own storage, never sending it anywhere; how long it keeps it
+ * and where is `src/app/gcal/service.ts`'s business, and nothing here depends on
+ * the answer. Only its sha256 is sent, to `begin`, and that hash rides in the
  * signed state (tamper-proof, and worth nothing to whoever reads it) onto the
  * parked row. The claim must then present the RAW secret beside `n`.
  *
@@ -154,12 +153,31 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events.readonly',
 ].join(' ')
 
-/** nothing here may wait forever — bell.ts's reasoning, same magnitudes */
+/**
+ * Nothing here may wait forever — bell.ts's reasoning, same magnitudes.
+ *
+ * `leaving` is the caller's departure, which `./_node.js` now hangs on the
+ * incoming `Request` when the socket closes. A deadline says how long a
+ * dependency may take; that signal says whether anybody is still waiting for
+ * the answer. It is composed IN rather than substituted for the deadline, so a
+ * caller who stays put still gets a dependency that cannot stall forever.
+ *
+ * IT IS THREADED INTO EXACTLY ONE CALL SITE IN THIS FILE, and the restraint is
+ * the point. See `verifyUser` for the one that takes it, and the rope line
+ * below the claim for the ones that must not: every other upstream here either
+ * WRITES the household's credential or is the OAuth code exchange itself, and
+ * a walk abandoned halfway through either of those leaves something behind
+ * that nothing later comes back for.
+ */
 const withTimeout =
-  (ms: number): typeof fetch =>
+  (ms: number, leaving?: AbortSignal): typeof fetch =>
   (input, init) => {
-    const deadline = AbortSignal.timeout(ms)
-    const signal = init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline
+    // Never drop a signal the caller already set, and never drop the departure
+    // either: whichever fires first ends the wait.
+    const reasons: AbortSignal[] = [AbortSignal.timeout(ms)]
+    if (init?.signal) reasons.push(init.signal)
+    if (leaving) reasons.push(leaving)
+    const signal = reasons.length === 1 ? reasons[0] : AbortSignal.any(reasons)
     return fetch(input, { ...init, signal })
   }
 
@@ -252,8 +270,8 @@ const bounce = (site: string, outcome: 'denied' | 'error'): Response =>
  * browser history, in the platform's request log, in a referrer if anything
  * ever links out of the landing frame. The claim is NOT that it is confidential.
  * The claim is that what rides here is no longer SUFFICIENT — a claim also needs
- * the walk secret, which never left one tab's sessionStorage and was never sent
- * anywhere in the clear. A logged `n` buys a burnt grant and nothing else.
+ * the walk secret, which never left the browser that minted it and was never
+ * sent anywhere in the clear. A logged `n` buys a burnt grant and nothing else.
  */
 const handoff = (site: string, secret: string): Response =>
   new Response(null, {
@@ -399,10 +417,22 @@ type Door =
   | { ok: false; reason: 'invalid' }
   | { ok: false; reason: 'unreachable' }
 
-async function verifyUser(token: string): Promise<Door> {
+/**
+ * `leaving` is the ONE place in this file that takes the caller's signal, and
+ * it is safe for the same reason bell.ts's copy is: WHERE it sits. Nothing has
+ * been spent and nothing has been written by the time this runs, so a question
+ * abandoned here leaves nothing behind to reconcile. It also happens to be the
+ * longest single wait on every POST — the six seconds a departed caller used to
+ * pay for in full, on a `token` action nobody was waiting for.
+ *
+ * A caller who left is reported 'unreachable', which writes a 503 into a socket
+ * that is no longer there: read by nobody, costing nothing, and a great deal
+ * cheaper than finishing the walk on their behalf.
+ */
+async function verifyUser(token: string, leaving?: AbortSignal): Promise<Door> {
   const auth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { fetch: withTimeout(REGISTRY_TIMEOUT_MS) },
+    global: { fetch: withTimeout(REGISTRY_TIMEOUT_MS, leaving) },
   })
   try {
     const { data, error } = await auth.auth.getUser(token)
@@ -532,13 +562,15 @@ async function callback(req: Request): Promise<Response> {
     // The sweep. An expired pending row is not litter — it is a LIVE Google
     // refresh token sitting in a table, for a walk nobody ever came back to
     // finish, and it would sit there forever because no other code path has a
-    // reason to look at it. This is the only moment anything routinely touches
-    // this table, so it is where the sweeping happens. It runs ALONGSIDE the
-    // insert rather than before it because the callback's budget is the
-    // bridge's 20 s deadline and it has already spent up to eight of them at
-    // Google; two registry round-trips in sequence would put the walk on the
-    // line. Nothing races: the row being written expires in the future, so a
-    // sweep of the past cannot take it.
+    // reason to look at it. The claim does the same thing for the same reason,
+    // so the table is swept by both ends of a walk; what neither can reach is
+    // an estate that abandons a walk and never starts another, and 0007 says so
+    // in as many words rather than promising a retention nothing enforces. It
+    // runs ALONGSIDE the insert rather than before it because the callback's
+    // budget is the bridge's 20 s deadline and it has already spent up to eight
+    // of them at Google; two registry round-trips in sequence would put the
+    // walk on the line. Nothing races: the row being written expires in the
+    // future, so a sweep of the past cannot take it.
     pending().delete().lt('expires_at', new Date().toISOString()),
   ])
   // the refresh token is lost with the row unwritten — acceptable: reconnect
@@ -618,7 +650,7 @@ async function serve(req: Request): Promise<Response> {
     return fail(400, 'bad')
   }
 
-  const door = await verifyUser(token)
+  const door = await verifyUser(token, req.signal)
   if (!door.ok) {
     return door.reason === 'unreachable' ? fail(503, 'unreachable') : fail(401, 'invalid')
   }
@@ -633,7 +665,7 @@ async function serve(req: Request): Promise<Response> {
   // secret. That is why `userId` is unused for the length of this block.
   if (action === 'begin') {
     // THE WALK BINDING, and a walk that cannot carry one does not start. This is
-    // the sha256 of a secret the calling tab minted into its own sessionStorage
+    // the sha256 of a secret the calling browser minted into its own storage
     // before it asked; we never see the secret until the claim. Refusing here
     // rather than defaulting is the whole point: an unbound walk is exactly the
     // walk whose finished link can be handed to a stranger, and this file has
@@ -690,29 +722,71 @@ async function serve(req: Request): Promise<Response> {
     if (typeof n !== 'string' || !SECRET_SHAPE.test(n)) return claimRefused()
     if (typeof w !== 'string' || !SECRET_SHAPE.test(w)) return claimRefused()
 
-    // Single use, and ATOMICALLY so — this is OAUTH-03's fix. The old walk
-    // consumed nothing at all: a state stayed good for its whole ten minutes,
-    // so one crafted link harvested everybody who clicked it inside the window.
-    // Here the DELETE and the read of what was deleted are one statement, so
-    // the row is locked for the whole of it: of two claims racing on the same
-    // secret, one comes away with the grant and the other comes away with
-    // nothing. There is no read-then-delete for them to interleave inside.
-    const { data: parked, error: claimError } = await pending()
-      .delete()
-      .eq('claim_hash', sha256Hex(n))
-      .select('refresh_token, google_email, expires_at, walk_hash')
-      .maybeSingle<PendingRow>()
+    // THE ROPE LINE. Not one upstream from here to the end of this block takes
+    // the caller's departure signal, and that is a decision rather than an
+    // omission. Everything below either destroys a parked grant or files a
+    // household's credential, and a browser closing its tab mid-claim is
+    // exactly when it would fire: aborted between the DELETE and the upsert, a
+    // live refresh token is gone from one table and never arrived in the other,
+    // and the walk it belonged to cannot be walked again without a fresh
+    // consent screen. Better to spend six seconds nobody is waiting for than to
+    // lose a credential nothing later comes back for. The same rule holds in
+    // `callback()` for the code exchange and the park, and in `disconnect`.
+    //
+    // Single use, and ATOMICALLY so: the DELETE and the read of what was
+    // deleted are one statement, so the row is locked for the whole of it. Of
+    // two claims racing on the same secret one comes away with the grant and
+    // the other comes away with nothing, and there is no read-then-delete for
+    // them to interleave inside.
+    //
+    // BE PRECISE ABOUT WHAT IS SINGLE-USE HERE, because an earlier draft of
+    // this comment was not and claimed OAUTH-03 outright. What is consumed is
+    // the CLAIM SECRET. The STATE is not: nothing marks one spent, so inside
+    // its ten minutes one `begin` can still drive as many callbacks as there
+    // are people willing to approve at Google, each parking its own row.
+    //
+    // What makes that no longer worth doing is the walk binding rather than
+    // this statement. Every row a reused state parks carries the ORIGINATOR's
+    // walk hash, so the browser that actually approved holds no secret that
+    // matches it and never claims — the grant simply expires. The one way it
+    // pays is if the originator also gets hold of that browser's `n`, which
+    // lives only in its address bar (stripped before boot finishes) and in the
+    // platform's own request log. That is the residual, it is written down in
+    // CLAUDE.md rather than left to be rediscovered, and closing it properly
+    // means a used-state record outliving the claim — more machinery than the
+    // finding is worth while the binding stands.
+    //
+    // The sweep rides ALONGSIDE it, and it is here because the callback was the
+    // only place that ever swept and the callback only runs when somebody walks
+    // consent. On a household that connects once and abandons the walk, the
+    // callback's sweep is a sweep that never happens again — so a live refresh
+    // token nobody can claim any more sat in `gcal_pending` until the next
+    // walk, which on a quiet estate is never. Concurrently rather than in
+    // sequence, because the claim's own budget is what is left of the bridge's
+    // deadline after `verifyUser`. It cannot take the row being claimed unless
+    // that row is already past its expiry, and an expired row is one the check
+    // below refuses anyway.
+    const [spent] = await Promise.allSettled([
+      pending()
+        .delete()
+        .eq('claim_hash', sha256Hex(n))
+        .select('refresh_token, google_email, expires_at, walk_hash')
+        .maybeSingle<PendingRow>(),
+      pending().delete().lt('expires_at', new Date().toISOString()),
+    ])
     // the registry being unreachable is a different sentence with a different
     // remedy — try again — and it says nothing about the secret, so it is the
     // one refusal here that is allowed to be its own code
+    if (spent.status !== 'fulfilled') return fail(503, 'unreachable')
+    const { data: parked, error: claimError } = spent.value
     if (claimError) return fail(503, 'unreachable')
     // absent, already spent, or too late. The row is gone either way — an
     // expired grant must not survive being asked for.
     if (!parked || Date.parse(parked.expires_at) <= Date.now()) return claimRefused()
 
-    // THE WALK BINDING, checked. `w` is the raw secret the calling tab put in
-    // its sessionStorage before this walk began; the row carries the hash that
-    // same tab handed to `begin`. A browser given a finished `?gcal=pending`
+    // THE WALK BINDING, checked. `w` is the raw secret the calling browser put
+    // away before this walk began; the row carries the hash that same browser
+    // handed to `begin`. A browser given a finished `?gcal=pending`
     // link it did not earn holds no such secret and cannot compute one, so this
     // is where the mirror-image attack stops — one comparison, before anything
     // is filed under anybody. Constant-time over equal-length digests, because

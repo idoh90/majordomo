@@ -1895,10 +1895,19 @@ export interface VoicePack {
       failed: string
       /**
        * The link was handed here rather than earned here. The walk's secret
-       * lives in the tab that began it, so a browser holding none of it did
-       * not start this connection — and must say so without claiming.
+       * lives in the browser that began it, so one holding none of it did not
+       * start this connection — and must say so without claiming. It carries a
+       * remedy as well as the fact: an honest reader reaches this line too, by
+       * coming home to a walk that has aged out or to storage somebody cleared.
        */
       unstarted: string
+      /**
+       * The walk was begun by one household and a different one is signed in
+       * now. Sign-ins broadcast between tabs of a browser, so this is reachable
+       * without anybody meaning harm — and filing the calendar anyway would be
+       * the swap the claim step exists to refuse.
+       */
+      otherAccount: string
       /** no session storage, so a walk begun here could never be finished */
       blocked: string
     }

@@ -121,9 +121,12 @@ these remain undecided and must not be presented as settled:
 **Built, awaiting arming:** two-way Google Calendar sync (settings → CALENDARS) —
 the estate's bookings go to an app-created "Majordomo" calendar in the user's
 Google account, Google's own events arrive as read-only blocks that hold their
-hours. The code ships dormant: it needs the Google Cloud OAuth client, the
-`gcal_accounts` migration and `GCAL_ENABLED=1` before the door opens (playbook
+hours. The code ships dormant: it needs the Google Cloud OAuth client, BOTH migrations
+— `0006_gcal.sql` and `0007_gcal_claim.sql`, the second pasted before the app
+that expects it ships — and `GCAL_ENABLED=1` before the door opens (playbook
 §3.3.1's verification warning applies from the moment the consent screen exists).
+With 0007 missing every consent walk fails at the park and nothing can connect
+at all, which is the safe direction and the reason the order matters.
 
 **Not built, and not to be described as existing:** onboarding or first-run flow ·
 payments or any paid tier · push notifications and the

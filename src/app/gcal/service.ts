@@ -486,12 +486,13 @@ export async function connectGoogle(): Promise<void> {
  *    that household's calendar at the attacker's.
  *
  * The second is what the WALK SECRET closes. connectGoogle() mints 32 random
- * bytes, keeps them in this tab's sessionStorage and sends only their sha256
- * with `begin`; the server carries that hash through the signed state onto the
- * parked grant, and a claim must present the raw secret to match it. So a link
- * alone buys nothing: the browser that finishes a walk has to be the browser
- * that began it. Identity is the session present; authority is the tab that
- * asked.
+ * bytes, keeps them to this browser (walkStores(), below — two carriers, one
+ * binding) and sends only their sha256 with `begin`; the server carries that
+ * hash through the signed state onto the parked grant, and a claim must present
+ * the raw secret to match it. So a link alone buys nothing: the browser that
+ * finishes a walk has to be the browser that began it. Identity is the session
+ * present; authority is the browser that asked — and, since the record names
+ * the household that asked, the account that asked.
  *
  * The secret is a bearer credential for a refresh token, so it is held exactly
  * the way the access tokens are: never in the store (which holds no
@@ -504,30 +505,81 @@ export async function connectGoogle(): Promise<void> {
  * nothing to anyone and a second attempt would fail the same way.
  */
 
-/** the walk's own secret: this tab, this walk, and no longer than either */
+/** the walk's own secret: this walk, and no longer than the server's own state */
 const WALK_KEY = 'majordomo-gcal-walk'
 
+/**
+ * How long a stored walk is worth reading — the same ten minutes `api/google.ts`
+ * signs a state for. Past it the walk it belongs to cannot be finished anyway,
+ * so a record older than this is not a secret, it is litter with a live shape.
+ */
+const WALK_TTL_MS = 10 * 60_000
+
 type Walk = { secret: string; hash: string }
-type Grant = { n: string; w: string }
+
+/** what a claim has to present, and who is entitled to make it */
+type Grant = { n: string; w: string; owner: string | null }
 
 /**
- * sessionStorage and not localStorage, deliberately. A walk is one tab's
- * business: it must not outlive the tab, and it must not be readable by
- * another tab that never started one. A top-level navigation out to Google
- * and back keeps the same tab's sessionStorage, which is exactly the lifetime
- * wanted — no more.
+ * What is kept while a walk is out at Google: the secret itself, the household
+ * that began the walk, and when. The last two are not decoration — see
+ * `claimGrant()` for the account swap `owner` refuses, and `readWalk()` for
+ * what `mintedAt` sweeps.
  */
-function walkStore(): Storage | null {
-  try {
-    const s = window.sessionStorage
-    const probe = '__gcal_walk__'
-    s.setItem(probe, '1')
-    s.removeItem(probe)
-    return s
-  } catch {
-    // private mode, blocked storage, an embedding that refuses it
-    return null
+type WalkRecord = { secret: string; owner: string | null; mintedAt: number }
+
+/**
+ * TWO CARRIERS, and the second one is a concession to a platform rather than a
+ * relaxation of the rule.
+ *
+ * sessionStorage is the lifetime this wants and the first place it is written:
+ * one tab's business, dead when the tab is, invisible to a tab that never
+ * started a walk, and preserved across the top-level navigation out to Google
+ * and back. That was the whole design, and on an ordinary browser it is still
+ * exactly what happens.
+ *
+ * It is not sufficient on its own, because the walk leaves the app. An INSTALLED
+ * app (the manifest says `standalone`, and the estate is meant to be installed)
+ * may hand a cross-origin navigation to the system browser or a custom tab, and
+ * the consent screen and the return then happen in a context whose
+ * sessionStorage never held anything. A return that lands in a new tab does the
+ * same. In that state the app could never connect Google at all — a total,
+ * repeatable, silent failure, and the sentence on screen blamed the reader for
+ * using another browser. So the record is written to localStorage too, and a
+ * read takes whichever carrier still has it.
+ *
+ * WHAT THAT COSTS, stated plainly: another tab of the same browser can now read
+ * the record. What it does NOT cost is the binding, which is the only thing the
+ * security rests on — a browser handed a finished `?gcal=pending&n=…` link it
+ * did not earn holds no record matching THAT walk's hash, whichever carrier it
+ * looks in, and its claim is refused and burns the attacker's grant. The
+ * property given up is invisibility between two tabs of one profile, which is
+ * one person looking at their own storage. The localStorage copy is fenced by
+ * `mintedAt` instead of by the tab's lifetime, and it is deleted the moment it
+ * is spent.
+ *
+ * It is still out of reach of `core/backup.ts`: that export reads localStorage
+ * against an ALLOW-list, so a key nobody added cannot ride into a file somebody
+ * mails themselves. It does match `hasEstate()`'s `majordomo*` sweep, which is
+ * harmless only because of WHO writes it: `begin` needs a bearer, so a walk can
+ * only be minted from inside the app by a signed-in reader, who has had an
+ * estate and an `sb-` key since long before. Nothing pre-consent ever writes
+ * here — the reason `majordomo-telemetry` had to be careful.
+ */
+function walkStores(): Storage[] {
+  const found: Storage[] = []
+  for (const pick of [() => window.sessionStorage, () => window.localStorage]) {
+    try {
+      const s = pick()
+      const probe = '__gcal_walk__'
+      s.setItem(probe, '1')
+      s.removeItem(probe)
+      found.push(s)
+    } catch {
+      // private mode, blocked storage, an embedding that refuses it
+    }
   }
+  return found
 }
 
 const b64url = (bytes: Uint8Array): string => {
@@ -546,8 +598,8 @@ async function sha256Hex(text: string): Promise<string> {
 /** 256 bits from the browser's CSPRNG — 43 base64url characters, kept here,
  *  and its shadow (lowercase hex sha256) the only half that ever travels */
 async function mintWalk(): Promise<Walk | null> {
-  const store = walkStore()
-  if (!store) return null
+  const stores = walkStores()
+  if (stores.length === 0) return null
   try {
     const bytes = new Uint8Array(32)
     crypto.getRandomValues(bytes)
@@ -555,30 +607,70 @@ async function mintWalk(): Promise<Walk | null> {
     // subtle is absent on an insecure origin; a walk that cannot be hashed is
     // a walk that cannot be bound, and an unbindable walk must not start
     const hash = await sha256Hex(secret)
-    store.setItem(WALK_KEY, secret)
+    // the household that is walking. `begin` needs a bearer, so there is always
+    // one — and it is what stops a walk begun by one account being spent by
+    // another that happened to sign in on this browser meanwhile
+    const record: WalkRecord = {
+      secret,
+      owner: useAuthStore.getState().userId,
+      mintedAt: Date.now(),
+    }
+    const written = JSON.stringify(record)
+    for (const store of stores) store.setItem(WALK_KEY, written)
     return { secret, hash }
   } catch {
     return null
   }
 }
 
+/** whichever carrier still holds it, if it is still inside the window the
+ *  server would honour. A record past that cannot finish its walk, so it is
+ *  swept rather than returned — this is also what keeps a localStorage copy
+ *  from outliving the tab it was minted in by more than the walk itself. */
+function readWalk(): WalkRecord | null {
+  for (const store of walkStores()) {
+    let raw: string | null = null
+    try {
+      raw = store.getItem(WALK_KEY)
+    } catch {
+      continue
+    }
+    if (!raw) continue
+    try {
+      const parsed = JSON.parse(raw) as Partial<WalkRecord>
+      if (typeof parsed.secret !== 'string' || typeof parsed.mintedAt !== 'number') continue
+      if (Date.now() - parsed.mintedAt > WALK_TTL_MS) continue
+      return {
+        secret: parsed.secret,
+        owner: typeof parsed.owner === 'string' ? parsed.owner : null,
+        mintedAt: parsed.mintedAt,
+      }
+    } catch {
+      // not ours, a half-written value, or the bare secret this key used to
+      // hold before it carried an owner and a mint time — a walk in flight
+      // across that deploy comes home to the `unstarted` line and one more
+      // consent screen, which is the correct cost of a format change and the
+      // reason that line carries a remedy
+    }
+  }
+  return null
+}
+
 /** one walk, one secret — read and burnt in the same breath, whatever the
  *  claim goes on to do with it */
-function takeWalk(): string | null {
-  try {
-    const secret = window.sessionStorage.getItem(WALK_KEY)
-    window.sessionStorage.removeItem(WALK_KEY)
-    return secret
-  } catch {
-    return null
-  }
+function takeWalk(): WalkRecord | null {
+  const record = readWalk()
+  dropWalk()
+  return record
 }
 
 function dropWalk(): void {
-  try {
-    window.sessionStorage.removeItem(WALK_KEY)
-  } catch {
-    // nothing was stored; nothing to regret
+  for (const store of walkStores()) {
+    try {
+      store.removeItem(WALK_KEY)
+    } catch {
+      // nothing was stored; nothing to regret
+    }
   }
 }
 
@@ -603,6 +695,28 @@ function claimGrant(): Promise<void> {
   if (claimInFlight) return claimInFlight
   const grant = pendingClaim
   if (!grant) return Promise.resolve()
+
+  // THE WALK'S OWN HOUSEHOLD, and this is the last swap the claim step had left
+  // open. A grant is held across boot's first `loading → signedOut` on purpose
+  // (below), which is also what a session that lapsed while its owner stood at
+  // Google's consent screen looks like. Sign-ins broadcast between tabs of one
+  // browser profile, so the NEXT session to arrive here could be somebody
+  // else's — and it would have been handed a calendar it never walked for,
+  // which is the exact confusion the whole claim exists to prevent, reached
+  // from inside the house instead of from a link. The walk recorded who began
+  // it; only they may finish it. Nobody signed in yet is not a mismatch — that
+  // is the wait the ten-minute window is for.
+  const who = useAuthStore.getState().userId
+  if (grant.owner !== null && who !== null && who !== grant.owner) {
+    pendingClaim = null
+    const s = useGcalStore.getState()
+    s.setNotice(null)
+    s.setError(voice.calendars.claim.otherAccount)
+    standingLine = voice.calendars.claim.otherAccount
+    ordinaryStart()
+    return Promise.resolve()
+  }
+
   claimInFlight = runClaim(grant).finally(() => {
     claimInFlight = null
   })
@@ -642,7 +756,8 @@ async function runClaim(grant: Grant): Promise<void> {
     pendingClaim = null
     s.setNotice(null)
     s.setError(voice.calendars.claim.failed)
-    ordinaryStart(voice.calendars.claim.failed)
+    standingLine = voice.calendars.claim.failed
+    ordinaryStart()
     return
   }
   if (r.ok) {
@@ -655,14 +770,45 @@ async function runClaim(grant: Grant): Promise<void> {
     return
   }
 
-  if (!retryable(r.code)) pendingClaim = null
+  if (!retryable(r.code)) {
+    pendingClaim = null
+    // A CLAIM CAN FAIL ON THE WAY BACK. The server deletes the row, files the
+    // grant, and the reply is lost in transit; the retry then finds nothing and
+    // is answered 'expired', which reads here as *granted but never completed*
+    // over a connection that is already made. A reader who obeys that sentence
+    // walks the consent screen and mints a second Google grant on top of a live
+    // one — precisely what the in-flight guard above exists to prevent, reached
+    // through another door. So the household is ASKED before it is told, and a
+    // 'yes' outranks the claim's own verdict: a grant that turns out to be
+    // filed here is a success that lost its receipt.
+    //
+    // On a RECONNECT the row was already there, so a 'yes' can also be the old
+    // connection answering for itself. That is why this hands straight to
+    // cycle() rather than declaring victory: the very next thing it does is ask
+    // Google for a token on that grant, and a lapsed one says so in its own
+    // words a second later. Better a right answer arriving late than a wrong
+    // instruction to walk consent again.
+    await refreshGcalStatus()
+    if (useGcalStore.getState().connected !== null) {
+      const after = useGcalStore.getState()
+      after.setError(null)
+      after.setNeedsReconnect(false)
+      after.setNotice(voice.calendars.returnedConnected)
+      void cycle()
+      return
+    }
+  }
   const line = claimLine(r.code, r.raw)
-  s.setNotice(null)
-  s.setError(line)
+  const now = useGcalStore.getState()
+  now.setNotice(null)
+  now.setError(line)
   // a claim that is over, one way or another, must hand the tab back its
   // ordinary work — the boot tail took the claim branch INSTEAD of the usual
   // status-then-cycle, and nothing else was ever going to restore it
-  if (!pendingClaim) ordinaryStart(line)
+  if (!pendingClaim) {
+    standingLine = line
+    ordinaryStart()
+  }
 }
 
 /**
@@ -726,49 +872,60 @@ export function startGcalService(outcome: string | null, claim: string | null): 
   if (started || !armed()) return
   started = true
 
-  // whatever line the return door leaves standing, so the ordinary work below
-  // can put it back if it starts a cycle over the top of it
-  let standing: string | null = null
-
   if (outcome === 'pending' && claim) {
     // The walk is home but NOTHING is connected yet, and this is the branch
-    // that decides whether it ever will be. The secret is read out of this
-    // tab's sessionStorage and burnt on the spot — one walk, one secret,
+    // that decides whether it ever will be. The record is read out of whichever
+    // carrier still holds it and burnt on the spot — one walk, one secret,
     // whatever happens next.
     const walk = takeWalk()
     if (walk) {
       // the grant is claimed below, against whoever is actually signed in here
-      pendingClaim = { n: claim, w: walk }
+      pendingClaim = { n: claim, w: walk.secret, owner: walk.owner }
       useGcalStore.getState().setNotice(voice.calendars.claim.working)
     } else {
       // THIS BROWSER DID NOT START THIS WALK. Somebody else finished a consent
       // screen with their own Google account and handed the address on; a tab
       // that claimed it would file a stranger's calendar over this household's
       // and push its bookings out to them. So nothing is sent at all — no
-      // claim, no probe, no acknowledgement the link's author could read.
-      standing = voice.calendars.claim.unstarted
-      useGcalStore.getState().setError(standing)
+      // claim, no probe, no acknowledgement the link's author could read. The
+      // line carries a remedy as well as the fact, because an honest reader can
+      // land here too — a walk older than ten minutes, storage cleared mid-walk
+      // — and being told only that they are in the wrong browser leaves them
+      // with nothing to do about it.
+      standingLine = voice.calendars.claim.unstarted
+      useGcalStore.getState().setError(standingLine)
     }
   } else if (outcome === 'connected') {
     // a server that still connects on the callback's word alone (an older
     // deployment answering a newer app); its news is still news
     useGcalStore.getState().setNotice(voice.calendars.returnedConnected)
+    dropWalk()
   } else if (outcome === 'denied') {
-    standing = voice.calendars.returnedDenied
-    useGcalStore.getState().setError(standing)
+    standingLine = voice.calendars.returnedDenied
+    useGcalStore.getState().setError(standingLine)
+    dropWalk()
   } else if (outcome === 'error') {
-    standing = voice.calendars.returnedError
-    useGcalStore.getState().setError(standing)
+    standingLine = voice.calendars.returnedError
+    useGcalStore.getState().setError(standingLine)
+    dropWalk()
   } else if (outcome === 'pending') {
     // home from the walk with nothing to spend — the secret was lost between
     // the callback and here, and only another consent can replace it
-    standing = voice.calendars.claim.failed
-    useGcalStore.getState().setError(standing)
+    standingLine = voice.calendars.claim.failed
+    useGcalStore.getState().setError(standingLine)
+    dropWalk()
   }
 
-  // an unclaimable walk secret is litter of the most expensive kind; never
-  // leave one lying in a tab that has just been told it cannot use it
-  if (!pendingClaim) dropWalk()
+  // NOTHING IS SWEPT ON AN ORDINARY BOOT, and that is the fix for a bug this
+  // very line used to be. A walk survives a top-level navigation out to Google
+  // and back — but the tab in between is free to be re-created: BACK out of the
+  // consent screen with the bfcache missing, a service worker serving a fresh
+  // document, iOS reclaiming memory. Each of those is a boot with no `?gcal=`
+  // param, and dropping the record there destroyed a live walk thirty seconds
+  // old and then told its owner it had been begun in another browser, while the
+  // grant they went on to authorise sat parked and unclaimable. A record is
+  // swept when the return door says the walk is over, and otherwise ages out on
+  // its own `mintedAt`.
 
   // follow the session, exactly as the estate sync does
   useAuthStore.subscribe((s, prev) => {
@@ -777,7 +934,14 @@ export function startGcalService(outcome: string | null, claim: string | null): 
       // a session that arrived late is the ordinary case for a claim: the
       // registry rehydrates after boot, and the secret waited for it
       if (pendingClaim) void claimGrant()
-      else void refreshGcalStatus().then(() => cycle())
+      // …and it is the ordinary case for the rest of boot too. `initAuth()`
+      // resolves through a dynamic import, so the status is ALWAYS 'loading'
+      // when the tail below runs and the tail's own ordinaryStart() always
+      // returns at the door. This is where the boot work actually happens, and
+      // routing it through the same function is what carries a standing verdict
+      // — a denial, a refused claim — across that resolution. Called directly,
+      // the cycle here cleared the line before anyone could read it.
+      else ordinaryStart()
     } else if (s.status === 'signedOut') {
       // the mirrors are estate records and stay, like everything on sign-out;
       // only the credential dies with the session
@@ -789,7 +953,11 @@ export function startGcalService(outcome: string | null, claim: string | null): 
       // server's ten-minute window, runClaim's 'signin' retry) unreachable.
       // Whoever signs in NEXT on this tab need not be who walked through
       // Google's consent screen, and handing them that calendar would be the
-      // very swap this claim step exists to stop.
+      // very swap this claim step exists to stop — which is why holding the
+      // grant across this transition is safe only in company: claimGrant()
+      // refuses an account that does not match the walk's recorded owner, and
+      // a sign-in broadcast from another tab of the same profile arrives here
+      // looking exactly like the session that walked.
       if (prev.status === 'signedIn') pendingClaim = null
     }
   })
@@ -815,20 +983,36 @@ export function startGcalService(outcome: string | null, claim: string | null): 
     // detour and never a dead end.
     void claimGrant()
   } else {
-    ordinaryStart(standing)
+    ordinaryStart()
   }
 }
 
 /**
+ * A verdict from the return door that has to outlive the cycle following it.
+ *
+ * It is a module variable rather than an argument because the two are separated
+ * by an await nobody controls: the boot tail sets it while auth is still
+ * 'loading', and the work that would erase it does not start until the session
+ * resolves a moment later, in the subscription above. Passed as an argument it
+ * was simply dropped — every boot took the early return, and the denial or the
+ * refused claim the reader most needed to see was the one line guaranteed to
+ * disappear.
+ */
+let standingLine: string | null = null
+
+/**
  * The ordinary boot work: what the tab does when no grant is waiting.
  *
- * `standing` is a line already on screen. cycle() clears lastError on its way
- * in — right for a stale sync complaint, wrong for a verdict about a walk —
- * so a line that survived the round trip unchallenged is put back. Anything
- * the cycle itself had to say wins, and says it later.
+ * cycle() clears lastError on its way in — right for a stale sync complaint,
+ * wrong for a verdict about a walk — so a line that survived the round trip
+ * unchallenged is put back. Anything the cycle itself had to say wins, and says
+ * it later. The line is consumed only once the work actually starts, so a boot
+ * that leaves at the door keeps it for the session that arrives next.
  */
-function ordinaryStart(standing: string | null): void {
+function ordinaryStart(): void {
   if (useAuthStore.getState().status !== 'signedIn') return
+  const standing = standingLine
+  standingLine = null
   void refreshGcalStatus()
     .then(() => cycle())
     .then(() => {

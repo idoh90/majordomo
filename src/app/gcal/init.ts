@@ -25,10 +25,11 @@ import { startGcalService } from './service'
  *
  * ONE HALF is the load-bearing word, and it is not a claim that a query string
  * is private — it plainly is not. The other half is the walk secret, minted at
- * connectGoogle() and kept in the sessionStorage of the one tab that began the
- * walk. So an `n` recovered from history, from a platform's request log, or
- * from a link somebody was handed buys nothing on its own: the claim step
- * refuses without the secret, and the secret never left that tab.
+ * connectGoogle() and kept by the browser that began the walk (see walkStores()
+ * for which storage, and why there are two). So an `n` recovered from history,
+ * from a platform's request log, or from a link somebody was handed buys nothing
+ * on its own: the claim step refuses without the secret, and the secret never
+ * left the browser that minted it.
  *
  * On a disarmed origin (?demo'd, unconfigured, no storage) the service never
  * starts at all, which is also what keeps the Manor harness inert — and a
