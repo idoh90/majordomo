@@ -5,7 +5,7 @@ import { armed } from '../../core/sync/gate'
 import { useEventsStore } from '../../core/events/store'
 import type { CalendarEvent } from '../../core/events/types'
 import { voice } from '../../core/voice'
-import { errorLine, gcalApi } from './apiClient'
+import { errorLine, gcalApi, type GcalErrorCode } from './apiClient'
 import * as g from './google'
 import {
   FUTURE_DAYS,
@@ -457,6 +457,82 @@ export async function connectGoogle(): Promise<void> {
   window.location.assign(r.data.url)
 }
 
+/* ------------------------------------------------------------------ claim */
+
+/**
+ * The last step of the consent walk, and the reason there is a step at all.
+ *
+ * Google's callback proves only who STARTED the walk. A signed state travels
+ * inside a link, and a link can be handed to somebody else — so a genuine
+ * consent screen, sent to a stranger, used to file that stranger's calendar
+ * under whoever built the link, silently. The grant now waits at the server
+ * instead, and the app spends a one-use secret against the session actually
+ * sitting here. Identity is the session present, never the link followed.
+ *
+ * The secret is a bearer credential for a refresh token, so it is held exactly
+ * the way the access tokens are: module memory, this tab, gone on reload. It
+ * is never written to the store (which holds no credential, by charter), never
+ * exported, and out of the address bar before the first line of boot finishes.
+ *
+ * A claim that could not be SENT — no session yet, no network, a register
+ * asleep — keeps the secret for the triggers below; a claim the server
+ * REFUSED drops it, because a spent or expired secret is worth nothing to
+ * anyone and a second attempt would fail the same way.
+ */
+let pendingClaim: string | null = null
+
+/** which refusals are worth holding the secret for */
+const retryable = (code: GcalErrorCode): boolean =>
+  code === 'offline' || code === 'unreachable' || code === 'signin'
+
+/** the walk's own sentences: the general error lines promise a catching-up
+ *  that a one-use secret cannot honour ("the calendars will catch up when it
+ *  is not" is true of a sync, false of a grant nobody claimed) */
+const claimLine = (code: GcalErrorCode, raw: string): string => {
+  switch (code) {
+    case 'offline':
+      return voice.calendars.claim.offline
+    case 'signin':
+      return voice.calendars.claim.signin
+    case 'unreachable':
+      // the register, not the claim — and its own line already says "shortly"
+      return errorLine(code, raw)
+    default:
+      return voice.calendars.claim.failed
+  }
+}
+
+async function claimGrant(): Promise<void> {
+  const secret = pendingClaim
+  if (!secret) return
+  useGcalStore.getState().setBusy(true)
+  const r = await gcalApi.claim(secret)
+  const s = useGcalStore.getState()
+  s.setBusy(false)
+
+  // the server answering "nobody is connected" is an answer, not a failure of
+  // transport: the grant is gone, and there is nothing left to wait for
+  if (r.ok && !r.data.connected) {
+    pendingClaim = null
+    s.setNotice(null)
+    s.setError(voice.calendars.claim.failed)
+    return
+  }
+  if (r.ok) {
+    pendingClaim = null
+    s.setError(null)
+    s.setNeedsReconnect(false)
+    s.setConnected({ email: r.data.email, calendarId: r.data.calendarId })
+    s.setNotice(voice.calendars.returnedConnected)
+    void cycle()
+    return
+  }
+
+  if (!retryable(r.code)) pendingClaim = null
+  s.setNotice(null)
+  s.setError(claimLine(r.code, r.raw))
+}
+
 /**
  * Take every mirror off the Manor. Real deletions through the store, so real
  * tombstones travel to every device — the one legitimate wholesale removal,
@@ -514,27 +590,45 @@ function soon(): void {
 
 let started = false
 
-export function startGcalService(outcome: string | null): void {
+export function startGcalService(outcome: string | null, claim: string | null): void {
   if (started || !armed()) return
   started = true
 
-  if (outcome === 'connected') {
+  if (outcome === 'pending' && claim) {
+    // the walk is home but nothing is connected yet — the grant is claimed
+    // below, against whoever is actually signed in here
+    pendingClaim = claim
+    useGcalStore.getState().setNotice(voice.calendars.claim.working)
+  } else if (outcome === 'connected') {
+    // a server that still connects on the callback's word alone (an older
+    // deployment answering a newer app); its news is still news
     useGcalStore.getState().setNotice(voice.calendars.returnedConnected)
   } else if (outcome === 'denied') {
     useGcalStore.getState().setError(voice.calendars.returnedDenied)
   } else if (outcome === 'error') {
     useGcalStore.getState().setError(voice.calendars.returnedError)
+  } else if (outcome === 'pending') {
+    // home from the walk with nothing to spend — the secret was lost between
+    // the callback and here, and only another consent can replace it
+    useGcalStore.getState().setError(voice.calendars.claim.failed)
   }
 
   // follow the session, exactly as the estate sync does
   useAuthStore.subscribe((s, prev) => {
     if (s.status === prev.status && s.userId === prev.userId) return
     if (s.status === 'signedIn') {
-      void refreshGcalStatus().then(() => cycle())
+      // a session that arrived late is the ordinary case for a claim: the
+      // registry rehydrates after boot, and the secret waited for it
+      if (pendingClaim) void claimGrant()
+      else void refreshGcalStatus().then(() => cycle())
     } else if (s.status === 'signedOut') {
       // the mirrors are estate records and stay, like everything on sign-out;
       // only the credential dies with the session
       invalidateToken()
+      // …and so does an unspent grant. Whoever signs in NEXT on this tab need
+      // not be who walked through Google's consent screen, and handing them
+      // that calendar would be the very swap this claim step exists to stop.
+      pendingClaim = null
     }
   })
 
@@ -548,13 +642,24 @@ export function startGcalService(outcome: string | null): void {
   })
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') void cycle()
+    if (document.visibilityState === 'visible') resume()
   })
-  window.addEventListener('online', () => void cycle())
+  window.addEventListener('online', () => resume())
 
-  if (useAuthStore.getState().status === 'signedIn') {
+  if (pendingClaim) {
+    // the claim comes first: a status call before it would only ask the server
+    // a question it cannot answer until the grant has an owner
+    void claimGrant()
+  } else if (useAuthStore.getState().status === 'signedIn') {
     void refreshGcalStatus().then(() => cycle())
   }
+}
+
+/** a tab coming back, or a network with it: an unspent grant outranks a cycle,
+ *  and is the only thing here that can expire while nobody is looking */
+function resume(): void {
+  if (pendingClaim) void claimGrant()
+  else void cycle()
 }
 
 if (import.meta.env.DEV) {

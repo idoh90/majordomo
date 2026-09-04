@@ -2,7 +2,7 @@ import { getClient } from '../../core/auth/client'
 import { voice } from '../../core/voice'
 
 /**
- * The client half of `api/google.ts` — typed wrappers over its five actions.
+ * The client half of `api/google.ts` — typed wrappers over its six actions.
  *
  * The endpoint speaks a CLOSED machine vocabulary (`{ error: code }`); the
  * words live here, in voice, where every string in this app lives. A relative
@@ -118,6 +118,12 @@ export type TokenReply = {
 export const gcalApi = {
   begin: (email: string | null) =>
     call<{ url: string }>(email ? { action: 'begin', email } : { action: 'begin' }),
+  /**
+   * The last step of the consent walk: spend the one-use secret the callback
+   * came home with. It answers in the `status` shape, because a claim that
+   * succeeds IS the connection — there is nothing else to ask afterwards.
+   */
+  claim: (n: string) => call<StatusReply>({ action: 'claim', n }),
   status: () => call<StatusReply>({ action: 'status' }),
   token: () => call<TokenReply>({ action: 'token' }),
   calendar: (id: string, previous: string | null) =>

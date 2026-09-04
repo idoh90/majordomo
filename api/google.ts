@@ -11,8 +11,10 @@
  *
  * What it does, and nothing more:
  *   POST {action:'begin'}       → the Google consent URL, with a signed state
- *   GET  ?code&state            → Google's redirect: exchange the code, keep
- *                                 the refresh token, bounce back to the app
+ *   GET  ?code&state            → Google's redirect: exchange the code, PARK
+ *                                 the refresh token, hand the browser a secret
+ *   POST {action:'claim'}       → spend that secret; file the parked grant
+ *                                 under the session that presents it
  *   POST {action:'status'}      → is this household connected (no Google call)
  *   POST {action:'token'}       → a fresh access token from the refresh grant
  *   POST {action:'calendar'}    → remember the app-created calendar's id
@@ -26,19 +28,55 @@
  * the client bundle, never VITE_-prefixed):
  *   GOOGLE_CLIENT_ID           required
  *   GOOGLE_CLIENT_SECRET       required — also keys the state signature
- *   SUPABASE_SERVICE_ROLE_KEY  required — gcal_accounts is service_role-only
+ *   SUPABASE_SERVICE_ROLE_KEY  required — both gcal tables are service_role-only
  *   GCAL_ENABLED               required, "1" to arm. Absent = every call refused.
  * The Supabase URL and anon key are reused from the client build's VITE_ pair.
  *
- * The state parameter is the callback's whole authentication: a 10-minute
- * HMAC over {user, origin, expiry}, keyed by a hash of the client secret with
- * a domain-separation prefix — so there is no nonce table to migrate and no
- * extra secret to provision, and rotating the client secret only invalidates
- * states that were already mid-flight.
+ * THE HANDOFF — and why the signed state is not, and never was, an identity.
+ *
+ * This file used to treat the state parameter as the callback's whole
+ * authentication: a 10-minute HMAC over {user, origin, expiry}, and the
+ * callback wrote Google's refresh token straight into `gcal_accounts` under
+ * the user id it read back out of there. The signature was sound. The
+ * conclusion drawn from it was wrong, and it was wrong in the way that costs
+ * somebody their calendar: a state proves who STARTED the walk, and in the
+ * attack that is the attacker. Sign up, ask this endpoint for a consent URL,
+ * send the genuine accounts.google.com link to somebody else. They see
+ * Google's own screen on Google's own domain, approve with their own account —
+ * and their refresh token is filed under the sender's user id, who can then
+ * read every calendar they have for as long as Google honours the grant. The
+ * one identity that mattered was never in the walk at all: the browser that
+ * FINISHED it.
+ *
+ * So the callback no longer knows, or asks, whose connection this is. It parks
+ * the refresh token in `gcal_pending` (0007), addressed by the sha256 of a
+ * secret minted right there with `randomBytes`, and hands the plaintext secret
+ * to the only party that could possibly be entitled to it — the browser it is
+ * redirecting. That browser comes back with `{action:'claim'}` and its OWN
+ * bearer token, and the grant is filed under the id that token verifies to.
+ * The secret is deliberately absent from the state: a state is base64url and
+ * whoever started the walk can read every field in it, so a secret minted at
+ * `begin` would be a secret the attacker could spend first.
+ *
+ * The pending row is single-use and short-lived. The claim DELETEs and RETURNs
+ * in one statement, so two claims racing on the same secret cannot both come
+ * away with the grant, and a link that leaks is a link worth one attempt inside
+ * ten minutes rather than an open door for everyone who clicks it.
+ *
+ * PKCE rides along, derived rather than stored: the verifier is an HMAC over
+ * the state under the same key that signs it, so the callback recomputes it
+ * from what Google hands back and there is still no table to migrate for it.
+ * The state's own MAC travels in the URL, so the verifier is a DIFFERENT PRF
+ * output over the same bytes — see `codeVerifier`, where that is the whole of
+ * its safety.
+ *
+ * The key under all of it is still a hash of the client secret with a
+ * domain-separation prefix: no extra secret to provision, and rotating the
+ * client secret only invalidates walks that were already mid-flight.
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { nodeHandler } from './_node.js'
 
 /* -------------------------------------------------------------------------- */
@@ -107,6 +145,26 @@ export const maxDuration = 30
 /** how long a consent walk may take between `begin` and the callback */
 const STATE_TTL_MS = 10 * 60_000
 
+/**
+ * How long the finished walk's claim secret is worth anything.
+ *
+ * The walk is over by the time one is minted and the app is already loading, so
+ * this is not a wait — it is room for a browser that came home signed OUT to
+ * sign in and spend it. The row is single-use besides, so the width of the
+ * window only ever matters once per walk.
+ */
+const CLAIM_TTL_MS = 10 * 60_000
+
+/** 256 bits from the system CSPRNG — 43 base64url characters, derived from nothing */
+const CLAIM_BYTES = 32
+
+/**
+ * Shape, not authentication. The secret authenticates itself by matching a
+ * parked row; this only keeps a stray megabyte of nonsense from being carried
+ * to the registry and hashed.
+ */
+const CLAIM_SHAPE = /^[A-Za-z0-9_-]{32,128}$/
+
 /* -------------------------------------------------------------------------- */
 /* replies                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -124,18 +182,54 @@ const ok = (body: object): Response =>
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
   })
 
-/** the callback's replies are navigations, not JSON — the browser is mid-walk */
-const bounce = (site: string, outcome: 'connected' | 'denied' | 'error'): Response =>
+/**
+ * The callback's replies are navigations, not JSON — the browser is mid-walk.
+ * There is no longer a 'connected' outcome here, and its absence is the point:
+ * this endpoint cannot connect anything on a browser's say-so, because the
+ * browser Google redirects is not necessarily the household that asked.
+ */
+const bounce = (site: string, outcome: 'denied' | 'error'): Response =>
   new Response(null, {
     status: 302,
     headers: { location: `${site}/?gcal=${outcome}`, 'cache-control': 'no-store' },
+  })
+
+/**
+ * The handoff: the one reply that carries a claim secret, to the one browser
+ * that could be entitled to it.
+ *
+ * `pending` rather than `connected` because nothing is connected yet — the app
+ * has to trade `n` for the grant under its own session. The client strips both
+ * params before anything else runs (the `?join` rule, in `app/gcal/init.ts`),
+ * so the secret does not survive a reload or a copied address; that, and the
+ * row being single-use, is what keeps a shared browser history from being a
+ * credential.
+ */
+const handoff = (site: string, secret: string): Response =>
+  new Response(null, {
+    status: 302,
+    headers: {
+      location: `${site}/?gcal=pending&n=${encodeURIComponent(secret)}`,
+      'cache-control': 'no-store',
+    },
   })
 
 /* -------------------------------------------------------------------------- */
 /* the signed state                                                           */
 /* -------------------------------------------------------------------------- */
 
-type State = { u: string; o: string; e: number }
+/**
+ * What the state has to prove, now that it no longer pretends to know whose
+ * walk this is: that WE issued it, for an origin of ours, within the last ten
+ * minutes. There is no user id in here any more — see the handoff paragraph at
+ * the top of this file for what carrying one cost.
+ *
+ * `s` is a per-walk salt. Its only job is to make the PKCE verifier derived
+ * below unique to this walk rather than to this millisecond: two `begin` calls
+ * landing in the same tick would otherwise share a state body, and a verifier
+ * is not meant to be reused.
+ */
+type State = { o: string; e: number; s: string }
 
 /** domain-separated from the client secret: no second secret to provision */
 const stateKey = (): Buffer =>
@@ -148,7 +242,13 @@ const signState = (s: State): string => {
 }
 
 const readState = (raw: string): State | null => {
-  const [body, mac] = raw.split('.')
+  // Exactly two parts, so a state that verifies here is byte-identical to the
+  // one `begin` signed. That matters beyond tidiness: the PKCE verifier is
+  // derived from the WHOLE string, so a tolerated suffix would verify happily
+  // and then derive a verifier Google refuses at the exchange.
+  const parts = raw.split('.')
+  if (parts.length !== 2) return null
+  const [body, mac] = parts
   if (!body || !mac) return null
   const expect = createHmac('sha256', stateKey()).update(body).digest()
   let got: Buffer
@@ -160,7 +260,7 @@ const readState = (raw: string): State | null => {
   if (got.length !== expect.length || !timingSafeEqual(got, expect)) return null
   try {
     const s = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as State
-    if (typeof s.u !== 'string' || typeof s.o !== 'string' || typeof s.e !== 'number') return null
+    if (typeof s.o !== 'string' || typeof s.e !== 'number' || typeof s.s !== 'string') return null
     if (Date.now() > s.e) return null
     if (!ALLOWED_ORIGINS.has(s.o)) return null
     return s
@@ -168,6 +268,53 @@ const readState = (raw: string): State | null => {
     return null
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* PKCE, without a table                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * RFC 7636 §4.1: 43–128 characters from [A-Za-z0-9-._~]. The base64url of a
+ * SHA-256 HMAC is exactly 43 characters drawn from a subset of that alphabet,
+ * so `codeVerifier` satisfies the rule by construction — this is that rule
+ * written somewhere it can actually be checked rather than in a comment nobody
+ * runs. `begin` refuses to hand out a consent URL if it ever stops holding.
+ */
+const VERIFIER_RULE = /^[A-Za-z0-9\-._~]{43,128}$/
+
+/**
+ * The verifier for this walk, derived rather than remembered.
+ *
+ * Nothing is stored between `begin` and the callback: the state is the only
+ * thing that travels, and the key that signs it can also derive a secret from
+ * it. THE DOMAIN PREFIX IS THE WHOLE OF THE SAFETY HERE. The state's own MAC is
+ * HMAC(key, body) and it rides in the URL where the walk's initiator reads it;
+ * a verifier computed the same way would therefore be a value the initiator
+ * already holds. Prefixed, it is a different PRF output over the same bytes,
+ * and no amount of holding the MAC produces it without the key.
+ *
+ * PKCE is defence in depth here rather than the load-bearing fix — Google
+ * requires the client secret from a web client, and the code goes to our own
+ * redirect_uri, so an intercepted code was never enough on its own. It closes
+ * the interception case anyway, and it is one line to close.
+ */
+const codeVerifier = (state: string): string =>
+  createHmac('sha256', stateKey()).update(`majordomo-gcal-pkce:${state}`).digest('base64url')
+
+/** S256: what Google is told to expect back, and never the verifier itself */
+const codeChallenge = (verifier: string): string =>
+  createHash('sha256').update(verifier).digest('base64url')
+
+/* -------------------------------------------------------------------------- */
+/* the claim secret                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What the registry is allowed to hold: the shadow of a claim secret, never the
+ * secret. A read of `gcal_pending` — a leaked backup, a mistaken grant, an
+ * evening in the SQL editor — must not yield anything that can be spent.
+ */
+const claimHash = (secret: string): string => createHash('sha256').update(secret).digest('hex')
 
 /* -------------------------------------------------------------------------- */
 /* the door — verbatim from bell.ts, and the same seam                        */
@@ -233,12 +380,17 @@ const emailFromIdToken = (idToken: unknown): string | null => {
   }
 }
 
-/** the service_role client — gcal_accounts' only door */
-const table = () =>
+/** the service_role client — both credential tables' only door */
+const service = () =>
   createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: withTimeout(REGISTRY_TIMEOUT_MS) },
-  }).from('gcal_accounts')
+  })
+
+const table = () => service().from('gcal_accounts')
+
+/** where a finished walk's grant waits for the browser that finished it (0007) */
+const pending = () => service().from('gcal_pending')
 
 type Row = {
   user_id: string
@@ -247,13 +399,20 @@ type Row = {
   calendar_id: string | null
 }
 
+type PendingRow = {
+  refresh_token: string
+  google_email: string | null
+  expires_at: string
+}
+
 /* -------------------------------------------------------------------------- */
 /* the callback (GET)                                                         */
 /* -------------------------------------------------------------------------- */
 
 async function callback(req: Request): Promise<Response> {
   const url = new URL(req.url)
-  const state = readState(url.searchParams.get('state') ?? '')
+  const raw = url.searchParams.get('state') ?? ''
+  const state = readState(raw)
   // no verifiable state = no knowable origin; the canonical door takes the news
   if (!state) return bounce(CANONICAL, 'error')
   if (url.searchParams.get('error')) return bounce(state.o, 'denied')
@@ -266,6 +425,8 @@ async function callback(req: Request): Promise<Response> {
     code,
     client_id: env('GOOGLE_CLIENT_ID'),
     client_secret: env('GOOGLE_CLIENT_SECRET'),
+    // re-derived from the state Google just handed back, never remembered
+    code_verifier: codeVerifier(raw),
     // must byte-match what `begin` sent, or Google refuses the exchange
     redirect_uri: `${state.o}/api/google`,
   })
@@ -273,21 +434,38 @@ async function callback(req: Request): Promise<Response> {
   // means the exchange itself went sideways, and a retry re-issues it
   if (!grant?.access_token || !grant.refresh_token) return bounce(state.o, 'error')
 
-  const { error } = await table().upsert(
-    {
-      user_id: state.u,
-      google_email: emailFromIdToken(grant.id_token),
+  // MINTED HERE, AND NOWHERE ELSE. Not in `begin`, not in the state, not from
+  // anything either of them holds: the state is legible to whoever started the
+  // walk, so a secret they could read or derive would be a secret they could
+  // spend before the person who actually approved at Google. This is the one
+  // value that separates the two, and only the browser being redirected below
+  // ever sees it in the clear.
+  const secret = randomBytes(CLAIM_BYTES).toString('base64url')
+
+  const [parked] = await Promise.allSettled([
+    pending().insert({
+      claim_hash: claimHash(secret),
       refresh_token: grant.refresh_token,
-      // calendar_id deliberately absent: a reconnect must not forget the
-      // calendar the account already has (upsert only touches named columns)
-    },
-    { onConflict: 'user_id' },
-  )
+      google_email: emailFromIdToken(grant.id_token),
+      expires_at: new Date(Date.now() + CLAIM_TTL_MS).toISOString(),
+    }),
+    // The sweep. An expired pending row is not litter — it is a LIVE Google
+    // refresh token sitting in a table, for a walk nobody ever came back to
+    // finish, and it would sit there forever because no other code path has a
+    // reason to look at it. This is the only moment anything routinely touches
+    // this table, so it is where the sweeping happens. It runs ALONGSIDE the
+    // insert rather than before it because the callback's budget is the
+    // bridge's 20 s deadline and it has already spent up to eight of them at
+    // Google; two registry round-trips in sequence would put the walk on the
+    // line. Nothing races: the row being written expires in the future, so a
+    // sweep of the past cannot take it.
+    pending().delete().lt('expires_at', new Date().toISOString()),
+  ])
   // the refresh token is lost with the row unwritten — acceptable: reconnect
   // walks the same door and Google mints another
-  if (error) return bounce(state.o, 'error')
+  if (parked.status !== 'fulfilled' || parked.value.error) return bounce(state.o, 'error')
 
-  return bounce(state.o, 'connected')
+  return handoff(state.o, secret)
 }
 
 /* -------------------------------------------------------------------------- */
@@ -326,8 +504,11 @@ async function serve(req: Request): Promise<Response> {
     return req.method === 'GET' ? bounce(CANONICAL, 'error') : fail(500, 'misconfigured')
   }
 
-  // Google's redirect is a top-level navigation: no Origin worth reading, no
-  // bearer to present — the HMAC state IS its authentication.
+  // Google's redirect is a top-level navigation: no Origin worth reading and no
+  // bearer to present, so the HMAC state is all it can be asked for. Note what
+  // that state is now allowed to mean: this walk came from us, for an origin of
+  // ours, recently. It says nothing about WHO, and the callback asks it nothing
+  // of the sort — that question is answered at `claim`, with a bearer token.
   if (req.method === 'GET') return callback(req)
   if (req.method !== 'POST') return fail(405, 'method')
 
@@ -348,6 +529,7 @@ async function serve(req: Request): Promise<Response> {
   const action = (body as { action?: unknown }).action
   if (
     action !== 'begin' &&
+    action !== 'claim' &&
     action !== 'status' &&
     action !== 'token' &&
     action !== 'calendar' &&
@@ -364,6 +546,11 @@ async function serve(req: Request): Promise<Response> {
 
   /* ------------------------------------------------------------- begin */
 
+  // The session that reaches `begin` is a DOORMAN and nothing more: it keeps
+  // strangers from generating consent URLs on this house's client id. It is not
+  // an identity, and nothing downstream may treat it as one — whose connection
+  // this becomes is decided at `claim`, by the session that presents the
+  // secret. That is why `userId` is unused for the length of this block.
   if (action === 'begin') {
     // the origin the walk should come home to: the caller's own when it is
     // one of ours (vercel dev included), the canonical door otherwise
@@ -382,8 +569,75 @@ async function serve(req: Request): Promise<Response> {
     if (typeof hint === 'string' && hint.includes('@') && hint.length <= 320) {
       auth.searchParams.set('login_hint', hint)
     }
-    auth.searchParams.set('state', signState({ u: userId, o: site, e: Date.now() + STATE_TTL_MS }))
+    const state = signState({
+      o: site,
+      e: Date.now() + STATE_TTL_MS,
+      s: randomBytes(9).toString('base64url'),
+    })
+    const verifier = codeVerifier(state)
+    // by construction this cannot fail; if it ever does, the walk is refused
+    // rather than started with a challenge Google will reject at the exchange
+    if (!VERIFIER_RULE.test(verifier)) return fail(500, 'misconfigured')
+    auth.searchParams.set('code_challenge', codeChallenge(verifier))
+    auth.searchParams.set('code_challenge_method', 'S256')
+    auth.searchParams.set('state', state)
     return ok({ url: auth.toString() })
+  }
+
+  /* ------------------------------------------------------------- claim */
+
+  // Deliberately ABOVE the household read below: a claim is the write that
+  // creates that row, and it has its own reason to be economical — the bridge's
+  // deadline has already paid for `verifyUser`, and the two registry calls here
+  // are what is left of it.
+  if (action === 'claim') {
+    const n = (body as { n?: unknown }).n
+    if (typeof n !== 'string' || !CLAIM_SHAPE.test(n)) return fail(400, 'bad')
+
+    // Single use, and ATOMICALLY so — this is OAUTH-03's fix. The old walk
+    // consumed nothing at all: a state stayed good for its whole ten minutes,
+    // so one crafted link harvested everybody who clicked it inside the window.
+    // Here the DELETE and the read of what was deleted are one statement, so
+    // the row is locked for the whole of it: of two claims racing on the same
+    // secret, one comes away with the grant and the other comes away with
+    // nothing. There is no read-then-delete for them to interleave inside.
+    const { data: parked, error: claimError } = await pending()
+      .delete()
+      .eq('claim_hash', claimHash(n))
+      .select('refresh_token, google_email, expires_at')
+      .maybeSingle<PendingRow>()
+    if (claimError) return fail(503, 'unreachable')
+    // absent, already spent, or too late. One code, because they are one
+    // sentence to the reader and one remedy: walk the consent again. The row is
+    // gone either way — an expired grant must not survive being asked for.
+    if (!parked || Date.parse(parked.expires_at) <= Date.now()) return fail(404, 'expired')
+
+    const { data: row, error: writeError } = await table()
+      .upsert(
+        {
+          // THE VERIFIED SESSION'S id, from the bearer this request carried —
+          // never a user id read out of anything that travelled through Google.
+          user_id: userId,
+          google_email: parked.google_email,
+          refresh_token: parked.refresh_token,
+          // calendar_id deliberately absent: a reconnect must not forget the
+          // calendar the account already has (upsert only touches named columns)
+        },
+        { onConflict: 'user_id' },
+      )
+      // the written row comes back rather than being read again: the calendar
+      // id this preserved is the one thing the reply still needs, and the
+      // deadline has no room for a third round-trip
+      .select('google_email, calendar_id')
+      .maybeSingle<Pick<Row, 'google_email' | 'calendar_id'>>()
+    if (writeError) return fail(503, 'unreachable')
+
+    // the `status` shape, because a claim that succeeds IS the connection
+    return ok({
+      connected: true,
+      email: row?.google_email ?? parked.google_email,
+      calendarId: row?.calendar_id ?? null,
+    })
   }
 
   /* the remaining actions all read the household's row first */

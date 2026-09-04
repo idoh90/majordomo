@@ -150,13 +150,27 @@ const ALLOWED_ORIGINS = new Set([
  * Six seconds rather than eight because two of these land in one ring — the
  * session, then the meter — and both have to finish inside the deadline the
  * bridge holds this handler to.
+ *
+ * `leaving` is the second half of that, and it answers a different question. A
+ * deadline says how long a dependency may take; the caller's signal — which
+ * `./_node.js` now hangs on the incoming `Request` when the socket closes — says
+ * whether anybody is still waiting for the answer. A wait nobody is waiting on
+ * should end where it stands rather than run its six seconds out and hand a
+ * reply to an empty room. It is composed IN, never substituted for the deadline:
+ * a caller who stays put still gets a dependency that cannot stall forever.
+ *
+ * Threaded in one direction only. The meter's client below deliberately declines
+ * it, and the reasoning is at the rope line.
  */
 const withTimeout =
-  (ms: number): typeof fetch =>
+  (ms: number, leaving?: AbortSignal): typeof fetch =>
   (input, init) => {
-    const deadline = AbortSignal.timeout(ms)
-    // Never drop a signal the caller already set — the SDK uses its own.
-    const signal = init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline
+    // Never drop a signal the caller already set — the SDK uses its own — and
+    // never drop the departure either, so whichever fires first ends the wait.
+    const reasons: AbortSignal[] = [AbortSignal.timeout(ms)]
+    if (init?.signal) reasons.push(init.signal)
+    if (leaving) reasons.push(leaving)
+    const signal = reasons.length === 1 ? reasons[0] : AbortSignal.any(reasons)
     return fetch(input, { ...init, signal })
   }
 
@@ -309,10 +323,15 @@ type Door =
   /** nobody answered — asleep, offline, or too slow */
   | { ok: false; reason: 'unreachable' }
 
-async function verifyUser(token: string): Promise<Door> {
+async function verifyUser(token: string, leaving: AbortSignal): Promise<Door> {
   const auth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { fetch: withTimeout(REGISTRY_TIMEOUT_MS) },
+    // Safe to drop on the caller's departure, and the only reason it is safe is
+    // WHERE it sits: no slot has been claimed and no model has been called at
+    // this point in the ring, so a question abandoned here leaves nothing behind
+    // to reconcile. It also happens to be the longest single wait in the walk,
+    // which is the six seconds a departed caller was previously paying for.
+    global: { fetch: withTimeout(REGISTRY_TIMEOUT_MS, leaving) },
   })
 
   try {
@@ -327,7 +346,11 @@ async function verifyUser(token: string): Promise<Door> {
     const status = (error as { status?: number } | null)?.status
     return { ok: false, reason: status ? 'invalid' : 'unreachable' }
   } catch {
-    // Timed out or the host does not resolve at all.
+    // Timed out, the host does not resolve at all, or the caller left while we
+    // were asking. All three are "nobody answered", and the last writes a 503
+    // into a socket that is no longer there — which costs nothing, is read by
+    // nobody, and is a great deal cheaper than finishing the walk on their
+    // behalf.
     return { ok: false, reason: 'unreachable' }
   }
 }
@@ -385,7 +408,7 @@ async function ring(req: Request): Promise<Response> {
   const read = readTurns(body)
   if ('bad' in read) return fail(400, read.bad)
 
-  const door = await verifyUser(token)
+  const door = await verifyUser(token, req.signal)
   if (!door.ok) {
     return door.reason === 'unreachable'
       ? fail(503, 'the household register did not answer — it may simply be asleep')
@@ -415,6 +438,23 @@ async function ring(req: Request): Promise<Response> {
   // explicit grant is a refusal — a full day, a sleeping database, and a missing
   // function all stop the request here, and the missing function is the one that
   // matters: a meter that cannot be written must not read as permission.
+  //
+  // THE CALLER'S SIGNAL IS DELIBERATELY ABSENT FROM THIS CLIENT, and it is the
+  // one place in this file where dropping it is the correct move. Everything the
+  // meter does runs at precisely the moment a hang-up happens, so a signal here
+  // would abort the accounting for exactly the rings it is meant to account for.
+  //
+  // Two writes, two ways it would go wrong. `bell_note_tokens` in `settle()` is
+  // the bill for a reply that WAS generated: aborted, a household reads words it
+  // was never charged for. And an aborted claim is not a claim undone — Postgres
+  // may have taken the slot with only the answer lost in transit, and the branch
+  // that hands a slot back is downstream of a reservation we would then never
+  // have seen. That is a slot spent with nothing left running to return it: the
+  // opposite failure from the one at the rope line, and just as quiet.
+  //
+  // The deadline still applies, so the meter cannot hang the invocation either
+  // way. It simply has to be allowed to finish its sentence after the room has
+  // emptied.
   const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: withTimeout(REGISTRY_TIMEOUT_MS) },
@@ -477,7 +517,27 @@ async function ring(req: Request): Promise<Response> {
       ],
       messages: read.turns,
     },
-    { timeout: UPSTREAM_TIMEOUT_MS },
+    {
+      timeout: UPSTREAM_TIMEOUT_MS,
+      // The expensive one, and the deadline keeps its job: the timeout says the
+      // model is taking too long, this says nobody is left to read it.
+      //
+      // `cancel()` below already stops a reply mid-flight, but it cannot fire
+      // until the response has been handed to the bridge and someone has begun
+      // reading it. This covers the window BEFORE that — the registry
+      // round-trips a caller can vanish during — where a generation would
+      // otherwise be dispatched, streamed and paid for on behalf of a browser
+      // that closed its tab a second after ringing. Handed a signal that has
+      // already aborted, the SDK never puts the request on the wire at all.
+      //
+      // That path costs the household nothing and gives the slot back, because
+      // `settle()` sees no tokens either side. It is the release rule doing its
+      // job rather than the ceiling springing a leak: the ring was never put to
+      // the model, so it bought nothing, and a caller cannot buy WORDS this way
+      // — the first thing the model sends sets `tokIn`, and from that moment the
+      // slot stays spent however early the hang-up.
+      signal: req.signal,
+    },
   )
 
   // Tracked from the events rather than from the final message, so a caller who

@@ -26,6 +26,16 @@
  * the whole reason the outage above cost what it did. Past the deadline this
  * writes a 504 itself rather than letting the platform's ceiling do it minutes
  * later.
+ *
+ * Its third job is the socket, and it falls here because nothing else can reach
+ * it. A handler is handed a `Request` and hands back a `Response`; it cannot see
+ * that the caller has hung up, cannot tell a socket that has stopped taking
+ * bytes from one that has gone away, and does not know what ends up in the log
+ * store. So this file owns all three: it tells the handler when the caller left
+ * (the `AbortController` in `nodeHandler`), it waits on backpressure without
+ * waiting forever (`drained`), and it decides what a log line is allowed to say
+ * (`pathOf`). None of the three is a correctness bug inside a handler. Each of
+ * them costs the household either billed minutes or a live secret.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -85,6 +95,23 @@ const urlOf = (req: IncomingMessage): string => {
   const host = first(req.headers['x-forwarded-host']) || first(req.headers.host) || 'localhost'
   return `${proto}://${host}${req.url ?? '/'}`
 }
+
+/**
+ * The part of the address a log line may repeat, which is the path and nothing
+ * else.
+ *
+ * Node hands over a path with its query still attached, and on `/api/google`
+ * that query IS the OAuth callback — a live authorization code and a `state`
+ * still inside the ten minutes it was signed for. The two `console.error` lines
+ * below fire on exactly the two occasions that matter most (a handler past its
+ * deadline, a handler that threw), so a slow upstream on the consent walk wrote
+ * a usable code and a usable state into Vercel's log store, where they sit far
+ * longer than either was meant to live and are readable by anyone with
+ * dashboard access. No log line here has ever needed the query to be useful, so
+ * no log line gets it. Splitting on the `?` is enough: a query can only follow
+ * one, and a fragment never reaches a server.
+ */
+const pathOf = (req: IncomingMessage): string => (req.url ?? '/').split('?')[0]
 
 /**
  * The body, however the platform decided to give it to us.
@@ -151,6 +178,42 @@ const sendHead = (res: ServerResponse, response: Response): void => {
 }
 
 /**
+ * Wait for the socket to take more — or for it to admit it never will.
+ *
+ * `drain` is a promise the connection only keeps while it is alive. A caller who
+ * hangs up with our buffer full never sends one, so waiting on `drain` alone
+ * parks the invocation until the platform's ceiling kills it: sixty seconds of
+ * billed silence on behalf of a reader who left. `close` and `error` therefore
+ * end the wait as well, and all three listeners come off whichever of them wins
+ * — the Bell's stream can meet backpressure hundreds of times in one reply, and
+ * a listener left behind on each of them is a leak that announces itself as a
+ * MaxListeners warning long after the cause.
+ *
+ * The early return is that same hang one tick earlier, and it is not belt and
+ * braces. `write()` on a socket that is already gone returns false too, and by
+ * then `close` has fired: a listener registered at that point is waiting on an
+ * event that is in the past, which is precisely the wait this function exists to
+ * end. Resolving rather than rejecting is deliberate — the reader has already
+ * been cancelled by the hang-up path below, so the next `read()` reports done
+ * and the loop leaves through its ordinary door.
+ */
+const drained = (res: ServerResponse): Promise<void> =>
+  new Promise<void>((resolve) => {
+    if (res.destroyed || res.writableEnded) return resolve()
+
+    const settle = (): void => {
+      res.off('drain', settle)
+      res.off('close', settle)
+      res.off('error', settle)
+      resolve()
+    }
+
+    res.once('drain', settle)
+    res.once('close', settle)
+    res.once('error', settle)
+  })
+
+/**
  * Write the reply out, honouring backpressure and the caller hanging up.
  *
  * The hang-up path is load-bearing rather than tidy: cancelling the reader is
@@ -170,18 +233,26 @@ const sendBody = async (res: ServerResponse, response: Response, head: boolean):
   const reader = response.body.getReader()
   let hangUp: Promise<void> | null = null
 
-  res.on('close', () => {
-    if (res.writableEnded) return
+  const hungUp = (): void => {
+    if (res.writableEnded || hangUp) return
     hangUp = reader.cancel(new Error('the caller hung up')).catch(() => {})
-  })
+  }
+
+  res.on('close', hungUp)
+  // `close` can already be in the past. A caller is free to leave while the
+  // handler is still deciding what to answer, and a listener armed here would
+  // then be waiting on an event that has been and gone — the same blind spot as
+  // `drained`'s, and the same cure. It matters more here than it reads: without
+  // it the loop below finds every write refused, never waits, and empties the
+  // whole of the Bell's stream at full speed into a socket that is not there,
+  // paying an upstream for every token of it. Better to notice at the door.
+  if (res.destroyed) hungUp()
 
   try {
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
-      if (!res.write(Buffer.from(value))) {
-        await new Promise<void>((resolve) => res.once('drain', resolve))
-      }
+      if (!res.write(Buffer.from(value))) await drained(res)
     }
   } catch {
     /* the consumer went away mid-stream — `close` above has already cancelled */
@@ -208,11 +279,40 @@ export const nodeHandler =
     const head = req.method === 'HEAD'
     let timer: ReturnType<typeof setTimeout> | undefined
 
+    // The caller's departure, made visible to the handler.
+    //
+    // Both files already compose `init.signal` into every upstream fetch they
+    // make; until now there was simply nothing to compose, because the `Request`
+    // carried no signal at all. So a browser that closed its tab stayed
+    // invisible for the entire window before a response came back — the six
+    // second registry round-trip included — and the house went on paying an
+    // upstream, and in the Bell's case a household slot, for a reply nobody was
+    // ever going to read.
+    //
+    // `close` fires on a healthy finished response too, so it is guarded the way
+    // `sendBody`'s own hang-up is: `writableEnded` is set the moment we call
+    // `end()`, and is only still false here if the socket went first. By the
+    // time a reply is streaming the handler has long since returned, so a
+    // spurious abort would mostly go unobserved — but a signal that cries abort
+    // over every successful request is a signal nobody can trust on the one
+    // occasion it means it.
+    const leaving = new AbortController()
+    res.on('close', () => {
+      if (res.writableEnded) return
+      leaving.abort(new Error('the caller hung up'))
+    })
+
     try {
+      // Armed before the body is read, on purpose: a caller can leave while we
+      // are still buffering, and that is the longest anyone waits here. Handing
+      // `Request` a signal that has ALREADY aborted does not throw — it arrives
+      // aborted, which is exactly what the handler should be told before it
+      // spends anything.
       const request = new Request(urlOf(req), {
         method: req.method,
         headers: headersOf(req),
         body: await bodyOf(req),
+        signal: leaving.signal,
       })
 
       const running = handler(request)
@@ -223,7 +323,7 @@ export const nodeHandler =
       const response = await Promise.race([running, deadline])
 
       if (response === LATE) {
-        console.error(`[api] ${req.method} ${req.url} produced no response in ${deadlineMs}ms`)
+        console.error(`[api] ${req.method} ${pathOf(req)} produced no response in ${deadlineMs}ms`)
         refuse(res, 504, 'timeout')
         // Not awaited: the caller already has an answer and the invocation is
         // free to end. Cancelling stops a handler that is still paying an
@@ -237,7 +337,7 @@ export const nodeHandler =
     } catch (e) {
       // The reason goes to the function log; the wire gets a status and nothing
       // that describes this house's insides.
-      console.error(`[api] ${req.method} ${req.url} threw:`, e instanceof Error ? e.message : e)
+      console.error(`[api] ${req.method} ${pathOf(req)} threw:`, e instanceof Error ? e.message : e)
       refuse(res, 500, 'server')
       if (!res.writableEnded) res.end()
     } finally {

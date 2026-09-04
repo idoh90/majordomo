@@ -1878,6 +1878,22 @@ export interface VoicePack {
     returnedConnected: string
     returnedDenied: string
     returnedError: string
+    /**
+     * The claim — the step between Google's yes and a connection of your own.
+     * The callback comes home holding a one-use secret; spending it against
+     * the session actually present is what binds the calendar to this
+     * household rather than to whoever handed out the link.
+     */
+    claim: {
+      /** the ?gcal=pending return, while the secret is being spent */
+      working: string
+      /** no account signed in to receive it */
+      signin: string
+      /** the network went before it could be spent */
+      offline: string
+      /** spent, expired, or refused — one fact, one remedy */
+      failed: string
+    }
     /** the line that stands where Edit/Remove would, on an abroad event */
     abroadLine: string
     /** a Google event that arrived without a title still needs a name */

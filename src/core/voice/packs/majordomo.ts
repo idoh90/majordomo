@@ -2418,6 +2418,12 @@ export const majordomoPack: VoicePack = {
     returnedConnected: 'Google Calendar is connected, sir.',
     returnedDenied: 'Google was told no. Nothing was connected.',
     returnedError: 'The connection did not complete. Try the door again.',
+    claim: {
+      working: 'Google has agreed. Finishing the connection…',
+      signin: 'No account was signed in to receive the connection. Sign in, then connect again.',
+      offline: 'This device went offline before the connection was finished. Connect again when it is back.',
+      failed: 'The connection was granted but never completed. Connect again.',
+    },
     abroadLine: 'From your Google calendar. It is edited there, not here.',
     untitled: '(untitled)',
     calendarName: 'Majordomo',
