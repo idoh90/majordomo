@@ -25,6 +25,8 @@ import { useAuthUi } from './authUi'
 import { useButlerStore } from './butler/store'
 import { useSettingsUi } from './settingsUi'
 import { CalendarsSheet } from './gcal/CalendarsSheet'
+import { useGcalStore } from './gcal/store'
+import { connectGoogle, disconnectGoogle, refreshGcalStatus } from './gcal/service'
 import { openFrontDoor } from './frontDoor'
 import { nudgeWing, useWings } from './wings'
 import { entryStage, useOnboarding } from './onboarding/store'
@@ -196,11 +198,7 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
             {registryShut ? null : (
               <Section title={voice.settings.groupCalendars}>
                 {authStatus === 'signedIn' ? (
-                  <Row
-                    label={voice.calendars.settingsLabel}
-                    blurb={voice.calendars.settingsBlurb}
-                    onClick={() => setCalendarsOpen(true)}
-                  />
+                  <CalendarControls onOpenSheet={() => setCalendarsOpen(true)} />
                 ) : (
                   <Note>{voice.calendars.needsAccount}</Note>
                 )}
@@ -294,6 +292,92 @@ export function SettingsScreen({ open, onClose }: { open: boolean; onClose: () =
         onConfirm={() => {
           setConfirmClear(false)
           clearAll()
+        }}
+      />
+    </>
+  )
+}
+
+/* --------------------------------------------------------------- calendar controls */
+
+/**
+ * The Google Calendar controls, inline in settings. Shows connection status and
+ * the primary action (Connect when not connected, a door to the full sheet when
+ * connected) without requiring an extra click. Refreshes status on mount so a
+ * connection made on another device shows immediately.
+ */
+function CalendarControls({ onOpenSheet }: { onOpenSheet: () => void }) {
+  const connected = useGcalStore((s) => s.connected)
+  const busy = useGcalStore((s) => s.busy)
+  const needsReconnect = useGcalStore((s) => s.needsReconnect)
+  const [confirming, setConfirming] = useState(false)
+
+  // refresh status on mount so another device's connection shows
+  useEffect(() => {
+    void refreshGcalStatus()
+  }, [])
+
+  if (connected === null) {
+    // not connected — show the connect button directly
+    return (
+      <div className="py-1">
+        <p className="mb-2.5 text-[12.5px] leading-snug text-ink-dim">
+          {voice.calendars.settingsBlurb}
+        </p>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void connectGoogle()}
+          className="btn-cta h-11 w-full font-display text-[13px] font-semibold tracking-[0.18em] disabled:opacity-40"
+        >
+          {busy ? voice.calendars.working : voice.calendars.connect}
+        </button>
+      </div>
+    )
+  }
+
+  // connected — show status and a door to the full sheet
+  return (
+    <>
+      <div className="py-1">
+        <p className="mb-2 text-[12.5px] text-ink">
+          {voice.calendars.connectedAs(connected.email ?? '—')}
+        </p>
+        {needsReconnect && (
+          <p className="mb-2 text-[11.5px] leading-snug text-danger">
+            {voice.calendars.reconnectNote}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onOpenSheet}
+            className="btn-soft flex-1 py-2.5 text-[12.5px] disabled:opacity-40"
+          >
+            {needsReconnect ? voice.calendars.reconnect : voice.calendars.settingsLabel}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setConfirming(true)}
+            className="flex items-center justify-center rounded-lg border px-4 py-2.5 text-[11.5px] font-semibold tracking-[0.12em] text-danger transition-colors hover:bg-panel-2 disabled:opacity-40"
+            style={{ borderColor: 'color-mix(in srgb, var(--color-danger) 40%, transparent)' }}
+          >
+            {voice.calendars.disconnect}
+          </button>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirming}
+        title={voice.calendars.disconnectTitle}
+        message={voice.calendars.disconnectBody}
+        confirmLabel={voice.calendars.disconnectYes}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false)
+          void disconnectGoogle()
         }}
       />
     </>
