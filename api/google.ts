@@ -11,10 +11,12 @@
  *
  * What it does, and nothing more:
  *   POST {action:'begin'}       → the Google consent URL, with a signed state
+ *                                 binding the walk to the tab that asked
  *   GET  ?code&state            → Google's redirect: exchange the code, PARK
  *                                 the refresh token, hand the browser a secret
- *   POST {action:'claim'}       → spend that secret; file the parked grant
- *                                 under the session that presents it
+ *   POST {action:'claim'}       → spend that secret, with the walk secret that
+ *                                 proves this tab is the one that started it;
+ *                                 file the grant under the session presenting both
  *   POST {action:'status'}      → is this household connected (no Google call)
  *   POST {action:'token'}       → a fresh access token from the refresh grant
  *   POST {action:'calendar'}    → remember the app-created calendar's id
@@ -62,6 +64,37 @@
  * in one statement, so two claims racing on the same secret cannot both come
  * away with the grant, and a link that leaks is a link worth one attempt inside
  * ten minutes rather than an open door for everyone who clicks it.
+ *
+ * THE WALK BINDING — and the mirror image of the same attack.
+ *
+ * The handoff above moved identity out of the state and into the session, which
+ * settled the question of WHOSE TOKEN this is. It left the other half of the
+ * root cause exactly where it was: nothing tied the walk to the browser that
+ * STARTED it. So the attack runs backwards, and it costs one click. The
+ * attacker walks the consent screen themselves, with their own Google account,
+ * and is redirected to `/?gcal=pending&n=…`. They do not follow it — they send
+ * that finished link to a signed-in victim, whose app trades the secret under
+ * ITS session, and the attacker's Google account is now filed under the
+ * victim's household. The bridge then pushes the victim's own estate bookings
+ * out to a stranger's calendar on the next cycle and mirrors the stranger's
+ * events into the Manor. An exfiltration in the opposite direction, out of the
+ * same hole.
+ *
+ * So a walk is now bound to the one tab that began it. Before asking for a
+ * consent URL the client mints a WALK SECRET — 32 CSPRNG bytes, base64url — and
+ * keeps it in sessionStorage: one tab's business, gone when the tab is,
+ * invisible to a tab that never started a walk, and preserved across the
+ * top-level navigation out to Google and back, which is precisely the lifetime
+ * wanted. Only its sha256 is sent, to `begin`, and that hash rides in the
+ * signed state (tamper-proof, and worth nothing to whoever reads it) onto the
+ * parked row. The claim must then present the RAW secret beside `n`.
+ *
+ * That is one branch on each side, and it closes both directions at once. A
+ * browser handed a finished link it did not earn holds no walk secret, so it
+ * never claims; a browser handed a consent link cannot be the one that finishes
+ * it into somebody else's household, because the session that claims is the one
+ * that gets the grant. Neither half works alone — the session says whose this
+ * becomes, the walk secret says whether this browser is entitled to ask.
  *
  * PKCE rides along, derived rather than stored: the verifier is an HMAC over
  * the state under the same key that signs it, so the callback recomputes it
@@ -159,11 +192,23 @@ const CLAIM_TTL_MS = 10 * 60_000
 const CLAIM_BYTES = 32
 
 /**
- * Shape, not authentication. The secret authenticates itself by matching a
- * parked row; this only keeps a stray megabyte of nonsense from being carried
- * to the registry and hashed.
+ * Shape, not authentication — and it covers BOTH of the secrets a finished walk
+ * carries, since both are 32 CSPRNG bytes in base64url and neither is anything
+ * else. Each authenticates itself: the claim secret by matching a parked row,
+ * the walk secret by matching that row's walk hash. This only keeps a stray
+ * megabyte of nonsense from being carried to the registry and hashed.
  */
-const CLAIM_SHAPE = /^[A-Za-z0-9_-]{32,128}$/
+const SECRET_SHAPE = /^[A-Za-z0-9_-]{32,128}$/
+
+/**
+ * The walk secret's shadow, as the client computes it: sha256 in lowercase hex,
+ * which is what `crypto.subtle.digest` gives a browser and what this file's own
+ * `sha256Hex` gives back. Checked at `begin` so a client that stopped minting
+ * one is refused there rather than starting a walk nobody can finish, and
+ * checked again coming out of a state, because the column it lands in is NOT
+ * NULL and a row that cannot prove its walk must never be written.
+ */
+const WALK_HASH_SHAPE = /^[0-9a-f]{64}$/
 
 /* -------------------------------------------------------------------------- */
 /* replies                                                                    */
@@ -201,9 +246,14 @@ const bounce = (site: string, outcome: 'denied' | 'error'): Response =>
  * `pending` rather than `connected` because nothing is connected yet — the app
  * has to trade `n` for the grant under its own session. The client strips both
  * params before anything else runs (the `?join` rule, in `app/gcal/init.ts`),
- * so the secret does not survive a reload or a copied address; that, and the
- * row being single-use, is what keeps a shared browser history from being a
- * credential.
+ * so the secret does not survive a reload or a copied address.
+ *
+ * `n` rides in a query string, and a query string is not private: it lands in
+ * browser history, in the platform's request log, in a referrer if anything
+ * ever links out of the landing frame. The claim is NOT that it is confidential.
+ * The claim is that what rides here is no longer SUFFICIENT — a claim also needs
+ * the walk secret, which never left one tab's sessionStorage and was never sent
+ * anywhere in the clear. A logged `n` buys a burnt grant and nothing else.
  */
 const handoff = (site: string, secret: string): Response =>
   new Response(null, {
@@ -228,8 +278,14 @@ const handoff = (site: string, secret: string): Response =>
  * below unique to this walk rather than to this millisecond: two `begin` calls
  * landing in the same tick would otherwise share a state body, and a verifier
  * is not meant to be reused.
+ *
+ * `w` is the walk binding: the sha256 of a secret that never leaves the tab
+ * that minted it. It is safe here for the same reason the user id was not — a
+ * state is legible to whoever is walking, and a hash tells them nothing they
+ * can spend. What it buys is that the callback can stamp the parked grant with
+ * the walk it belongs to, and the claim can be made to prove it.
  */
-type State = { o: string; e: number; s: string }
+type State = { o: string; e: number; s: string; w: string }
 
 /** domain-separated from the client secret: no second secret to provision */
 const stateKey = (): Buffer =>
@@ -261,6 +317,10 @@ const readState = (raw: string): State | null => {
   try {
     const s = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as State
     if (typeof s.o !== 'string' || typeof s.e !== 'number' || typeof s.s !== 'string') return null
+    // an unbound walk is not a walk this file will finish: a state without a
+    // usable `w` predates the binding or was never ours, and either way the
+    // grant it comes home with could be filed by any browser holding the link
+    if (typeof s.w !== 'string' || !WALK_HASH_SHAPE.test(s.w)) return null
     if (Date.now() > s.e) return null
     if (!ALLOWED_ORIGINS.has(s.o)) return null
     return s
@@ -310,11 +370,25 @@ const codeChallenge = (verifier: string): string =>
 /* -------------------------------------------------------------------------- */
 
 /**
- * What the registry is allowed to hold: the shadow of a claim secret, never the
+ * What the registry is allowed to hold: the SHADOW of each secret, never a
  * secret. A read of `gcal_pending` — a leaked backup, a mistaken grant, an
- * evening in the SQL editor — must not yield anything that can be spent.
+ * evening in the SQL editor — must not yield anything that can be spent, and
+ * that goes for the claim secret the row is addressed by and for the walk
+ * secret it is bound to alike.
  */
-const claimHash = (secret: string): string => createHash('sha256').update(secret).digest('hex')
+const sha256Hex = (secret: string): string => createHash('sha256').update(secret).digest('hex')
+
+/**
+ * The ONE thing a claim is allowed to say about a secret it will not honour.
+ *
+ * Malformed, unknown, already spent, expired, or presented by a browser that
+ * cannot prove it walked this walk — five causes, one sentence, and they are
+ * deliberately indistinguishable. Anything finer is an oracle: it would tell
+ * whoever is holding an `n` out of a request log whether it is still live, and
+ * whether the thing they are missing is a walk secret worth going after. The
+ * remedy is identical in every case besides — walk the consent screen again.
+ */
+const claimRefused = (): Response => fail(404, 'expired')
 
 /* -------------------------------------------------------------------------- */
 /* the door — verbatim from bell.ts, and the same seam                        */
@@ -403,6 +477,7 @@ type PendingRow = {
   refresh_token: string
   google_email: string | null
   expires_at: string
+  walk_hash: string
 }
 
 /* -------------------------------------------------------------------------- */
@@ -444,10 +519,15 @@ async function callback(req: Request): Promise<Response> {
 
   const [parked] = await Promise.allSettled([
     pending().insert({
-      claim_hash: claimHash(secret),
+      claim_hash: sha256Hex(secret),
       refresh_token: grant.refresh_token,
       google_email: emailFromIdToken(grant.id_token),
       expires_at: new Date(Date.now() + CLAIM_TTL_MS).toISOString(),
+      // carried straight off the signed state: the walk this grant belongs to,
+      // as the tab that started it described itself. The callback cannot check
+      // it — the browser being redirected here has not presented anything yet —
+      // it only makes sure the claim CAN.
+      walk_hash: state.w,
     }),
     // The sweep. An expired pending row is not litter — it is a LIVE Google
     // refresh token sitting in a table, for a walk nobody ever came back to
@@ -552,6 +632,15 @@ async function serve(req: Request): Promise<Response> {
   // this becomes is decided at `claim`, by the session that presents the
   // secret. That is why `userId` is unused for the length of this block.
   if (action === 'begin') {
+    // THE WALK BINDING, and a walk that cannot carry one does not start. This is
+    // the sha256 of a secret the calling tab minted into its own sessionStorage
+    // before it asked; we never see the secret until the claim. Refusing here
+    // rather than defaulting is the whole point: an unbound walk is exactly the
+    // walk whose finished link can be handed to a stranger, and this file has
+    // already shipped one half-fix for that.
+    const walk = (body as { walk?: unknown }).walk
+    if (typeof walk !== 'string' || !WALK_HASH_SHAPE.test(walk)) return fail(400, 'bad')
+
     // the origin the walk should come home to: the caller's own when it is
     // one of ours (vercel dev included), the canonical door otherwise
     const site = origin && ALLOWED_ORIGINS.has(origin) ? origin : CANONICAL
@@ -573,6 +662,7 @@ async function serve(req: Request): Promise<Response> {
       o: site,
       e: Date.now() + STATE_TTL_MS,
       s: randomBytes(9).toString('base64url'),
+      w: walk,
     })
     const verifier = codeVerifier(state)
     // by construction this cannot fail; if it ever does, the walk is refused
@@ -592,7 +682,13 @@ async function serve(req: Request): Promise<Response> {
   // are what is left of it.
   if (action === 'claim') {
     const n = (body as { n?: unknown }).n
-    if (typeof n !== 'string' || !CLAIM_SHAPE.test(n)) return fail(400, 'bad')
+    const w = (body as { w?: unknown }).w
+    // Refused in the SAME WORDS as a spent secret, deliberately. A 400 here
+    // would answer a question no caller has business asking — it separates
+    // "that is not even a secret" from "that secret is gone", which is the
+    // beginning of a probe rather than the end of one.
+    if (typeof n !== 'string' || !SECRET_SHAPE.test(n)) return claimRefused()
+    if (typeof w !== 'string' || !SECRET_SHAPE.test(w)) return claimRefused()
 
     // Single use, and ATOMICALLY so — this is OAUTH-03's fix. The old walk
     // consumed nothing at all: a state stayed good for its whole ten minutes,
@@ -603,14 +699,34 @@ async function serve(req: Request): Promise<Response> {
     // nothing. There is no read-then-delete for them to interleave inside.
     const { data: parked, error: claimError } = await pending()
       .delete()
-      .eq('claim_hash', claimHash(n))
-      .select('refresh_token, google_email, expires_at')
+      .eq('claim_hash', sha256Hex(n))
+      .select('refresh_token, google_email, expires_at, walk_hash')
       .maybeSingle<PendingRow>()
+    // the registry being unreachable is a different sentence with a different
+    // remedy — try again — and it says nothing about the secret, so it is the
+    // one refusal here that is allowed to be its own code
     if (claimError) return fail(503, 'unreachable')
-    // absent, already spent, or too late. One code, because they are one
-    // sentence to the reader and one remedy: walk the consent again. The row is
-    // gone either way — an expired grant must not survive being asked for.
-    if (!parked || Date.parse(parked.expires_at) <= Date.now()) return fail(404, 'expired')
+    // absent, already spent, or too late. The row is gone either way — an
+    // expired grant must not survive being asked for.
+    if (!parked || Date.parse(parked.expires_at) <= Date.now()) return claimRefused()
+
+    // THE WALK BINDING, checked. `w` is the raw secret the calling tab put in
+    // its sessionStorage before this walk began; the row carries the hash that
+    // same tab handed to `begin`. A browser given a finished `?gcal=pending`
+    // link it did not earn holds no such secret and cannot compute one, so this
+    // is where the mirror-image attack stops — one comparison, before anything
+    // is filed under anybody. Constant-time over equal-length digests, because
+    // the comparison must not leak how much of a guess was right.
+    //
+    // The row has ALREADY been deleted by the statement above, and that is
+    // deliberate rather than an oversight to tidy up later. A presented-but-
+    // wrong walk secret means somebody is being walked through a handoff they
+    // did not start: burning the grant is the safe end of it. The honest owner
+    // of the walk pays one more consent screen; the attacker's parked token is
+    // destroyed instead of left waiting for a second victim to click.
+    const shown = createHash('sha256').update(w).digest()
+    const bound = Buffer.from(typeof parked.walk_hash === 'string' ? parked.walk_hash : '', 'hex')
+    if (shown.length !== bound.length || !timingSafeEqual(shown, bound)) return claimRefused()
 
     const { data: row, error: writeError } = await table()
       .upsert(

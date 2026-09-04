@@ -1893,6 +1893,14 @@ export interface VoicePack {
       offline: string
       /** spent, expired, or refused — one fact, one remedy */
       failed: string
+      /**
+       * The link was handed here rather than earned here. The walk's secret
+       * lives in the tab that began it, so a browser holding none of it did
+       * not start this connection — and must say so without claiming.
+       */
+      unstarted: string
+      /** no session storage, so a walk begun here could never be finished */
+      blocked: string
     }
     /** the line that stands where Edit/Remove would, on an abroad event */
     abroadLine: string

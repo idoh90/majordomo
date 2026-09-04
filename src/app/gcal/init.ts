@@ -15,13 +15,20 @@ import { startGcalService } from './service'
  *
  * BOTH params are stripped whatever happens next (the ?join rule: an address
  * is not a standing order — a reload or a copied URL must not replay the
- * news), and `n` has a harder reason than tidiness. It is a bearer credential
- * for one Google refresh token: left standing it lands in history, in a copied
- * link, in the next navigation's Referer, and in anything that ever decides to
- * record a URL. It is therefore stripped BEFORE initTelemetry() runs — which
- * is simply where boot already calls this, the ?join gate's own ordering, and
- * the reason that ordering is worth keeping even though the outbox records no
- * URL today.
+ * news), and `n` has a harder reason than tidiness. It is one half of a bearer
+ * credential for one Google refresh token: left standing it lands in history,
+ * in a copied link, in the next navigation's Referer, and in anything that
+ * ever decides to record a URL. It is therefore stripped BEFORE
+ * initTelemetry() runs — which is simply where boot already calls this, the
+ * ?join gate's own ordering, and the reason that ordering is worth keeping
+ * even though the outbox records no URL today.
+ *
+ * ONE HALF is the load-bearing word, and it is not a claim that a query string
+ * is private — it plainly is not. The other half is the walk secret, minted at
+ * connectGoogle() and kept in the sessionStorage of the one tab that began the
+ * walk. So an `n` recovered from history, from a platform's request log, or
+ * from a link somebody was handed buys nothing on its own: the claim step
+ * refuses without the secret, and the secret never left that tab.
  *
  * On a disarmed origin (?demo'd, unconfigured, no storage) the service never
  * starts at all, which is also what keeps the Manor harness inert — and a

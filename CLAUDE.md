@@ -206,11 +206,20 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   dependency that one day ships code to read `localStorage` (where the Supabase
   session lives, by deliberate design) and post it somewhere. `script-src 'self'`
   makes that post fail. Keep `connect-src` as the list of origins the app
-  genuinely talks to — Supabase over both `https:` and `wss:` (realtime is a
-  WebSocket), Twelve Data, Frankfurter, `eu.i.posthog.com` (the telemetry
-  outbox; see TELEMETRY below), and `www.googleapis.com` (the Calendar bridge
-  runs client-side; token traffic stays in `api/`) — and **add to it only when
-  a real feature needs it**, since every entry is a place data could go. `style-src` carries
+  genuinely talks to — **this project's own Supabase host, named in full**, over
+  both `https:` and `wss:` (realtime is a WebSocket), Twelve Data, Frankfurter,
+  `eu.i.posthog.com` (the telemetry outbox; see TELEMETRY below), and
+  `www.googleapis.com` (the Calendar bridge runs client-side; token traffic
+  stays in `api/`) — and **add to it only when a real feature needs it**, since
+  every entry is a place data could go. It used to read `https://*.supabase.co`,
+  which is a hole the exact shape of the threat above: anyone can stand up a
+  free Supabase project and use it as the exfiltration endpoint. The ref is a
+  constant in the bundle already, so naming it costs nothing. **Pinning it does
+  mean a fork or a second project needs this line edited** — accepted, for a
+  single-tenant product. Two entries are still generic destinations an
+  exfiltrator could sign up for (`eu.i.posthog.com`, `www.googleapis.com`);
+  they buy real features, the wildcard bought nothing, and that is the whole of
+  the difference. `style-src` carries
   `'unsafe-inline'` because React writes `style` attributes all over this app;
   that is a style hole, not a script hole. If the build ever gains an inline
   `<script>` (it has none today — checked in `dist/index.html`, where the PWA
@@ -482,13 +491,41 @@ the Google account to iPhone/Mac Calendar (no CalDAV, no ICS — deliberate).
 walk and holds `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`; the refresh token
 lives in `gcal_accounts` (`supabase/migrations/0006_gcal.sql` — RLS on, ZERO
 policies, service_role the only door), and the browser only ever sees hour-long
-access tokens, in memory. The consent walk returns to `?gcal=connected|denied|
-error` — never `?code=`, which Supabase's `detectSessionInUrl` would eat — and
-its `state` is an HMAC over `{user, origin, 10 min}` keyed off the client
-secret, so there is no nonce table. Scopes: `calendar.app.created` +
+access tokens, in memory. The consent walk returns to `?gcal=pending&n=…`
+(or `denied`/`error`) — never `?code=`, which Supabase's `detectSessionInUrl`
+would eat — and its `state` is an HMAC over `{origin, expiry, salt, walk hash}`
+keyed off the client secret. Scopes: `calendar.app.created` +
 `calendar.events.readonly` — the app can never edit an event the user made in
 their own calendar.
 
+- **THE CONSENT WALK TAKES TWO SECRETS, and both halves are scar tissue.** The
+  state used to carry the household's `user_id` and the callback filed the
+  refresh token under it. A signature proves who STARTED a walk, and in the
+  attack that is the attacker: sign up, ask for a consent URL, send that genuine
+  `accounts.google.com` link to somebody else, and their calendar lands in your
+  estate. So the callback files nothing. It PARKS the grant in `gcal_pending`
+  (`0007_gcal_claim.sql`, same treatment as 0006 — RLS on, zero policies,
+  service_role only), addressed by the sha256 of a **claim secret** minted right
+  there with `randomBytes`, and hands the plaintext to the browser it redirects.
+  That browser POSTs `{action:'claim'}` with its OWN bearer, and the grant is
+  filed under the id that token verifies to. The claim is single-use and the
+  DELETE returns the row in one statement, so two claims cannot both win.
+  · Fixing only that opens the **mirror image**, which cost a review round to
+  catch: an attacker finishes the walk with their own Google account and
+  forwards the `?gcal=pending&n=…` link to a signed-in victim, whose app would
+  claim it and point that household at the attacker's calendar. So a walk is
+  also bound to the tab that began it. `connectGoogle()` mints a **walk secret**
+  into `sessionStorage` (`majordomo-gcal-walk`) and sends only its sha256; that
+  hash rides in the signed state onto the parked row, and the claim must present
+  the raw secret. A browser handed a link it did not earn holds none and never
+  claims at all. **Neither half works alone** — the session says whose
+  connection this becomes, the walk secret says whether this browser may ask —
+  and removing either one re-opens a live calendar-theft hole in one direction
+  or the other. `n` rides in a query string and is therefore NOT confidential
+  (history, the platform's request log); the claim is that it is no longer
+  SUFFICIENT. PKCE rides along, its verifier derived from the state under a
+  domain-separated HMAC rather than stored, so there is still nothing to migrate
+  for it.
 - **Everything with judgment runs on the CLIENT** (`src/app/gcal/service.ts`,
   triggered like estate sync: sign-in, visibility, online, a 5 s-debounced edit,
   SYNC NOW; never while a what-if sandbox is open). One cycle: pull Google's
@@ -519,12 +556,26 @@ their own calendar.
   connection cache) — like `majordomo-sync`: never estate, never exported,
   never synced. The ledger only advances on confirmed writes, so it may
   under-claim (idempotent re-push) but never over-claim (a lost edit).
-- **Arming is four manual acts**, none in git: create the Google Cloud OAuth
-  client (Web app; redirect URIs `https://majordomocal.com/api/google`, the
-  vercel.app twin, and `http://localhost:3000/api/google` — NOT 5173, which
-  never serves `api/`), set the three env vars in Vercel (`GOOGLE_CLIENT_ID`,
-  `GOOGLE_CLIENT_SECRET`, `GCAL_ENABLED=1`), paste `0006_gcal.sql` in full, and
-  add the scopes + a test user on the consent screen. **While the consent
+- **`majordomo-gcal-walk` is the ONE thing this app keeps in `sessionStorage`**,
+  and the storage is the point rather than an implementation detail: a walk is
+  one tab's business, must not outlive the tab, and must be invisible to a tab
+  that never started one — while surviving the top-level navigation out to
+  Google and back. `localStorage` would satisfy none of the first three. It is
+  a live credential half, so it is read and deleted in the same breath
+  (`takeWalk()`), and it is out of reach of `core/backup.ts` for free: the
+  export reads `localStorage` against an allow-list, so this key can never ride
+  into a file somebody mails themselves.
+- **Arming is five manual acts, and two of them have an ORDER**, none in git:
+  create the Google Cloud OAuth client (Web app; redirect URIs
+  `https://majordomocal.com/api/google`, the vercel.app twin, and
+  `http://localhost:3000/api/google` — NOT 5173, which never serves `api/`), set
+  the three env vars in Vercel (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `GCAL_ENABLED=1`), paste `0006_gcal.sql` in full, **paste `0007_gcal_claim.sql`
+  in full BEFORE the app that expects it ships**, and add the scopes + a test
+  user on the consent screen. The order is the whole of it: with 0007 missing,
+  every callback fails at the park and no connection can be made at all — which
+  is the safe direction, and is why it is this way round rather than the other.
+  0007 is idempotent and repairs a half-applied earlier draft of itself. **While the consent
   screen sits in Testing mode, Google expires refresh tokens after 7 days** —
   weekly reconnects until verification lands, and the sensitive read scope's
   review takes weeks: start it early (playbook §3.3.1 said so first).

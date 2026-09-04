@@ -116,14 +116,24 @@ export type TokenReply = {
 }
 
 export const gcalApi = {
-  begin: (email: string | null) =>
-    call<{ url: string }>(email ? { action: 'begin', email } : { action: 'begin' }),
+  /**
+   * `walk` is the sha256 of a secret this tab keeps to itself — the shape of
+   * the walk, never the walk. The server refuses a begin without one, because
+   * a consent walk that cannot be tied back to the browser that started it is
+   * a walk somebody else can finish. See mintWalk() in service.ts.
+   */
+  begin: (walk: string, email: string | null) =>
+    call<{ url: string }>(
+      email ? { action: 'begin', walk, email } : { action: 'begin', walk },
+    ),
   /**
    * The last step of the consent walk: spend the one-use secret the callback
-   * came home with. It answers in the `status` shape, because a claim that
-   * succeeds IS the connection — there is nothing else to ask afterwards.
+   * came home with (`n`) together with the RAW walk secret (`w`) that only the
+   * tab which began the walk is holding. Both, or nothing is filed. It answers
+   * in the `status` shape, because a claim that succeeds IS the connection —
+   * there is nothing else to ask afterwards.
    */
-  claim: (n: string) => call<StatusReply>({ action: 'claim', n }),
+  claim: (n: string, w: string) => call<StatusReply>({ action: 'claim', n, w }),
   status: () => call<StatusReply>({ action: 'status' }),
   token: () => call<TokenReply>({ action: 'token' }),
   calendar: (id: string, previous: string | null) =>

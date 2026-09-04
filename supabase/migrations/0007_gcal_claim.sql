@@ -24,6 +24,27 @@
 -- appear in `gcal_accounts`, under the id that token verifies to. This table
 -- is the whole of the gap between the two halves.
 --
+-- AND THE MIRROR IMAGE, WHICH IS WHY THERE IS A `walk_hash`.
+--
+-- The handoff alone moves identity from the state to the session, and that
+-- answers WHOSE TOKEN this is. It leaves the other half of the same root cause
+-- standing: nothing ties the walk to the browser that STARTED it. So the attack
+-- simply runs backwards. The attacker approves at Google with their OWN
+-- account, is redirected to `/?gcal=pending&n=…`, and does not follow it — they
+-- send that finished link to a signed-in victim, whose app spends the secret
+-- under ITS session. The attacker's calendar is now filed under the victim's
+-- household: the victim's own bookings are pushed out to a stranger's calendar
+-- on the next sync, and the stranger's events are mirrored into their Manor.
+--
+-- So a walk is bound to one tab. Before asking for a consent URL the client
+-- mints a walk secret and keeps it in sessionStorage — one tab's business, dead
+-- when the tab is — and sends only its sha256. That hash rides in the signed
+-- state, lands in the column below, and the claim has to present the RAW secret
+-- beside `n`. A browser handed a link it did not earn holds no walk secret and
+-- never claims at all. Neither half of this works alone: the session decides
+-- whose connection it becomes, the walk secret decides whether this browser was
+-- entitled to ask.
+--
 -- WHAT A ROW IS.
 --
 -- A live Google refresh token, in the open, for at most ten minutes. Treat it
@@ -56,6 +77,15 @@ create table if not exists gcal_pending (
   claim_hash    text        primary key,
   -- the credential in question, waiting to be filed
   refresh_token text        not null,
+  -- sha256 of the WALK secret, hex — the one the finishing browser minted into
+  -- its own sessionStorage before the walk began, carried here off the signed
+  -- state. NOT NULL, and that is load-bearing rather than tidy: a row that
+  -- cannot prove which walk it belongs to is a row that must never have
+  -- existed. It would be a live refresh token claimable by anyone holding the
+  -- redirect's `n` — a request log, a browser history, a forwarded link — which
+  -- is precisely the mirror-image attack above. A nullable column would let one
+  -- forgotten insert re-open it silently, and nothing downstream would notice.
+  walk_hash     text        not null,
   google_email  text,
   created_at    timestamptz not null default now(),
   -- the claim is refused past this, and the sweep below removes it. Set by the
@@ -63,6 +93,16 @@ create table if not exists gcal_pending (
   -- the rest of the walk's timings (CLAIM_TTL_MS in api/google.ts).
   expires_at    timestamptz not null
 );
+
+-- The idempotent belt for a HALF-APPLIED paste. `create table if not exists`
+-- does nothing to a table that already stands, so an estate that ran an earlier
+-- draft of this file would keep a `gcal_pending` with no walk binding and never
+-- learn of it. The repair for a row written before the binding existed is to
+-- DROP it, not to invent a hash it never had: a pending row is a ten-minute
+-- credential and never history, and the cost of losing one is a reconnect.
+alter table gcal_pending add column if not exists walk_hash text;
+delete from gcal_pending where walk_hash is null;
+alter table gcal_pending alter column walk_hash set not null;
 
 -- The sweep's index. `api/google.ts` deletes everything past its expiry on
 -- every callback — an abandoned walk's row is not litter, it is a live refresh

@@ -2423,6 +2423,8 @@ export const majordomoPack: VoicePack = {
       signin: 'No account was signed in to receive the connection. Sign in, then connect again.',
       offline: 'This device went offline before the connection was finished. Connect again when it is back.',
       failed: 'The connection was granted but never completed. Connect again.',
+      unstarted: 'That connection was begun in another browser. Nothing was connected here.',
+      blocked: 'This browser is blocking storage, so a connection cannot be completed here. Allow it for this site, or use another browser.',
     },
     abroadLine: 'From your Google calendar. It is edited there, not here.',
     untitled: '(untitled)',
