@@ -1957,8 +1957,11 @@ export interface VoicePack {
     termsBlurb: string
     privacyLabel: string
     privacyBlurb: string
-    /** the usage-analytics opt-out. The blurb must restate the door's promise:
-     *  counts of features used, never the contents of any record. */
+    /** the usage-analytics opt-out — one switch for the usage counts AND the
+     *  Meta Pixel, because a person withdrawing consent should not have to
+     *  know which of two systems is watching. The blurb must restate the
+     *  door's promise: counts of features used, never the contents of any
+     *  record; ad measurement named as such. */
     analyticsToggle: string
     analyticsBlurb: string
   }
@@ -1974,8 +1977,12 @@ export interface VoicePack {
     /** what the house keeps and what pressing the button means — this line IS
      *  the clickwrap, so it must say that entering is agreeing */
     body: string
-    /** the one-line analytics disclosure: anonymous feature counts, never
-     *  record contents, and where the off-switch lives */
+    /** the one-line disclosure of everything that leaves the device once the
+     *  button is pressed: anonymous feature counts, never record contents;
+     *  Meta's pixel measuring whether an advertisement brought them here; and
+     *  where the off-switch lives. The Privacy Policy says the pixel loads
+     *  only after the door — so the door itself must say the pixel exists,
+     *  or the acceptance was to something the reader was never shown. */
     analyticsLine: string
     termsLink: string
     privacyLink: string

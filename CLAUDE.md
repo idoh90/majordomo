@@ -382,7 +382,16 @@ one **consent door**, and the acceptance stamp that gates telemetry.
   unconditional, so existing estates meet it once as an interstitial.
 - **A material change to /terms or /privacy = bump `TERMS_VERSION`** — that is the
   whole re-acceptance mechanism. Also update each document's "Last updated" line
-  (`src/landing/voice.ts`).
+  (`src/landing/voice.ts`; the privacy date is `PRIVACY_EFFECTIVE` there, one
+  constant printed in three places), and **keep the version being replaced**: it
+  moves, word for word, into `voice.privacyArchive` under its own last-updated
+  date and is served at `/privacy/<date>` (`privacy/2026-08-31.html` is the
+  first), linked from the new policy's closing section. It is what people
+  actually agreed to, so it is never edited. Version history: **v1** (31 Aug
+  2026) promised no advertising pixels; **v2** (5 Sep 2026) discloses the Meta
+  Pixel — published BEFORE the pixel was installed, deliberately, because a
+  policy has to be true before the thing it describes exists. The mailbox swap
+  (PR #10) did NOT bump, because a changed address is not a changed promise.
 - **The legal pages follow the /privacy pattern exactly**: root `terms.html` /
   `privacy.html` → rollup `input` in `vite.config.ts` → `entry-*.tsx` client entry →
   `TermsPage`/`PrivacyPage` over the shared `LegalPage` shell → copy in
@@ -390,8 +399,13 @@ one **consent door**, and the acceptance stamp that gates telemetry.
   route means touching four fail-loud lists**: the rollup `input`, the prerender
   route loop, `entry-server.tsx` (union + meta), and `audit.mjs` `ROUTES`/`PAGES` —
   plus `public/sitemap.xml` and the landing footer. The html must carry
-  `__SITE_ORIGIN__` in its canonical or the build throws (the lone exception is
-  `404.html`, below).
+  `__SITE_ORIGIN__` in its canonical or the build throws (the exceptions are
+  `404.html`, below, and the dated privacy archive, which is `noindex` for the
+  404's reason inverted: a search for the policy must never land on a version
+  that no longer applies — so it is in `audit.mjs`'s `PAGES` (contrast, the
+  address check) and NOT in `ROUTES`, the sitemap, or the footer). `LegalPage`
+  paragraphs may be strings or segment arrays (`LegalPara`) — that is how a
+  policy carries a link without inline markup.
 - **The SW answers for `/` AND NOTHING ELSE.** `navigateFallbackDenylist`
   (vite.config.ts) ends in `/^\/[^?]/` — any path that is not the root. Workbox
   tests these against `pathname + search`, which is exactly what lets that one rule
@@ -433,12 +447,21 @@ one **consent door**, and the acceptance stamp that gates telemetry.
   page WITHOUT that rule ships a page the owner can never see on his own machine,
   which is exactly how it shipped first and exactly how it was caught.
 - **The legal copy carries honesty invariants** (stated in a comment block above it
-  in `src/landing/voice.ts`): the public pages stay tracker-free (Vercel aggregate
-  counts only); app analytics are named actions only; deletion is a mailbox
+  in `src/landing/voice.ts`): the ONLY advertising tool on the site is the Meta
+  Pixel, and the policy names it — three named actions, loads only after the
+  door and never before, Global Privacy Control suppresses it outright, the
+  "Share usage counts" switch withdraws it, Meta is a transfer to the United
+  States (the consent door's `analyticsLine` and the switch's blurb in
+  `core/voice/packs/majordomo.ts` say the same in one line each, because the
+  door is where the consent is actually given); beyond that the public pages
+  carry Vercel's aggregate counts and nothing else; app analytics are named
+  actions only; deletion is a mailbox
   (`majorcal@majordomocal.com` — `FALLBACK_CONTACT` in `site.config.ts`, duplicated in
   `scripts/prerender.mjs`, both overridden by a `CONTACT_EMAIL` Vercel env var)
   because no in-app deletion exists. Do not edit the documents into promising
-  machinery the app does not have.
+  machinery the app does not have. `npm run audit` reads every legal document
+  in `dist` (privacy, terms, the archive) and fails if any names no contact
+  address, or a different one from the footer's.
 
 ## Telemetry (`src/core/telemetry/`)
 

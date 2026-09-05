@@ -22,6 +22,13 @@
    assumes English word order beyond the strings themselves.
 --------------------------------------------------------------------------- */
 
+/* The day the current privacy policy took effect. Printed in its "Last
+   updated" line, in its own change note, and on the archive it replaced — one
+   constant, so the three cannot disagree. Set it to the day the change ships:
+   a policy dated before it was published is a policy that misstates when its
+   own terms began. */
+const PRIVACY_EFFECTIVE = '5 September 2026'
+
 export const voice = {
   meta: {
     title: 'Majordomo — the calendar that survives your schedule',
@@ -250,14 +257,27 @@ export const voice = {
      The legal pages. Everything below is user-facing copy AND the operative
      text of the agreement: the consent door's AGREE & ENTER points here.
      Honesty invariants that must survive any edit:
-     - the public pages themselves stay tracker-free (Vercel's aggregate
-       counts only), so the landing may keep saying so;
+     - the ONLY advertising tool anywhere on the site is the Meta Pixel, and
+       the policy names it in full: what it reports (three named actions,
+       never a record), that it loads only after the door and never before,
+       that Global Privacy Control suppresses it outright, that the settings
+       switch withdraws it, and that Meta is a transfer to the United States.
+       The disclosure was published BEFORE the pixel was installed, on
+       purpose: a policy has to be true before the thing it describes
+       exists, not at the same moment. Never let the reverse happen — the
+       pixel must not predate, or outlive, this section;
+     - beyond that, the public pages carry Vercel's aggregate counts and
+       nothing else: no signup form, no cookies of their own;
      - the app's usage analytics are NAMED ACTIONS ONLY, never record
        contents — the same promise core/telemetry/events.ts enforces in code;
      - deletion is a mailbox, because no in-app deletion exists. Do not
        promise a button this app does not have.
      A material change to either document must be paired with a TERMS_VERSION
-     bump in core/store/shell.ts so every device re-reads its door.
+     bump in core/store/shell.ts so every device re-reads its door — and the
+     version being replaced is kept, word for word, under `privacyArchive`
+     below at a dated address (/privacy/<its last-updated date>), linked from
+     the new policy's closing section. The archive is the record of what
+     people actually agreed to; it is never edited.
   ------------------------------------------------------------------------- */
 
   privacy: {
@@ -266,20 +286,27 @@ export const voice = {
     /* injected into privacy.html at build time by scripts/prerender.mjs, so
        the document's <title> comes from here like everything else */
     metaTitle: 'Privacy — Majordomo',
-    metaDescription: 'What Majordomo keeps, what it counts, and what it never does.',
-    updated: 'Last updated: 31 August 2026',
+    metaDescription: 'What Majordomo keeps, what it counts, what it tells Meta, and what it never does.',
+    updated: `Last updated: ${PRIVACY_EFFECTIVE}`,
     sections: [
       {
         h: 'The short version',
         p: [
-          'Your records live on your own device. Signing in syncs them to your own account. The app counts which features get used — never what your records say. Nothing is sold, rented, or used to build an advertising profile of you.',
+          'Your records live on your own device. Signing in syncs them to your own account. The app counts which features get used — never what your records say. Once you have agreed at the door, the Meta Pixel measures whether an advertisement brought you here — three named actions, never a record. Nothing is sold or rented, and nothing about your records ever reaches Meta.',
           'An estate does not gossip.',
+        ],
+      },
+      {
+        h: 'Who is responsible, and how to reach them',
+        p: [
+          `Majordomo, at majordomocal.com, is operated by the operator of majordomocal.com — an individual based in Israel — who is the controller of every piece of data this page describes. Write to ${__CONTACT_EMAIL__} for anything on this page: to ask what is held about you, to get a copy of it, to have it deleted, or to withdraw a consent you gave.`,
         ],
       },
       {
         h: 'These pages',
         p: [
-          'The public pages at majordomocal.com — the landing page and these documents — collect nothing about you. No signup form, no analytics cookies, no advertising pixels, no third-party trackers. Visits are counted in aggregate by Vercel Web Analytics, which sets no cookies and stores no personal data.',
+          'The public pages at majordomocal.com — the landing page and these documents — have no signup form and set no cookies of their own. Visits are counted in aggregate by Vercel Web Analytics, which sets no cookies and stores no personal data.',
+          'The one third party that can learn of a visit is Meta, through the Meta Pixel described below — and only after you have accepted at the app’s door. Nothing from Meta loads before that, on the landing page included, so a visit that never reaches the door is never reported to Meta.',
         ],
       },
       {
@@ -298,14 +325,29 @@ export const voice = {
         h: 'Usage analytics in the app',
         p: [
           'After you agree at the door, the app sends anonymous usage counts to PostHog, hosted in the European Union: named events such as “a workout was logged” or “the Ledger was opened”, with a random device identifier, a session identifier, and the time. Never the contents — no amounts, no titles, no notes, no body stats, no health numbers, no record text of any kind.',
-          'The identifier and any unsent counts live in your browser’s storage and are created only after you agree. If you sign in, the random identifier is linked to your account identifier so your own devices count as one person; your email address is not sent. You can switch analytics off at any time in Settings, under THE FINE PRINT, and the app honors your browser’s Global Privacy Control signal automatically.',
+          'The identifier and any unsent counts live in your browser’s storage and are created only after you agree. If you sign in, the random identifier is linked to your account identifier so your own devices count as one person; your email address is not sent. You can switch analytics off at any time in Settings, under THE FINE PRINT — the “Share usage counts” switch, which also stops the Meta Pixel — and the app honors your browser’s Global Privacy Control signal automatically.',
           'These counts exist to show which parts of the app are used and kept. They are not shared, sold, or joined to anything else.',
+        ],
+      },
+      {
+        h: 'Advertising measurement: the Meta Pixel',
+        p: [
+          'Majordomo advertises on Instagram and Facebook. To learn whether those advertisements work, the site uses the Meta Pixel, a measurement tool operated by Meta Platforms, Inc. (Meta Platforms Ireland Limited for people in the European Economic Area, the United Kingdom and Switzerland). Its purpose is advertising measurement and attribution — telling Meta that a person who was shown an advertisement went on to arrive here, press GET STARTED, or finish the first-time setup — and nothing else.',
+          'It loads only after you press AGREE & ENTER at the app’s door, and never before. Until you have accepted, no Meta script runs and no Meta cookie is set — on the landing page as much as in the app.',
+          'Once it is running, the pixel reports three named actions — arriving on the landing page, pressing GET STARTED, and finishing the first-time setup — together with what any web request carries: your IP address, your browser and device details, the page address and the site you came from. It stores a random identifier in a cookie on this site so that it can recognise the same browser again. If you use Facebook or Instagram, Meta can connect those reports to your account there and combine them with what it already knows about you. We never send Meta your name, email address, phone number, or account identifier, and Meta’s “automatic advanced matching” is switched off.',
+          [
+            'Those reports go to Meta’s servers in the United States. That is a transfer of your data out of Israel and out of the European Economic Area, and by accepting at the door you consent to it. What Meta does with the data from there, and for how long, is governed by ',
+            { text: 'Meta’s own privacy policy', href: 'https://www.facebook.com/privacy/policy/' },
+            '.',
+          ],
+          'Your browser’s Global Privacy Control signal is honoured and suppresses the pixel outright: with the signal raised, it does not load at all, whatever you accepted at the door.',
+          'Refusing changes nothing in the app except this measurement. No feature is withheld, nothing else changes, and you are not asked again. You can withdraw at any time in Settings, under THE FINE PRINT: turning off “Share usage counts” stops the Meta Pixel and the usage counts together, from that moment on. What Meta was sent before that stays with Meta, under its policy.',
         ],
       },
       {
         h: 'Who processes what',
         p: [
-          'Supabase holds accounts and synced records. PostHog (EU) holds the usage counts. Vercel hosts the app and takes the aggregate page counts. Google provides sign-in.',
+          'Supabase holds accounts and synced records. PostHog (EU) holds the usage counts. Meta Platforms (United States) receives the advertising measurements described above. Vercel hosts the app and takes the aggregate page counts. Google provides sign-in.',
           'Market prices and exchange rates (Twelve Data, Frankfurter) are fetched directly from your device — for Twelve Data, with your own API key — so those requests travel from you to them under their policies, and we never see them.',
         ],
       },
@@ -313,12 +355,13 @@ export const voice = {
         h: 'Retention and deletion',
         p: [
           `Local records stay until you delete them, or your browser does. Synced records stay until you ask: write to ${__CONTACT_EMAIL__} from the address you signed in with, and whatever the sync holds is deleted — without argument and without a retention offer. Usage counts are pseudonymous and kept only while they are useful for understanding how the app is used.`,
+          'What the Meta Pixel reported is held by Meta, not by us, under Meta’s own retention rules. Meta’s privacy policy explains how to review and clear it — “your activity off Meta technologies”, in your Facebook or Instagram settings.',
         ],
       },
       {
         h: 'What is never done',
         p: [
-          'No advertising and no ad networks. No selling or renting of data. No cross-site tracking. No profiling for anyone else’s benefit. The app asks for no device permission it does not need.',
+          'No selling or renting of data. No advertisements inside the app. No advertising tool anywhere on the site beyond the single Meta Pixel described above, and none of it ever sees your records. No profiling of you by us, for anyone’s benefit. The app asks for no device permission it does not need.',
         ],
       },
       {
@@ -330,11 +373,106 @@ export const voice = {
       {
         h: 'Changes, and who to talk to',
         p: [
-          'If this policy changes materially, the app shows its door again and asks you to re-accept before continuing; this page always carries the current version.',
-          `Majordomo is operated by the operator of majordomocal.com, an individual based in Israel. You can always ask what is held about you, ask for a copy of it, or ask for its deletion: ${__CONTACT_EMAIL__}.`,
+          'If this policy changes materially, the app shows its door again and asks you to re-accept before continuing; this page always carries the current version, with its date below.',
+          [
+            `This version, of ${PRIVACY_EFFECTIVE}, added the Meta Pixel section. The version it replaced, of 31 August 2026, described the site before advertising measurement was added, and stays readable, word for word, at `,
+            { text: 'majordomocal.com/privacy/2026-08-31', href: '/privacy/2026-08-31' },
+            '.',
+          ],
+          `Questions, requests, and anything this page did not answer: ${__CONTACT_EMAIL__}.`,
         ],
       },
     ],
+  },
+
+  /* -------------------------------------------------------------------------
+     Superseded privacy policies, word for word, keyed by the date each was
+     last updated — which is also its address: /privacy/2026-08-31. A policy
+     that changes materially moves itself here first, then rewrites /privacy,
+     then bumps TERMS_VERSION. Nothing in here is ever edited; it is what the
+     people who pressed AGREE & ENTER under it actually agreed to. The only
+     thing added is the notice, which says so.
+  ------------------------------------------------------------------------- */
+  privacyArchive: {
+    '2026-08-31': {
+      title: 'Privacy — 31 August 2026',
+      back: 'Back to the estate',
+      metaTitle: 'Privacy, 31 August 2026 — Majordomo',
+      metaDescription: `The privacy policy that applied until ${PRIVACY_EFFECTIVE}, kept for the record.`,
+      notice: [
+        `This is the Privacy Policy of 31 August 2026. It was superseded on ${PRIVACY_EFFECTIVE} and is kept here, unchanged, for the record. The current policy is at `,
+        { text: 'majordomocal.com/privacy', href: '/privacy' },
+        '.',
+      ],
+      updated: 'Last updated: 31 August 2026',
+      sections: [
+        {
+          h: 'The short version',
+          p: [
+            'Your records live on your own device. Signing in syncs them to your own account. The app counts which features get used — never what your records say. Nothing is sold, rented, or used to build an advertising profile of you.',
+            'An estate does not gossip.',
+          ],
+        },
+        {
+          h: 'These pages',
+          p: [
+            'The public pages at majordomocal.com — the landing page and these documents — collect nothing about you. No signup form, no analytics cookies, no advertising pixels, no third-party trackers. Visits are counted in aggregate by Vercel Web Analytics, which sets no cookies and stores no personal data.',
+          ],
+        },
+        {
+          h: 'Your records',
+          p: [
+            'What you enter in the app — shifts, workouts, study, projects, money — is stored locally in your browser, on your own device. If you never sign in, none of it ever reaches us. The one-file export in Settings is yours to keep wherever you choose, and it deliberately leaves out any API key you saved in the app.',
+          ],
+        },
+        {
+          h: 'Your account and sync',
+          p: [
+            'Signing in with Google is optional; it exists so your devices can share one estate. If you sign in, we hold your email address and Google account identifier, and your synced records, stored with our database provider (Supabase). Sync carries your records and a few display preferences; it does not carry your API keys, and it does not carry this device’s consent or analytics settings.',
+          ],
+        },
+        {
+          h: 'Usage analytics in the app',
+          p: [
+            'After you agree at the door, the app sends anonymous usage counts to PostHog, hosted in the European Union: named events such as “a workout was logged” or “the Ledger was opened”, with a random device identifier, a session identifier, and the time. Never the contents — no amounts, no titles, no notes, no body stats, no health numbers, no record text of any kind.',
+            'The identifier and any unsent counts live in your browser’s storage and are created only after you agree. If you sign in, the random identifier is linked to your account identifier so your own devices count as one person; your email address is not sent. You can switch analytics off at any time in Settings, under THE FINE PRINT, and the app honors your browser’s Global Privacy Control signal automatically.',
+            'These counts exist to show which parts of the app are used and kept. They are not shared, sold, or joined to anything else.',
+          ],
+        },
+        {
+          h: 'Who processes what',
+          p: [
+            'Supabase holds accounts and synced records. PostHog (EU) holds the usage counts. Vercel hosts the app and takes the aggregate page counts. Google provides sign-in.',
+            'Market prices and exchange rates (Twelve Data, Frankfurter) are fetched directly from your device — for Twelve Data, with your own API key — so those requests travel from you to them under their policies, and we never see them.',
+          ],
+        },
+        {
+          h: 'Retention and deletion',
+          p: [
+            `Local records stay until you delete them, or your browser does. Synced records stay until you ask: write to ${__CONTACT_EMAIL__} from the address you signed in with, and whatever the sync holds is deleted — without argument and without a retention offer. Usage counts are pseudonymous and kept only while they are useful for understanding how the app is used.`,
+          ],
+        },
+        {
+          h: 'What is never done',
+          p: [
+            'No advertising and no ad networks. No selling or renting of data. No cross-site tracking. No profiling for anyone else’s benefit. The app asks for no device permission it does not need.',
+          ],
+        },
+        {
+          h: 'Age',
+          p: [
+            `Majordomo is not for children under 16, and we do not knowingly hold their data. If you believe someone under 16 is using it, write to ${__CONTACT_EMAIL__}.`,
+          ],
+        },
+        {
+          h: 'Changes, and who to talk to',
+          p: [
+            'If this policy changes materially, the app shows its door again and asks you to re-accept before continuing; this page always carries the current version.',
+            `Majordomo is operated by the operator of majordomocal.com, an individual based in Israel. You can always ask what is held about you, ask for a copy of it, or ask for its deletion: ${__CONTACT_EMAIL__}.`,
+          ],
+        },
+      ],
+    },
   },
 
   terms: {

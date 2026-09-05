@@ -44,7 +44,12 @@ const ROUTES = ['/', '/privacy', '/terms']
    it declares itself noindex on purpose, and Lighthouse counts "page is
    blocked from indexing" as an SEO failure — so scoring it would fail this
    gate for doing the correct thing. */
-const PAGES = [...ROUTES, '/404']
+/* The superseded privacy policy at its dated address joins /404 here for the
+   same two reasons: it is a page someone has to be able to read (so AA
+   applies), and it is noindex on purpose (so Lighthouse must not score it —
+   see privacy/2026-08-31.html for why a policy that no longer applies must
+   not be findable). */
+const PAGES = [...ROUTES, '/404', '/privacy/2026-08-31']
 
 let failures = 0
 const fail = (m) => {
@@ -167,8 +172,12 @@ await browser.close()
 console.log('\nthe page’s own address')
 {
   const dist = join(root, 'dist')
+  /* The three legal documents are read by name here and nowhere else: a
+     document that stops being built, or moves, fails as a missing file rather
+     than as a check that quietly has nothing to look at. */
+  const LEGAL = ['privacy.html', 'terms.html', 'privacy/2026-08-31.html']
   const files = Object.fromEntries(
-    ['index.html', 'privacy.html', 'robots.txt', 'sitemap.xml'].map((f) => [
+    ['index.html', ...LEGAL, 'robots.txt', 'sitemap.xml'].map((f) => [
       f,
       readFileSync(join(dist, f), 'utf8'),
     ]),
@@ -213,6 +222,7 @@ console.log('\nthe page’s own address')
     ['index.html', 'og:image', /<meta property="og:image" content="(https?:\/\/[^"]+)"/g, 1],
     ['index.html', 'twitter:image', /<meta name="twitter:image" content="(https?:\/\/[^"]+)"/g, 1],
     ['privacy.html', 'canonical', /<link rel="canonical" href="(https?:\/\/[^"]+)"/g, 1],
+    ['terms.html', 'canonical', /<link rel="canonical" href="(https?:\/\/[^"]+)"/g, 1],
     ['robots.txt', 'Sitemap:', /Sitemap:\s*(https?:\/\/\S+)/g, 1],
     ['sitemap.xml', '<loc>', /<loc>(https?:\/\/[^<]+)<\/loc>/g, 3],
   ]
@@ -235,15 +245,46 @@ console.log('\nthe page’s own address')
     else pass(`${found.length} absolute URLs, all on ${origin}`)
   }
 
-  /* The two places the page promises a mailbox must name the same one. */
-  const mails = new Set(
-    [...files['index.html'].matchAll(/mailto:([^"'\s>]+)/g)].map((m) => m[1]),
-  )
-  const privacyMail = files['privacy.html'].match(/Write to ([^\s]+@[^\s]+?) and/)
-  if (privacyMail) mails.add(privacyMail[1])
-  if (mails.size > 1) fail(`the page names more than one contact address: ${[...mails].join(', ')}`)
-  else if (mails.size === 1) pass(`one contact address, ${[...mails][0]}`)
-  else fail('no contact address found in dist — the footer link and /privacy both promise one')
+  /* The superseded policy is readable, not findable: it must say noindex,
+     and it must not be in the sitemap — which the <loc> count above already
+     enforces, since a fourth entry fails it. */
+  const NOINDEX = /<meta\s+name="robots"\s+content="[^"]*\bnoindex\b/i
+  if (!NOINDEX.test(files['privacy/2026-08-31.html'])) {
+    fail(
+      'dist/privacy/2026-08-31.html does not declare noindex — a superseded policy ' +
+        'must never outrank the current one in search',
+    )
+  } else pass('the superseded policy is noindex')
+
+  /* Every mailbox the site prints must be the same one. The footer's Contact
+     link and the noscript banner on the landing; the controller line, the
+     deletion clause and the under-16 line on /privacy; the operator line, the
+     termination clause and the contact line on /terms; and all of it again on
+     the archived policy — each promises that a person reads what arrives, so
+     one of them naming a different address is a promise made to a stranger.
+
+     Extracted by SHAPE, not by the sentence around it. This check used to
+     match "Write to X and" on /privacy alone, which meant a reworded clause
+     silently stopped being checked — and /terms, which prints the address
+     three times, was never read at all. Now every legal document must name
+     at least one address, and every address anywhere must be the same. */
+  const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
+  const mails = new Map()
+  const note = (addr, where) => mails.set(addr, [...(mails.get(addr) ?? []), where])
+  for (const m of files['index.html'].matchAll(/mailto:([^"'\s>?]+)/g)) note(m[1], 'index.html')
+  for (const name of LEGAL) {
+    const hits = files[name].match(EMAIL) ?? []
+    if (hits.length === 0) {
+      fail(`dist/${name} names no contact address — a legal document that promises a mailbox must print one`)
+    }
+    for (const h of hits) note(h, name)
+  }
+  if (mails.size > 1) {
+    fail('the site names more than one contact address:')
+    for (const [addr, where] of mails) console.log(`        ${addr}  (${[...new Set(where)].join(', ')})`)
+  } else if (mails.size === 1) {
+    pass(`one contact address, ${[...mails.keys()][0]}, on the landing and on all ${LEGAL.length} legal documents`)
+  } else fail('no contact address found in dist — the footer link and the legal pages all promise one')
 }
 
 /* ----------------------------------------------------------------- lighthouse */
