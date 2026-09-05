@@ -61,7 +61,12 @@ technical version.
   gate** (`scripts/check-brand.mjs`): dist must carry no Batman-era strings beyond
   the three legacy wire keys. It skips itself loudly under `VITE_FOUNDER_SKIN=1`
   (a founder bundle is not a shippable bundle); Vercel never sets the flag, so
-  every production build is gated.
+  every production build is gated. Last of all comes the **pixel gate**
+  (`scripts/check-pixel.mjs`): if `VITE_META_PIXEL_ID` is set for the build,
+  `dist/privacy.html` must carry the Meta Pixel disclosure phrase by phrase and
+  `vercel.json`'s CSP must admit Meta's hosts (and never `'unsafe-inline'`), or
+  the build fails. An unarmed build skips it — a policy may promise more than the
+  code does, never less.
 - `npm run lint` — ESLint, **import-boundary rules only** (no style rules).
   Scoped to `src`; `api/` is outside it (nothing there may import the app anyway).
 - `npm run vendor:exercises` — regenerates the exercise catalogue
@@ -124,6 +129,21 @@ technical version.
   without writing anything. Needs `npm run dev` up; exits non-zero on failure.
   `CHROME_PATH` / `LEDGER_BASE` override the browser and origin. It scores the SIGN
   only — spend pace, live prices, FX and the portfolio board are not covered.
+- `npm run check:pixel` — the **pixel harness** (`scripts/pixel-harness.mjs`): drives
+  headless Chromium through a PRODUCTION build served by `npm run preview` (the door
+  and the setup are gated differently in DEV, and it is the shipped gating that
+  matters) and asserts the Meta Pixel's contract — nothing before consent (no
+  request, no script, no global, no cookie, no storage), a held PageView and Lead
+  flushed in order on AGREE with `autoConfig` off and a bare `init`,
+  CompleteRegistration exactly once and never on a reload, ENTER WITHOUT
+  MEASUREMENT and Global Privacy Control sending nothing ever, a resident's
+  revisit loading nothing, the welcome-back stage sending no registration, and
+  the settings switch deleting the pixel's cookies. Build armed with a throwaway
+  id first: `VITE_META_PIXEL_ID=000000000000000 npm run build && npm run preview`.
+  Meta is never reached — its hosts are intercepted and `fbevents.js` is answered
+  with a recording stub. `CHROME_PATH` / `PIXEL_BASE` override the browser and the
+  origin. It does not exercise the real `fbevents.js`; that the script's beacons go
+  where the CSP admits is verified on the live site, once.
 - No test runner **for the app at large**; verification is done in the browser. The
   Manor, THE NIGHT, the Grounds' recast and the Ledger's sign are the exceptions —
   their contracts are numeric, and "looks plausible" is
@@ -208,9 +228,14 @@ idoh90, Vercel is idoh40; the Vercel account has idoh90's GitHub linked). Pushin
   makes that post fail. Keep `connect-src` as the list of origins the app
   genuinely talks to — Supabase over both `https:` and `wss:` (realtime is a
   WebSocket), Twelve Data, Frankfurter, `eu.i.posthog.com` (the telemetry
-  outbox; see TELEMETRY below), and `www.googleapis.com` (the Calendar bridge
-  runs client-side; token traffic stays in `api/`) — and **add to it only when
-  a real feature needs it**, since every entry is a place data could go. `style-src` carries
+  outbox; see TELEMETRY below), `www.googleapis.com` (the Calendar bridge
+  runs client-side; token traffic stays in `api/`), and `www.facebook.com` (the
+  Meta Pixel's beacons — `img-src` carries it too, and `script-src` admits
+  `connect.facebook.net` for `fbevents.js`; all three exist only after the
+  consent door, see THE META PIXEL below) — and **add to it only when
+  a real feature needs it**, since every entry is a place data could go.
+  `script-src` is `'self'` plus that one host and never gains `'unsafe-inline'`:
+  Meta's own installation snippet is inline and is deliberately not used. `style-src` carries
   `'unsafe-inline'` because React writes `style` attributes all over this app;
   that is a style hole, not a script hole. If the build ever gains an inline
   `<script>` (it has none today — checked in `dist/index.html`, where the PWA
@@ -375,7 +400,11 @@ one **consent door**, and the acceptance stamp that gates telemetry.
   early return, because Shell opens with hooks). It shows whenever the device's
   `termsAccepted` stamp in the shell store is below **`TERMS_VERSION`**
   (`core/store/shell.ts`). It is the app's ONE deliberate wall (the sign-in door
-  stays a door); pressing AGREE & ENTER stamps `termsAccepted`/`termsAcceptedAt`.
+  stays a door), with two answers that both lead in: AGREE & ENTER stamps
+  `termsAccepted`/`termsAcceptedAt`; ENTER WITHOUT MEASUREMENT sets `telemetryOff`
+  FIRST and then stamps — in, with the usage counts and the Meta Pixel refused,
+  the state Global Privacy Control produces, chosen by hand. Both accept the
+  Terms, and nothing is withheld from either (the policy promises exactly that).
   Per-device and never synced, like `onboarded` — sign-in is optional, so consent
   cannot hang on an account. In DEV the door only answers `?consent` (the Manor
   harness and every screenshot param drive bare URLs); in production it is
@@ -481,7 +510,12 @@ leaves is auditable in one file against the Privacy Policy's promises.
   only**, so previews and DEV are silent; the key is public-by-design, same class
   as the anon key) · `termsAccepted >= TERMS_VERSION` · settings switch not off
   (`telemetryOff` in the shell store; settings → THE FINE PRINT) · no Global
-  Privacy Control signal.
+  Privacy Control signal. The consent half — stamp, switch, GPC — is
+  `consentGranted()` in `core/telemetry/consent.ts`, kept apart from `index.ts` so
+  the landing can import it without the auth store (and the Supabase client
+  behind it); the Meta Pixel reads that same function. There is no second consent
+  check anywhere, and reading the shell store writes nothing — zustand's persist
+  touches storage only on a migration or a set, which the harness asserts.
 - **`majordomo-telemetry`** is a raw localStorage key ({deviceId, lastUserId,
   sessionId, outbox}) created **lazily on the first allowed capture** — never
   before consent, partly because `hasEstate()` matches any `majordomo*` key and a
@@ -494,6 +528,47 @@ leaves is auditable in one file against the Privacy Policy's promises.
   via the persisted `lastUserId`, because OAuth makes every real sign-in look like
   a boot restore) sends `$identify` to merge into the Supabase user id. Email never.
 - Owner-side setup and the dashboard recipes live in `docs/telemetry-dashboards.md`.
+
+## The Meta Pixel (`src/core/ads/meta.ts`)
+
+Advertising measurement for the Instagram/Facebook campaign — the one third party
+the public pages ever speak to. The disclosure on /privacy is its contract, and it
+shipped FIRST (PR #22) so the policy was true before the pixel existed.
+
+- **Armed by `VITE_META_PIXEL_ID`, set in Vercel for Production only.** Absent or
+  empty, the module is inert end to end: no stub, no listener, nothing held. The
+  id is public by nature (it is in every request the pixel makes), so it rides the
+  `VITE_` prefix like the anon key. Previews and DEV stay silent by not having it.
+- **Three named actions, three call sites, no parameters.** `PageView` from
+  `landing/mount.tsx` (skipped on a resident's `?landing` revisit, like the page's
+  own counter); `Lead` from GET STARTED in `GetStarted.tsx` (the stranger's button
+  only — `hasEstate()` asked at press time); `CompleteRegistration` from the
+  setup's `finish()` in `onboarding/store.ts` — the same moment as
+  `onboarding_finished`, minus the welcome-back stage (an existing account on a
+  new device is a sign-in, not a registration) and minus a re-run on a device
+  already marked `onboarded`. Waved off at the welcome door counts: that person
+  pressed GET STARTED, agreed at the door, and is standing in the Manor. `PixelEvent`
+  is a closed union; nothing rides as a property; `autoConfig` is set off before
+  `init` so the script scrapes nothing on its own; Automatic Advanced Matching is
+  off in Events Manager.
+- **Nothing before the door.** `trackPixel` asks `consentGranted()` first. Door
+  unanswered → the event is HELD IN MEMORY (never storage — `hasEstate()` reads
+  any `majordomo*` key as a resident) and flushed in order the moment AGREE
+  stamps the device; declined → dropped; GPC → dropped outright, never held. The
+  script (`connect.facebook.net/en_US/fbevents.js`) loads LAZILY on the first
+  event that may be sent, so a consented resident with nothing to report never
+  loads it — no request, no cookie. Withdrawal (the settings switch, or the door's
+  second answer) drops what is held and deletes `_fbp`/`_fbc` best-effort.
+- **No inline snippet, no `<noscript>` image.** The queueing stub is ordinary
+  code; the CSP admits the host and never `'unsafe-inline'`. The noscript image
+  fires without JavaScript, which is to say without asking.
+- **`fbclid` survives to the door on purpose.** `enterApp()` strips only
+  `?landing`, so an ad click's `fbclid` is still in the URL when `fbevents.js`
+  first loads after AGREE and becomes the `_fbc` cookie — the browser-side
+  attribution the campaign's optimisation runs on. Anything that rewrites the
+  query before the door must leave it standing.
+- `npm run check:pixel` scores the whole contract in a real browser (see
+  Commands); `scripts/check-pixel.mjs` ends every build.
 
 ## The Google Calendar bridge — two-way sync (`api/google.ts` + `src/app/gcal/`)
 

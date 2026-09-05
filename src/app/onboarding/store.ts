@@ -5,6 +5,7 @@ import { useNavStore } from '../../core/store/nav'
 import { useShellStore } from '../../core/store/shell'
 import { offReason } from '../../core/sync/gate'
 import { track } from '../../core/telemetry'
+import { trackPixel } from '../../core/ads/meta'
 import { useStudyStore } from '../../modules/study/store'
 import { useWorkoutStore } from '../../modules/training/store'
 import { useWorkshopStore } from '../../modules/workshop/store'
@@ -234,6 +235,10 @@ export const useOnboarding = create<OnboardState>((set, get) => ({
   },
 
   finish: () => {
+    // read before either is cleared: together they are the one fact that
+    // separates a new user from a returning one (see the pixel line below)
+    const from = get().stage
+    const first = !useShellStore.getState().onboarded
     // whatever the walk dressed must not outlive it — belt and braces beside
     // the walk card's own sweep-on-leave
     sweepSample()
@@ -246,6 +251,17 @@ export const useOnboarding = create<OnboardState>((set, get) => ({
     // walked to the end or waved off at the door — finish() is both, and the
     // count means "the interview is over", not "the interview was taken"
     track('onboarding_finished')
+    // The pixel's CompleteRegistration: the one event the ad campaign
+    // optimises toward, so it has to be exact. The same moment as the count
+    // above, MINUS two people. The returning one — 'welcomeBack' is the
+    // registry having come down populated, an existing account on a new
+    // device, which is a sign-in and not a registration. And anyone whose
+    // device was already marked: a re-run of the setup is a look around, not
+    // an arrival. Everyone else who reaches this line walked the setup or
+    // waved it off at the door — either way a person who was not a user
+    // before this sitting and is one now. Held or dropped by the pixel's own
+    // predicate like the other two (core/ads/meta.ts).
+    if (first && from !== 'welcomeBack') trackPixel('CompleteRegistration')
   },
 }))
 

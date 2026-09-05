@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.api.json && vite build && node scripts/prerender.mjs && node scripts/check-brand.mjs",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.api.json && vite build && node scripts/prerender.mjs && node scripts/check-brand.mjs && node scripts/check-pixel.mjs",
     "lint": "eslint src",
     "preview": "vite preview",
     "audit": "node scripts/audit.mjs",
@@ -14,7 +14,8 @@
     "bell:probe": "node scripts/bell-probe.mjs",
     "check:night": "node scripts/night-harness.mjs",
     "check:recast": "node scripts/recast-harness.mjs",
-    "check:ledger": "node scripts/ledger-harness.mjs"
+    "check:ledger": "node scripts/ledger-harness.mjs",
+    "check:pixel": "node scripts/pixel-harness.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

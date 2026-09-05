@@ -1,6 +1,7 @@
 import { makeId } from '../ids'
 import { TERMS_VERSION, useShellStore } from '../store/shell'
 import { useAuthStore } from '../auth/store'
+import { consentGranted, gpcRaised } from './consent'
 import type { TelemetryEvent, TelemetryProps } from './events'
 
 export type { TelemetryEvent, TelemetryProps } from './events'
@@ -23,9 +24,11 @@ export type { TelemetryEvent, TelemetryProps } from './events'
  *
  * The predicate, in full: initialized, a production build, a key present
  * (set in Vercel for the Production environment ONLY, so previews stay
- * silent; DEV never sends, like the landing's analytics), the current
- * TERMS_VERSION accepted on this device, the settings switch not off, and
- * the browser not raising Global Privacy Control.
+ * silent; DEV never sends, like the landing's analytics), and CONSENT — the
+ * current TERMS_VERSION accepted on this device, the settings switch not off,
+ * and the browser not raising Global Privacy Control. That last half lives in
+ * ./consent.ts because the Meta Pixel (core/ads/meta.ts) asks the very same
+ * question, and the policy promises one answer for both.
  *
  * Offline-first means an outbox: events are fully formed at enqueue
  * (capture-time timestamp, then-current identity) and drain on boot, on
@@ -161,10 +164,7 @@ function isStandalone(): boolean {
 
 function enabled(): boolean {
   if (!started || !import.meta.env.PROD || KEY === '') return false
-  const s = useShellStore.getState()
-  if (s.termsAccepted < TERMS_VERSION || s.telemetryOff) return false
-  if ((navigator as { globalPrivacyControl?: boolean }).globalPrivacyControl === true) return false
-  return true
+  return consentGranted()
 }
 
 /** the full predicate, readable from outside — a debugging door, nothing more */
@@ -215,7 +215,7 @@ export function flush(reason: 'boot' | 'online' | 'visible' | 'hidden' | 'track'
   if (!import.meta.env.PROD || KEY === '') return
   // a Global Privacy Control raised since these were queued covers them too:
   // drop, don't send — the signal means "stop", not "finish what you started"
-  if ((navigator as { globalPrivacyControl?: boolean }).globalPrivacyControl === true) {
+  if (gpcRaised()) {
     b.outbox = []
     save()
     return

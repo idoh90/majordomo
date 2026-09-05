@@ -1987,6 +1987,10 @@ export interface VoicePack {
     termsLink: string
     privacyLink: string
     agree: string
+    /** the other answer: in, with the measurement refused. Must read as a
+     *  way IN — the Terms are agreed either way — and must name what it
+     *  refuses, because the policy promises that refusing costs nothing else */
+    decline: string
   }
   /**
    * The first-time setup — the butler, scripted.

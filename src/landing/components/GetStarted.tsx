@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { trackPixel } from '../../core/ads/meta'
 import { hasEstate } from '../arrival'
 import { voice } from '../voice'
 import { enterApp } from '../enterApp'
@@ -32,6 +33,11 @@ export default function GetStarted({ placement }: { placement: 'hero' | 'footer'
         disabled={state === 'busy'}
         onClick={() => {
           setState('busy')
+          /* The pixel's Lead — from the stranger's button only: a resident's
+             BACK TO THE ESTATE is not a lead. Storage is asked at press time
+             rather than `resident`, which is a frame behind on purpose. Held
+             behind PageView until the door is answered (core/ads/meta.ts). */
+          if (!hasEstate()) trackPixel('Lead')
           enterApp().catch(() => setState('error'))
         }}
         className="btn-cta h-[54px] w-full px-[30px] text-[15px] whitespace-nowrap sm:h-[52px] sm:w-auto"

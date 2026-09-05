@@ -10,12 +10,22 @@ import { Wordmark } from './onboarding/WelcomeStage'
  * doctrine), but terms that nobody provably agreed to protect nobody, so this
  * screen renders INSTEAD of the shell — App() returns it before Shell exists,
  * so there is no header, no tab bar and no login behind it to tab or
- * screen-read into — and it offers exactly one way forward. No dismiss, no
- * Esc: pressing AGREE & ENTER is the acceptance the Terms name.
+ * screen-read into — and it offers exactly two answers, both of which lead
+ * in. No dismiss, no Esc: entering is the acceptance the Terms name, and the
+ * only thing the second answer refuses is the measurement.
  *
  * Order inside accept() is load-bearing: the stamp lands first, because the
  * telemetry predicate reads it — consent_accepted is the first event a device
- * is ever allowed to send, and it must not be swallowed by its own gate.
+ * is ever allowed to send, and it must not be swallowed by its own gate. And
+ * the pixel is watching the same stamp: PageView and Lead, held since the
+ * landing, go the moment it lands (core/ads/meta.ts).
+ *
+ * Order inside decline() is the mirror image: the switch goes off FIRST, so
+ * the stamp lands on a device that has already said no. Nothing held for the
+ * door is sent, no count fires from the stamp, and the device is in exactly
+ * the state Global Privacy Control produces — chosen by hand. It withholds
+ * nothing: same house, same rooms, nothing counted, and the switch in
+ * Settings is the way back either direction.
  *
  * Shown whenever this device's stamp is below TERMS_VERSION (so bumping that
  * constant after a material change to the documents re-runs this door for
@@ -26,6 +36,11 @@ export function ConsentDoor() {
   const accept = () => {
     useShellStore.getState().setTermsAccepted(TERMS_VERSION)
     trackConsentAccepted()
+  }
+  const decline = () => {
+    const shell = useShellStore.getState()
+    shell.setTelemetryOff(true)
+    shell.setTermsAccepted(TERMS_VERSION)
   }
 
   return (
@@ -62,6 +77,9 @@ export function ConsentDoor() {
         <p className="mt-5 text-sm leading-relaxed text-ink-dim">{voice.consent.analyticsLine}</p>
         <button type="button" onClick={accept} className="btn-cta mt-9 w-full py-4 text-base">
           {voice.consent.agree}
+        </button>
+        <button type="button" onClick={decline} className="btn-soft mt-3 w-full py-4 text-base">
+          {voice.consent.decline}
         </button>
       </div>
     </div>
