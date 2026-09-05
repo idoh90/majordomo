@@ -2487,10 +2487,11 @@ export const majordomoPack: VoicePack = {
     title: 'The terms of the house',
     body: 'Your records live on your device and remain yours. The house runs by the terms below, and entering is agreeing to them, sir.',
     analyticsLine:
-      'Once inside, the app counts which features are used — anonymous counts, never what your records say — and lets Meta’s pixel measure whether an advertisement brought you here. Settings holds one switch that stops both.',
+      'Once inside, the app counts which features are used — anonymous counts, never what your records say — and lets Meta’s pixel measure whether an advertisement brought you here. Enter without measurement and neither happens; Settings holds the switch either way.',
     termsLink: 'Terms of Service',
     privacyLink: 'Privacy Policy',
     agree: 'AGREE & ENTER',
+    decline: 'ENTER WITHOUT MEASUREMENT',
   },
   onboarding: {
     welcome: {
