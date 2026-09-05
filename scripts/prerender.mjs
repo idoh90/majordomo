@@ -87,7 +87,9 @@ const preloads = WANTED.map((re) => {
    error page that needs a bundle to say what went wrong is a worse error
    page. It differs only in carrying no canonical (see the NOINDEX note in
    vite.config.ts) and in staying out of the sitemap, which lists routes. */
-for (const route of ['index', 'privacy', 'terms', '404']) {
+/* 'privacy/2026-08-31' is the policy that /privacy replaced, at its dated
+   address; the path IS the route name, so the file lands in dist/privacy/. */
+for (const route of ['index', 'privacy', 'terms', '404', 'privacy/2026-08-31']) {
   const file = join(dist, `${route}.html`)
   let html = await readFile(file, 'utf8')
   html = html.replace('</head>', `${preloads}</head>`)

@@ -1,6 +1,7 @@
 import { renderToString } from 'react-dom/server'
 import LandingPage from './LandingPage'
 import NotFoundPage from './NotFoundPage'
+import PrivacyArchivePage from './PrivacyArchivePage'
 import PrivacyPage from './PrivacyPage'
 import TermsPage from './TermsPage'
 import { voice } from './voice'
@@ -22,10 +23,14 @@ import { voice } from './voice'
    Break any of those and hydration mismatches; there is no server at runtime
    to paper over it.
 --------------------------------------------------------------------------- */
-export function render(route: 'index' | 'privacy' | 'terms' | '404'): string {
+export function render(
+  route: 'index' | 'privacy' | 'terms' | '404' | 'privacy/2026-08-31',
+): string {
   return renderToString(
     route === 'privacy' ? (
       <PrivacyPage />
+    ) : route === 'privacy/2026-08-31' ? (
+      <PrivacyArchivePage date="2026-08-31" />
     ) : route === 'terms' ? (
       <TermsPage />
     ) : route === '404' ? (
@@ -44,4 +49,8 @@ export const meta = {
   privacy: { title: voice.privacy.metaTitle, description: voice.privacy.metaDescription },
   terms: { title: voice.terms.metaTitle, description: voice.terms.metaDescription },
   '404': { title: voice.notFound.metaTitle, description: voice.notFound.metaDescription },
+  'privacy/2026-08-31': {
+    title: voice.privacyArchive['2026-08-31'].metaTitle,
+    description: voice.privacyArchive['2026-08-31'].metaDescription,
+  },
 }

@@ -37,8 +37,17 @@ adoptLegacyKey('majordomo-shell', 'batman-shell')
  * door to every device on its next boot — that is the whole re-acceptance
  * mechanism for a material change to /terms or /privacy, so bump it only
  * when the documents change in a way a user would want to re-read.
+ *
+ * History:
+ *   1 — 31 Aug 2026. The policy promised no advertising pixels. (The mailbox
+ *       swap of the same day did NOT bump: a changed address is not a
+ *       changed promise.)
+ *   2 — 5 Sep 2026. The policy discloses the Meta Pixel. Everyone who agreed
+ *       under v1 agreed to a site with no pixel on it, and that consent does
+ *       not carry over to one that measures advertising — so every device is
+ *       asked again, at a door that now says so in its own words.
  */
-export const TERMS_VERSION = 1
+export const TERMS_VERSION = 2
 
 // First boot only: inherit the skin the user picked before this store existed
 // (frozen in the training blob — that field is never written again). If a

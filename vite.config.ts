@@ -13,8 +13,12 @@ import {
 } from './site.config'
 
 /* A document may skip the origin token only by declaring itself noindex —
-   which today is 404.html and nothing else. An error page has no canonical
-   URL because it has no address: it answers at every address that is wrong.
+   which today is 404.html and the superseded privacy policy at
+   privacy/2026-08-31.html. An error page has no canonical URL because it has
+   no address: it answers at every address that is wrong. A superseded policy
+   has an address and must not be FOUND at it: a search for the privacy policy
+   has to land on the one that applies, so the archive says noindex and stays
+   out of the sitemap.
    The guard's job is unchanged either way — a page carrying NEITHER a
    canonical nor a noindex is a page whose own address was forgotten, and it
    still fails the build.
@@ -36,8 +40,9 @@ const NOINDEX = /<meta\s+name="robots"\s+content="[^"]*\bnoindex\b/i
    Every hook here THROWS on a missing token rather than passing the file
    through untouched. A file that quietly stops being wired up is the exact
    failure this replaced: it builds, it deploys, and it is wrong in a way only
-   a crawler notices. The one document exempt from the canonical is 404.html,
-   which buys the exemption by declaring itself noindex — see NOINDEX above.
+   a crawler notices. The documents exempt from the canonical are 404.html and
+   the dated privacy archive, which buy the exemption by declaring themselves
+   noindex — see NOINDEX above.
 --------------------------------------------------------------------------- */
 function siteAddress(env: Record<string, string | undefined>): Plugin {
   const origin = resolveOrigin(env)
@@ -131,15 +136,19 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       rollupOptions: {
-        /* Four documents: the landing (which doubles as the app shell once
-           the boot gate speaks), its two legal pages, and the not-found page
-           Vercel serves at every path the deployment does not have.
-           scripts/prerender.mjs fills each with markup after this build. */
+        /* Five documents: the landing (which doubles as the app shell once
+           the boot gate speaks), its two legal pages, the not-found page
+           Vercel serves at every path the deployment does not have, and the
+           privacy policy of 31 August 2026 — superseded, kept word for word at
+           its dated address (Vercel's cleanUrls serves dist/privacy/<date>.html
+           at /privacy/<date>). scripts/prerender.mjs fills each with markup
+           after this build. */
         input: {
           index: 'index.html',
           privacy: 'privacy.html',
           terms: 'terms.html',
           '404': '404.html',
+          'privacy-2026-08-31': 'privacy/2026-08-31.html',
         },
       },
     },
@@ -232,6 +241,9 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [
             /^\/api\//,
             /^\/privacy$/,
+            // the dated archive of every superseded privacy policy — a real
+            // document at a real address, protected by name like the two above
+            /^\/privacy\//,
             /^\/terms$/,
             /^\/404$/,
             /^\/[^?]/,
